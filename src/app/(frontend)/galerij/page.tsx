@@ -1,5 +1,13 @@
+import type { Metadata } from "next";
 import { getPayloadClient } from "@/lib/payload";
 import { GalerijClient } from "./GalerijClient";
+
+export const metadata: Metadata = {
+  title: "Galerij — De Bee's Hive",
+  description:
+    "Bekijk foto's van De Bee's Hive — ons restaurant, gerechten, evenementen en sfeerbeelden uit het hart van Zuilen.",
+  alternates: { canonical: "https://debeeshive.nl/galerij" },
+};
 
 export const dynamic = "force-dynamic";
 

@@ -1,5 +1,13 @@
+import type { Metadata } from "next";
 import { getPayloadClient } from "@/lib/payload";
 import { KaartClient } from "./KaartClient";
+
+export const metadata: Metadata = {
+  title: "Kaart — De Bee's Hive",
+  description:
+    "Bekijk de menukaart van De Bee's Hive. Seizoensgebonden gerechten met lokale ingrediënten, creatief bereid met een Zuid-Afrikaanse twist.",
+  alternates: { canonical: "https://debeeshive.nl/kaart" },
+};
 
 export const dynamic = "force-dynamic";
 
