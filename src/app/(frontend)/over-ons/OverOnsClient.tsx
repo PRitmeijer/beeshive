@@ -3,8 +3,16 @@
 import { motion } from "framer-motion";
 import { HexagonGrid } from "@/components/HexagonGrid";
 import { ScrollReveal } from "@/components/ScrollReveal";
+import type { SiteSettingsData } from "@/lib/payload";
 
-export function OverOnsClient() {
+interface Props {
+  settings: SiteSettingsData;
+}
+
+export function OverOnsClient({ settings: s }: Props) {
+  const values =
+    (s.values as { icon: string; title: string; text: string }[]) || [];
+
   return (
     <>
       {/* Hero */}
@@ -31,76 +39,77 @@ export function OverOnsClient() {
             <div className="prose prose-lg max-w-none">
               <div className="space-y-8 text-hive-500 leading-relaxed">
                 <p className="text-xl text-hive-600 font-medium">
-                  De Bee&apos;s Hive is meer dan een restaurant — het is een
-                  plek waar kunst, creativiteit en lekker eten samenkomen in
-                  het hart van Zuilen, Utrecht.
+                  {s.aboutIntro}
                 </p>
 
-                <p>
-                  Ons verhaal begon in Zuid-Afrika, waar wij onze liefde voor
-                  alle vormen van kunst en creativiteit in het dagelijks leven
-                  ontdekten. Na jarenlange ervaring en inspiratie op te doen,
-                  keerden wij terug naar onze Nederlandse roots met een
-                  droom: een warm eetcafé creëren waar het &lsquo;kunst van
-                  het leven&rsquo; kan floreren.
-                </p>
+                {/* Rich text story from CMS, or fallback paragraphs */}
+                {s.aboutStory ? (
+                  <div
+                    dangerouslySetInnerHTML={{
+                      __html:
+                        typeof s.aboutStory === "string"
+                          ? s.aboutStory
+                          : "",
+                    }}
+                  />
+                ) : (
+                  <>
+                    <p>
+                      Ons verhaal begon in Zuid-Afrika, waar wij onze liefde
+                      voor alle vormen van kunst en creativiteit in het
+                      dagelijks leven ontdekten. Na jarenlange ervaring en
+                      inspiratie op te doen, keerden wij terug naar onze
+                      Nederlandse roots met een droom: een warm eetcafé creëren
+                      waar het &lsquo;kunst van het leven&rsquo; kan floreren.
+                    </p>
+
+                    <p>
+                      Bij {s.siteName} geloven wij dat eten bereiden een
+                      kunstvorm is. Elk gerecht wordt met zorg en creativiteit
+                      bereid, met lokale ingrediënten en seizoensgebonden
+                      producten. Onze kaart weerspiegelt onze reis — van
+                      Zuid-Afrikaanse smaken tot Nederlandse klassiekers, altijd
+                      met een creatieve twist.
+                    </p>
+
+                    <p>
+                      Maar {s.siteName} is meer dan alleen eten. Het is een
+                      gemeenschap. Een plek waar buren vrienden worden, waar
+                      kunstenaars hun werk delen, en waar iedereen welkom is om
+                      hun creatieve zelf te zijn.
+                    </p>
+                  </>
+                )}
 
                 <div className="my-12 p-8 rounded-3xl bg-honey-50 border border-honey-200/50">
                   <blockquote className="text-center">
                     <p className="font-display text-2xl text-hive-700 italic">
-                      &ldquo;Wij zijn een familie met een passie voor eten,
-                      kunst en verbinding.&rdquo;
+                      &ldquo;{s.aboutQuote}&rdquo;
                     </p>
                   </blockquote>
                 </div>
-
-                <p>
-                  Bij De Bee&apos;s Hive geloven wij dat eten bereiden een
-                  kunstvorm is. Elk gerecht wordt met zorg en creativiteit
-                  bereid, met lokale ingrediënten en seizoensgebonden
-                  producten. Onze kaart weerspiegelt onze reis — van
-                  Zuid-Afrikaanse smaken tot Nederlandse klassiekers, altijd
-                  met een creatieve twist.
-                </p>
-
-                <p>
-                  Maar De Bee&apos;s Hive is meer dan alleen eten. Het is een
-                  gemeenschap. Een plek waar buren vrienden worden, waar
-                  kunstenaars hun werk delen, en waar iedereen welkom is om
-                  hun creatieve zelf te zijn.
-                </p>
               </div>
             </div>
           </ScrollReveal>
 
           {/* Values */}
-          <div className="grid md:grid-cols-3 gap-8 mt-20">
-            {[
-              {
-                icon: "🌍",
-                title: "Onze Roots",
-                text: "Van Zuid-Afrika naar Zuilen — onze culturele reis vormt de basis van alles wat we doen.",
-              },
-              {
-                icon: "🌿",
-                title: "Duurzaamheid",
-                text: "Lokale ingrediënten, seizoensgebonden gerechten en respect voor de natuur.",
-              },
-              {
-                icon: "💛",
-                title: "Gemeenschap",
-                text: "Een warme plek voor iedereen — buren, families, kunstenaars en dromers.",
-              },
-            ].map((v, i) => (
-              <ScrollReveal key={v.title} delay={i * 0.15}>
-                <article className="text-center p-6">
-                  <div className="text-4xl mb-4" aria-hidden="true">{v.icon}</div>
-                  <h3 className="heading-md text-hive-700 mb-3">{v.title}</h3>
-                  <p className="text-hive-400 leading-relaxed">{v.text}</p>
-                </article>
-              </ScrollReveal>
-            ))}
-          </div>
+          {values.length > 0 && (
+            <div className="grid md:grid-cols-3 gap-8 mt-20">
+              {values.map((v, i) => (
+                <ScrollReveal key={v.title} delay={i * 0.15}>
+                  <article className="text-center p-6">
+                    <div className="text-4xl mb-4" aria-hidden="true">
+                      {v.icon}
+                    </div>
+                    <h3 className="heading-md text-hive-700 mb-3">
+                      {v.title}
+                    </h3>
+                    <p className="text-hive-400 leading-relaxed">{v.text}</p>
+                  </article>
+                </ScrollReveal>
+              ))}
+            </div>
+          )}
         </div>
       </section>
     </>

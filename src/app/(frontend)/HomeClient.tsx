@@ -6,8 +6,13 @@ import Link from "next/link";
 import { HexagonGrid } from "@/components/HexagonGrid";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { MailingListForm } from "@/components/MailingListForm";
+import type { SiteSettingsData } from "@/lib/payload";
 
-export function HomeClient() {
+interface Props {
+  settings: SiteSettingsData;
+}
+
+export function HomeClient({ settings: s }: Props) {
   const heroRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({
     target: heroRef,
@@ -16,6 +21,13 @@ export function HomeClient() {
   const heroY = useTransform(scrollYProgress, [0, 1], [0, 200]);
   const heroOpacity = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
   const heroScale = useTransform(scrollYProgress, [0, 1], [1, 1.1]);
+
+  // Support pipe-separated hero title for accent word, e.g. "De Bee's|Hive"
+  const titleParts = s.heroTitle.split("|");
+  const titleMain = titleParts[0];
+  const titleAccent = titleParts[1] || "";
+
+  const features = (s.features as { icon: string; title: string; text: string }[]) || [];
 
   return (
     <>
@@ -58,7 +70,9 @@ export function HomeClient() {
             transition={{ duration: 1 }}
             className="mb-8"
           >
-            <span className="text-6xl" role="img" aria-label="Bij">🐝</span>
+            <span className="text-6xl" role="img" aria-label="Bij">
+              🐝
+            </span>
           </motion.div>
 
           <motion.p
@@ -68,8 +82,13 @@ export function HomeClient() {
             className="heading-xl text-honey-100 mb-6"
             aria-hidden="true"
           >
-            De Bee&apos;s{" "}
-            <span className="text-honey-400 italic">Hive</span>
+            {titleMain}
+            {titleAccent && (
+              <>
+                {" "}
+                <span className="text-honey-400 italic">{titleAccent}</span>
+              </>
+            )}
           </motion.p>
 
           <motion.p
@@ -78,8 +97,7 @@ export function HomeClient() {
             transition={{ duration: 0.8, delay: 0.5 }}
             className="text-xl md:text-2xl text-honey-200/80 font-light max-w-2xl mx-auto mb-10 leading-relaxed"
           >
-            Waar eten en creativiteit samenkomen. Een warm eetcafé in het
-            hart van Zuilen.
+            {s.heroSubtitle}
           </motion.p>
 
           <motion.div
@@ -118,7 +136,10 @@ export function HomeClient() {
       </section>
 
       {/* ===== INTRODUCTION ===== */}
-      <section className="section-padding relative overflow-hidden" aria-label="Introductie">
+      <section
+        className="section-padding relative overflow-hidden"
+        aria-label="Introductie"
+      >
         <HexagonGrid count={8} />
         <div className="max-w-6xl mx-auto relative">
           <ScrollReveal>
@@ -127,51 +148,35 @@ export function HomeClient() {
                 Welkom
               </span>
               <h2 className="heading-lg text-hive-800 mt-3 mb-6">
-                De kunst van het leven
+                {s.introTitle}
               </h2>
               <p className="text-lg text-hive-400 leading-relaxed">
-                De Bee&apos;s Hive ontstond uit een liefde voor alle vormen van
-                kunst en creativiteit in het dagelijks leven. Begonnen in
-                Zuid-Afrika, keerden wij terug naar onze Nederlandse roots om
-                een plek te creëren waar het &lsquo;kunst van het leven&rsquo;
-                kan floreren.
+                {s.introText}
               </p>
             </div>
           </ScrollReveal>
 
-          <div className="grid md:grid-cols-3 gap-8 mt-16">
-            {[
-              {
-                icon: "🍳",
-                title: "Creatieve Keuken",
-                text: "Gerechten bereid met passie, lokale ingrediënten en een vleugje creativiteit.",
-              },
-              {
-                icon: "🎨",
-                title: "Kunst & Cultuur",
-                text: "Een plek waar creativiteit, verbinding en schoonheid in elke hoek zichtbaar is.",
-              },
-              {
-                icon: "🤝",
-                title: "Verbinding",
-                text: "Meer dan een restaurant — een gemeenschap waar iedereen welkom is.",
-              },
-            ].map((item, i) => (
-              <ScrollReveal key={item.title} delay={i * 0.15}>
-                <motion.article
-                  whileHover={{ y: -8, scale: 1.02 }}
-                  transition={{ type: "spring", stiffness: 300 }}
-                  className="glass rounded-2xl p-8 text-center group cursor-default"
-                >
-                  <div className="text-4xl mb-4" aria-hidden="true">{item.icon}</div>
-                  <h3 className="heading-md text-hive-700 mb-3 group-hover:text-honey-600 transition-colors">
-                    {item.title}
-                  </h3>
-                  <p className="text-hive-400 leading-relaxed">{item.text}</p>
-                </motion.article>
-              </ScrollReveal>
-            ))}
-          </div>
+          {features.length > 0 && (
+            <div className="grid md:grid-cols-3 gap-8 mt-16">
+              {features.map((item, i) => (
+                <ScrollReveal key={item.title} delay={i * 0.15}>
+                  <motion.article
+                    whileHover={{ y: -8, scale: 1.02 }}
+                    transition={{ type: "spring", stiffness: 300 }}
+                    className="glass rounded-2xl p-8 text-center group cursor-default"
+                  >
+                    <div className="text-4xl mb-4" aria-hidden="true">
+                      {item.icon}
+                    </div>
+                    <h3 className="heading-md text-hive-700 mb-3 group-hover:text-honey-600 transition-colors">
+                      {item.title}
+                    </h3>
+                    <p className="text-hive-400 leading-relaxed">{item.text}</p>
+                  </motion.article>
+                </ScrollReveal>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
@@ -188,11 +193,10 @@ export function HomeClient() {
           <ScrollReveal>
             <blockquote className="max-w-2xl">
               <p className="font-display text-2xl md:text-4xl text-honey-200 italic leading-relaxed">
-                &ldquo;Eten is kunst, en iedereen is welkom om hun creatieve
-                zelf te zijn&rdquo;
+                &ldquo;{s.quote}&rdquo;
               </p>
               <cite className="block mt-6 text-honey-400/70 not-italic text-sm uppercase tracking-widest">
-                — De Bee&apos;s Hive
+                — {s.quoteAttribution}
               </cite>
             </blockquote>
           </ScrollReveal>
@@ -200,7 +204,10 @@ export function HomeClient() {
       </section>
 
       {/* ===== FEATURED SECTION ===== */}
-      <section className="section-padding bg-honey-50/50 relative overflow-hidden" aria-label="Ontdek">
+      <section
+        className="section-padding bg-honey-50/50 relative overflow-hidden"
+        aria-label="Ontdek"
+      >
         <HexagonGrid count={6} />
         <div className="max-w-6xl mx-auto relative">
           <ScrollReveal>
@@ -253,7 +260,10 @@ export function HomeClient() {
                       className="text-honey-600 font-semibold hover:text-honey-700 transition-colors inline-flex items-center gap-2 group/link"
                     >
                       {card.label}
-                      <span className="transition-transform group-hover/link:translate-x-1" aria-hidden="true">
+                      <span
+                        className="transition-transform group-hover/link:translate-x-1"
+                        aria-hidden="true"
+                      >
                         →
                       </span>
                     </Link>
@@ -266,7 +276,10 @@ export function HomeClient() {
       </section>
 
       {/* ===== MAILING LIST ===== */}
-      <section className="section-padding bg-hive-800 relative overflow-hidden" aria-label="Nieuwsbrief">
+      <section
+        className="section-padding bg-hive-800 relative overflow-hidden"
+        aria-label="Nieuwsbrief"
+      >
         <HexagonGrid count={10} />
         <div className="max-w-2xl mx-auto text-center relative z-10">
           <ScrollReveal>
@@ -274,11 +287,10 @@ export function HomeClient() {
               Blijf op de hoogte
             </span>
             <h2 className="heading-lg text-honey-100 mt-3 mb-4">
-              Schrijf je in
+              {s.newsletterTitle}
             </h2>
             <p className="text-honey-200/60 mb-10 leading-relaxed">
-              Ontvang als eerste nieuws over speciale evenementen, nieuwe
-              gerechten en aanbiedingen.
+              {s.newsletterText}
             </p>
           </ScrollReveal>
           <ScrollReveal delay={0.2}>

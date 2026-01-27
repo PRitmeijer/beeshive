@@ -1,28 +1,16 @@
-import type { Metadata } from "next";
 import "../globals.css";
 import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
 import { NotificationBanner } from "@/components/NotificationBanner";
+import { getSiteSettings } from "@/lib/payload";
 
-export const metadata: Metadata = {
-  title: "De Bee's Hive — Eetcafé in het hart van Zuilen",
-  description:
-    "Een warm eetcafé in het hart van Zuilen waar creativiteit, verbinding en lekker eten samenkomen.",
-  keywords: ["eetcafé", "zuilen", "utrecht", "restaurant", "de bee's hive"],
-  openGraph: {
-    title: "De Bee's Hive",
-    description:
-      "Waar eten en creativiteit samenkomen. Een warm eetcafé in het hart van Zuilen.",
-    locale: "nl_NL",
-    type: "website",
-  },
-};
-
-export default function FrontendLayout({
+export default async function FrontendLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const s = await getSiteSettings();
+
   return (
     <html lang="nl">
       <head>
@@ -43,7 +31,10 @@ export default function FrontendLayout({
       </head>
       <body className="min-h-screen flex flex-col antialiased">
         <NotificationBanner />
-        <Navigation />
+        <Navigation
+          reservationUrl={s.reservationUrl || undefined}
+          siteName={s.siteName}
+        />
         <main className="flex-1">{children}</main>
         <Footer />
       </body>

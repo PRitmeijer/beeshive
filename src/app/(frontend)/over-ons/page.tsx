@@ -1,15 +1,19 @@
 import type { Metadata } from "next";
+import { getSiteSettings } from "@/lib/payload";
 import { OverOnsClient } from "./OverOnsClient";
 
-export const metadata: Metadata = {
-  title: "Over Ons — De Bee's Hive",
-  description:
-    "Ontdek het verhaal achter De Bee's Hive. Van Zuid-Afrika naar Zuilen — ons warm eetcafé waar kunst, creativiteit en lekker eten samenkomen.",
-  alternates: {
-    canonical: "https://debeeshive.nl/over-ons",
-  },
-};
+export const dynamic = "force-dynamic";
 
-export default function OverOnsPage() {
-  return <OverOnsClient />;
+export async function generateMetadata(): Promise<Metadata> {
+  const s = await getSiteSettings();
+  return {
+    title: `Over Ons — ${s.siteName}`,
+    description: `Ontdek het verhaal achter ${s.siteName}. ${s.aboutIntro}`,
+    alternates: { canonical: "https://debeeshive.nl/over-ons" },
+  };
+}
+
+export default async function OverOnsPage() {
+  const s = await getSiteSettings();
+  return <OverOnsClient settings={s} />;
 }

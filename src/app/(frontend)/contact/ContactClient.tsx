@@ -4,17 +4,36 @@ import { useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
 import { HexagonGrid } from "@/components/HexagonGrid";
 import { ScrollReveal } from "@/components/ScrollReveal";
+import type { SiteSettingsData } from "@/lib/payload";
 
-export function ContactClient() {
+interface Props {
+  settings: SiteSettingsData;
+}
+
+export function ContactClient({ settings: s }: Props) {
   const [form, setForm] = useState({ name: "", email: "", message: "" });
   const [status, setStatus] = useState<"idle" | "sent">("idle");
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    const mailto = `mailto:info@debeeshive.nl?subject=Bericht van ${form.name}&body=${encodeURIComponent(form.message)}%0A%0AVan: ${form.name} (${form.email})`;
+    const mailto = `mailto:${s.contactEmail}?subject=Bericht van ${form.name}&body=${encodeURIComponent(form.message)}%0A%0AVan: ${form.name} (${form.email})`;
     window.location.href = mailto;
     setStatus("sent");
   };
+
+  const openingHours = (s.openingHours || []) as {
+    day: string;
+    hours: string;
+  }[];
+
+  // Extract Instagram handle from URL
+  const instagramHandle = s.socialMedia.instagram
+    ? "@" +
+      s.socialMedia.instagram
+        .replace(/\/$/, "")
+        .split("/")
+        .pop()
+    : "";
 
   return (
     <>
@@ -43,37 +62,77 @@ export function ContactClient() {
               <div className="space-y-6 text-hive-500">
                 <div>
                   <h3 className="font-semibold text-hive-700 mb-1">Adres</h3>
-                  <p>Zuilen, Utrecht<br />Nederland</p>
+                  <p>
+                    {s.address.street && (
+                      <>
+                        {s.address.street}
+                        <br />
+                      </>
+                    )}
+                    {s.address.postalCode && `${s.address.postalCode} `}
+                    {s.address.area
+                      ? `${s.address.area}, ${s.address.city}`
+                      : s.address.city}
+                    <br />
+                    {s.address.country}
+                  </p>
                 </div>
+
                 <div>
                   <h3 className="font-semibold text-hive-700 mb-1">E-mail</h3>
                   <a
-                    href="mailto:info@debeeshive.nl"
+                    href={`mailto:${s.contactEmail}`}
                     className="text-honey-600 hover:text-honey-700 transition-colors"
                   >
-                    info@debeeshive.nl
+                    {s.contactEmail}
                   </a>
                 </div>
-                <div>
-                  <h3 className="font-semibold text-hive-700 mb-1">Volg ons</h3>
-                  <a
-                    href="https://instagram.com/debeeshive"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-honey-600 hover:text-honey-700 transition-colors"
-                  >
-                    @debeeshive
-                  </a>
-                </div>
-                <div>
-                  <h3 className="font-semibold text-hive-700 mb-1">
-                    Openingstijden
-                  </h3>
-                  <ul className="space-y-1 text-sm">
-                    <li>Woensdag – Zondag: 12:00 – 22:00</li>
-                    <li>Maandag – Dinsdag: Gesloten</li>
-                  </ul>
-                </div>
+
+                {s.phone && (
+                  <div>
+                    <h3 className="font-semibold text-hive-700 mb-1">
+                      Telefoon
+                    </h3>
+                    <a
+                      href={`tel:${s.phone.replace(/\s/g, "")}`}
+                      className="text-honey-600 hover:text-honey-700 transition-colors"
+                    >
+                      {s.phone}
+                    </a>
+                  </div>
+                )}
+
+                {s.socialMedia.instagram && (
+                  <div>
+                    <h3 className="font-semibold text-hive-700 mb-1">
+                      Volg ons
+                    </h3>
+                    <a
+                      href={s.socialMedia.instagram}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-honey-600 hover:text-honey-700 transition-colors"
+                    >
+                      {instagramHandle}
+                    </a>
+                  </div>
+                )}
+
+                {openingHours.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold text-hive-700 mb-1">
+                      Openingstijden
+                    </h3>
+                    <ul className="space-y-1 text-sm">
+                      {openingHours.map((h) => (
+                        <li key={h.day}>
+                          <span className="font-medium">{h.day}:</span>{" "}
+                          {h.hours}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             </address>
           </ScrollReveal>
@@ -92,7 +151,10 @@ export function ContactClient() {
             ) : (
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div>
-                  <label htmlFor="contact-name" className="block text-sm font-medium text-hive-600 mb-1.5">
+                  <label
+                    htmlFor="contact-name"
+                    className="block text-sm font-medium text-hive-600 mb-1.5"
+                  >
                     Naam
                   </label>
                   <input
@@ -100,13 +162,17 @@ export function ContactClient() {
                     type="text"
                     required
                     value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border border-honey-200 bg-white/80
-                               focus:border-honey-400 focus:ring-2 focus:ring-honey-400/20 outline-none transition-all"
+                    onChange={(e) =>
+                      setForm({ ...form, name: e.target.value })
+                    }
+                    className="w-full px-4 py-3 rounded-xl border border-honey-200 bg-white/80 focus:border-honey-400 focus:ring-2 focus:ring-honey-400/20 outline-none transition-all"
                   />
                 </div>
                 <div>
-                  <label htmlFor="contact-email" className="block text-sm font-medium text-hive-600 mb-1.5">
+                  <label
+                    htmlFor="contact-email"
+                    className="block text-sm font-medium text-hive-600 mb-1.5"
+                  >
                     E-mail
                   </label>
                   <input
@@ -114,13 +180,17 @@ export function ContactClient() {
                     type="email"
                     required
                     value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border border-honey-200 bg-white/80
-                               focus:border-honey-400 focus:ring-2 focus:ring-honey-400/20 outline-none transition-all"
+                    onChange={(e) =>
+                      setForm({ ...form, email: e.target.value })
+                    }
+                    className="w-full px-4 py-3 rounded-xl border border-honey-200 bg-white/80 focus:border-honey-400 focus:ring-2 focus:ring-honey-400/20 outline-none transition-all"
                   />
                 </div>
                 <div>
-                  <label htmlFor="contact-message" className="block text-sm font-medium text-hive-600 mb-1.5">
+                  <label
+                    htmlFor="contact-message"
+                    className="block text-sm font-medium text-hive-600 mb-1.5"
+                  >
                     Bericht
                   </label>
                   <textarea
@@ -128,9 +198,10 @@ export function ContactClient() {
                     required
                     rows={5}
                     value={form.message}
-                    onChange={(e) => setForm({ ...form, message: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border border-honey-200 bg-white/80
-                               focus:border-honey-400 focus:ring-2 focus:ring-honey-400/20 outline-none transition-all resize-none"
+                    onChange={(e) =>
+                      setForm({ ...form, message: e.target.value })
+                    }
+                    className="w-full px-4 py-3 rounded-xl border border-honey-200 bg-white/80 focus:border-honey-400 focus:ring-2 focus:ring-honey-400/20 outline-none transition-all resize-none"
                   />
                 </div>
                 <button type="submit" className="btn-primary w-full">

@@ -13,7 +13,15 @@ const navLinks = [
   { href: "/contact", label: "Contact" },
 ];
 
-export function Navigation() {
+interface NavigationProps {
+  reservationUrl?: string;
+  siteName?: string;
+}
+
+export function Navigation({
+  reservationUrl,
+  siteName = "De Bee's Hive",
+}: NavigationProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -38,8 +46,7 @@ export function Navigation() {
             className="font-display text-2xl font-bold text-hive-700"
             whileHover={{ scale: 1.05 }}
           >
-            De Bee&apos;s
-            <span className="text-honey-500"> Hive</span>
+            {siteName}
           </motion.span>
         </Link>
 
@@ -56,11 +63,18 @@ export function Navigation() {
               </Link>
             </li>
           ))}
-          <li>
-            <Link href="/contact" className="btn-primary text-sm !px-6 !py-2">
-              Reserveren
-            </Link>
-          </li>
+          {reservationUrl && (
+            <li>
+              <a
+                href={reservationUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-primary text-sm !px-6 !py-2"
+              >
+                Reserveren
+              </a>
+            </li>
+          )}
         </ul>
 
         {/* Mobile Toggle */}
