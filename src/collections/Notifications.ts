@@ -2,68 +2,110 @@ import type { CollectionConfig } from "payload";
 
 export const Notifications: CollectionConfig = {
   slug: "notifications",
+  labels: {
+    singular: "Melding",
+    plural: "Meldingen",
+  },
   admin: {
     useAsTitle: "title",
     defaultColumns: ["title", "type", "active", "startDate", "endDate"],
+    description:
+      "Meldingen verschijnen als banner bovenaan de website. Gebruik ze voor aanbiedingen, evenementen of belangrijke berichten.",
+    group: "Website",
   },
   fields: [
     {
       name: "title",
+      label: "Titel",
       type: "text",
       required: true,
+      admin: {
+        description: "Korte, opvallende titel voor de melding",
+      },
     },
     {
       name: "message",
+      label: "Bericht",
       type: "textarea",
       required: true,
+      admin: {
+        description: "Het volledige bericht dat bezoekers zien",
+      },
     },
     {
-      name: "type",
-      type: "select",
-      options: [
-        { label: "Info", value: "info" },
-        { label: "Aanbieding", value: "offer" },
-        { label: "Evenement", value: "event" },
-        { label: "Belangrijk", value: "important" },
+      type: "row",
+      fields: [
+        {
+          name: "type",
+          label: "Type",
+          type: "select",
+          options: [
+            { label: "ℹ️ Informatie", value: "info" },
+            { label: "🏷️ Aanbieding", value: "offer" },
+            { label: "🎉 Evenement", value: "event" },
+            { label: "⚠️ Belangrijk", value: "important" },
+          ],
+          required: true,
+          defaultValue: "info",
+          admin: {
+            width: "50%",
+            description: "Bepaalt de kleur van de banner",
+          },
+        },
+        {
+          name: "dismissible",
+          label: "Wegklikbaar",
+          type: "checkbox",
+          defaultValue: true,
+          admin: {
+            width: "50%",
+            description: "Kunnen bezoekers de melding sluiten?",
+          },
+        },
       ],
-      required: true,
-      defaultValue: "info",
     },
     {
       name: "link",
+      label: "Link (optioneel)",
       type: "text",
       admin: {
-        description: "Optionele link voor meer informatie",
+        description:
+          "URL naar meer informatie, bijv. een blogpost of externe pagina",
       },
+    },
+    {
+      type: "row",
+      fields: [
+        {
+          name: "startDate",
+          label: "Startdatum",
+          type: "date",
+          admin: {
+            width: "50%",
+            description: "Vanaf wanneer is de melding zichtbaar?",
+            date: { pickerAppearance: "dayOnly" },
+          },
+        },
+        {
+          name: "endDate",
+          label: "Einddatum",
+          type: "date",
+          admin: {
+            width: "50%",
+            description: "Tot wanneer is de melding zichtbaar?",
+            date: { pickerAppearance: "dayOnly" },
+          },
+        },
+      ],
     },
     {
       name: "active",
+      label: "Actief",
       type: "checkbox",
       defaultValue: true,
       admin: {
         position: "sidebar",
-      },
-    },
-    {
-      name: "startDate",
-      type: "date",
-      admin: {
-        position: "sidebar",
-      },
-    },
-    {
-      name: "endDate",
-      type: "date",
-      admin: {
-        position: "sidebar",
-      },
-    },
-    {
-      name: "dismissible",
-      type: "checkbox",
-      defaultValue: true,
-      admin: {
-        position: "sidebar",
+        description: "Zet uit om de melding tijdelijk te verbergen",
       },
     },
   ],

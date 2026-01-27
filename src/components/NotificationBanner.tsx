@@ -24,7 +24,7 @@ export function NotificationBanner() {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    fetch("/api/notifications")
+    fetch("/api/active-notifications")
       .then((res) => res.json())
       .then((data) => {
         if (data?.docs) setNotifications(data.docs);
