@@ -212,6 +212,26 @@ export function ContactClient({ settings: s }: Props) {
           </ScrollReveal>
         </div>
       </section>
+      {s.googleMapsEmbedUrl && (
+        <section className="section-padding pt-0">
+          <div className="max-w-5xl mx-auto">
+            <ScrollReveal>
+              <div className="rounded-2xl overflow-hidden shadow-lg border border-honey-200">
+                <iframe
+                  src={s.googleMapsEmbedUrl}
+                  width="100%"
+                  height="400"
+                  style={{ border: 0 }}
+                  allowFullScreen
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  title="Google Maps locatie"
+                />
+              </div>
+            </ScrollReveal>
+          </div>
+        </section>
+      )}
     </>
   );
 }

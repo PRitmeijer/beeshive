@@ -13,6 +13,9 @@ import { MenuItems } from "./collections/MenuItems";
 import { MenuCategories } from "./collections/MenuCategories";
 import { Notifications } from "./collections/Notifications";
 import { MailingList } from "./collections/MailingList";
+import { Testimonials } from "./collections/Testimonials";
+import { Events } from "./collections/Events";
+import { TeamMembers } from "./collections/TeamMembers";
 import { SiteSettings } from "./globals/SiteSettings";
 
 const filename = fileURLToPath(import.meta.url);
@@ -34,6 +37,9 @@ export default buildConfig({
     MenuCategories,
     Notifications,
     MailingList,
+    Testimonials,
+    Events,
+    TeamMembers,
   ],
   globals: [SiteSettings],
   editor: lexicalEditor(),

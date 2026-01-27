@@ -155,6 +155,15 @@ export const SiteSettings: GlobalConfig = {
               ],
             },
             {
+              name: "googleMapsEmbedUrl",
+              label: "Google Maps Embed URL",
+              type: "text",
+              admin: {
+                description:
+                  "Plak hier de Google Maps embed URL. Ga naar Google Maps → Delen → Insluiten → kopieer de src URL uit de iframe code (begint met https://www.google.com/maps/embed).",
+              },
+            },
+            {
               name: "socialMedia",
               label: "Social Media",
               type: "group",

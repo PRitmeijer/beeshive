@@ -88,6 +88,7 @@ const defaults = {
     },
   ],
   footerTagline: "Gemaakt met liefde in Zuilen",
+  googleMapsEmbedUrl: "",
 };
 
 export type SiteSettingsData = typeof defaults;
