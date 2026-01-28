@@ -33,7 +33,7 @@ const config: Config = {
           800: "#1E1008",
           900: "#120A04",
         },
-        cream: "#dfd4aa",
+        cream: "#FFF8F0",
         charcoal: "#1A1A2E",
       },
       fontFamily: {

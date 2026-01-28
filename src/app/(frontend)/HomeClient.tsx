@@ -35,7 +35,8 @@ export function HomeClient({ settings: s }: Props) {
       {/* ===== HERO ===== */}
       <section
         ref={heroRef}
-        className="relative min-h-screen flex items-center justify-center overflow-hidden bg-hive-800"
+        className="relative min-h-screen flex items-center justify-center overflow-hidden"
+        style={{ backgroundColor: "#dfd4aa" }}
         aria-label="Hero"
       >
         <motion.div
