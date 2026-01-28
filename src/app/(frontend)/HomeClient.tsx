@@ -35,14 +35,14 @@ export function HomeClient({ settings: s }: Props) {
       {/* ===== HERO ===== */}
       <section
         ref={heroRef}
-        className="relative min-h-screen flex items-center justify-center overflow-hidden"
-        style={{ backgroundColor: "#dfd4aa" }}
+        className="relative min-h-screen flex items-center justify-center overflow-hidden bg-hive-800"
         aria-label="Hero"
       >
         <motion.div
           style={{ y: heroY, scale: heroScale }}
           className="absolute inset-0 hex-pattern opacity-30"
         />
+        <div className="absolute inset-0 honeycomb-frame opacity-60" />
         <div className="absolute inset-0 bg-gradient-to-b from-hive-900/80 via-hive-800/50 to-honey-900/60" />
         <HexagonGrid count={18} />
         <FlyingBees count={5} />
