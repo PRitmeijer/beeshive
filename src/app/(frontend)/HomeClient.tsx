@@ -6,6 +6,7 @@ import Link from "next/link";
 import { HexagonGrid } from "@/components/HexagonGrid";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { MailingListForm } from "@/components/MailingListForm";
+import { FlyingBees } from "@/components/FlyingBees";
 import type { SiteSettingsData } from "@/lib/payload";
 
 interface Props {
@@ -41,8 +42,10 @@ export function HomeClient({ settings: s }: Props) {
           style={{ y: heroY, scale: heroScale }}
           className="absolute inset-0 hex-pattern opacity-30"
         />
+        <div className="absolute inset-0 honeycomb-frame opacity-60" />
         <div className="absolute inset-0 bg-gradient-to-b from-hive-900/80 via-hive-800/50 to-honey-900/60" />
         <HexagonGrid count={18} />
+        <FlyingBees count={5} />
         <div className="absolute top-0 left-0 right-0 h-32 flex justify-around">
           {[...Array(5)].map((_, i) => (
             <motion.div

@@ -58,8 +58,22 @@ export const Notifications: CollectionConfig = {
           type: "checkbox",
           defaultValue: true,
           admin: {
-            width: "50%",
+            width: "25%",
             description: "Kunnen bezoekers de melding sluiten?",
+          },
+        },
+        {
+          name: "displayMode",
+          label: "Weergave",
+          type: "select",
+          options: [
+            { label: "🔔 Banner", value: "banner" },
+            { label: "💬 Pop-up", value: "popup" },
+          ],
+          defaultValue: "banner",
+          admin: {
+            width: "25%",
+            description: "Toon als banner bovenaan of als pop-up venster",
           },
         },
       ],
