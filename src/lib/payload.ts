@@ -34,6 +34,7 @@ const nlDefaults = {
   siteName: "De Bee's Hive",
   description:
     "Een warm eetcafé in het hart van Zuilen waar creativiteit, verbinding en lekker eten samenkomen.",
+  keywords: "",
   cuisines: "Dutch, International, South African",
   priceRange: "€€",
   reservationUrl: "",
@@ -91,6 +92,7 @@ const enDefaults: SiteSettingsData = {
   siteName: "De Bee's Hive",
   description:
     "A warm eetcafé in the heart of Zuilen where creativity, connection and good food come together.",
+  keywords: "",
   cuisines: "Dutch, International, South African",
   priceRange: "€€",
   reservationUrl: "",

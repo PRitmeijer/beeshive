@@ -176,37 +176,38 @@ database, such as a new Docker volume, simply runs it.
 docker compose up -d --build
 ```
 
-The container listens on 3000 and is published on the host at `HOST_PORT`,
-which **must equal the Forward Port of the Nginx Proxy Manager Proxy Host**.
-Port 3000 is already taken on the production host, so `HOST_PORT` is set in
-that host's `.env`; the default here suits a clean machine only.
+Everything runs on **3100** — inside the container, on the host, and in Nginx
+Proxy Manager — from the single `HOST_PORT` in `.env`, so the two sides cannot
+drift apart. 3000 is occupied on this host, which is why it is not 3000.
 
-| | |
-|---|---|
-| Forward hostname | `beeshive` — the **host machine**, not the container |
-| Forward port | whatever `HOST_PORT` is on that host |
-| Scheme | `http` |
-| Websockets Support | on |
+The container is both published on the host *and* joined to the external
+`reverse-proxy` network, so NPM works either way:
 
-NPM lives outside this stack and reaches the site by the host's name over the
-network, so the port must be published: an unpublished container is unreachable
-from NPM however the Proxy Host is written. Two ways that has already broken:
+| | Forward hostname | Forward port |
+|---|---|---|
+| NPM on this Docker engine | `beeshive` (the container) | `3100` |
+| NPM anywhere else | this host's LAN IP | `3100` |
 
-- the published port was dropped in favour of reaching the container by name on
-  a shared `reverse-proxy` network — which needs NPM to be joined to that
-  network, and it is not;
-- the working port lived in an uncommitted edit to `docker-compose.yml` on the
-  server, which a `git pull` reverted.
+Scheme `http`, Websockets Support on. If the network does not exist on a host,
+`docker network create reverse-proxy` before the first `up`.
 
-Both fail the same way: the Proxy Host still reads correctly and the site is
-simply gone. Keep the number in `.env`, which survives a pull.
+Two ways this has already gone wrong, both of which look identical from
+outside — the Proxy Host still reads correctly and the site is simply gone:
 
-Then on the SSL tab request a Let's Encrypt certificate and turn on Force SSL —
-`NEXT_PUBLIC_SITE_URL` is baked in as `https://…`, so the canonical URLs,
-hreflang tags and sitemap all assume the site answers on HTTPS.
+- the published port was dropped in favour of container-name routing, on a
+  host where NPM was not joined to that network;
+- **`PAYLOAD_SECRET` was empty.** This one is the nastiest: the container
+  starts, logs `✓ Ready`, and never restarts, so `docker compose ps` shows it
+  healthy — and every single request returns 500, because the config throws
+  lazily on first use rather than at boot. `docker compose logs beeshive` is
+  the only place it shows. Keep the secret in `.env`; a pull cannot revert it.
 
-If uploading photographs in the admin returns **413**, put
-`client_max_body_size 100M;` in the Proxy Host's Advanced tab.
+Check the container itself before touching NPM — this bypasses the proxy
+entirely, so a 200 here means the fault is in NPM and not in the app:
+
+```bash
+curl -I http://localhost:3100
+```
 
 `docker compose down` is safe; **`down -v` deletes the database and the
 uploads**, which live in the `db-data` and `media-uploads` volumes.

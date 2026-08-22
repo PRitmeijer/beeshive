@@ -770,6 +770,10 @@ export interface SiteSetting {
   siteName: string;
   description?: string | null;
   /**
+   * Komma-gescheiden, bijvoorbeeld: eetcafé Utrecht, lunch Zuilen, borrel. Google negeert deze tag sinds 2009 en gebruikt hem niet voor de ranking — de Beschrijving hierboven en de tekst op de pagina's doen dat werk wel.
+   */
+  keywords?: string | null;
+  /**
    * Komma-gescheiden lijst van keukens voor zoekmachines
    */
   cuisines?: string | null;
@@ -864,6 +868,7 @@ export interface SiteSetting {
 export interface SiteSettingsSelect<T extends boolean = true> {
   siteName?: T;
   description?: T;
+  keywords?: T;
   cuisines?: T;
   priceRange?: T;
   reservationUrl?: T;

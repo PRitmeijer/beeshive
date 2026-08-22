@@ -1,4 +1,5 @@
 import "../../globals.css";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
@@ -15,6 +16,40 @@ import { locales, parseLocale } from "@/i18n/config";
  */
 export function generateStaticParams() {
   return locales.map((locale) => ({ locale }));
+}
+
+/**
+ * Site-wide metadata. Next merges this with whatever each page's own
+ * generateMetadata returns, and a page that does not mention keywords
+ * inherits these — so the owners maintain one list in the CMS rather than a
+ * field per page.
+ *
+ * Worth being straight about what this buys: Google dropped
+ * `<meta name="keywords">` as a ranking signal in 2009 and Bing treats it as
+ * a spam indicator when it is stuffed. It is here because it is asked for and
+ * it is harmless kept short; the site's actual search visibility comes from
+ * the page copy, the per-page descriptions, and the Restaurant structured
+ * data on the homepage.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const locale = parseLocale((await params).locale);
+  if (!locale) return {};
+
+  const s = await getSiteSettings(locale);
+
+  // Next renders an array as one comma-separated tag, and omits the tag
+  // entirely when the list is empty — which is the right outcome for a field
+  // the owners have not filled in.
+  const keywords = (s.keywords || "")
+    .split(",")
+    .map((k) => k.trim())
+    .filter(Boolean);
+
+  return keywords.length ? { keywords } : {};
 }
 
 export default async function FrontendLayout({

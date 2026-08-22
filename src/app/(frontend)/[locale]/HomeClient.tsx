@@ -286,11 +286,15 @@ export function HomeClient({ locale, settings: s, today }: Props) {
           </div>
         </motion.div>
 
+        {/* xl only, the breakpoint at which the stamp strip moves out to the
+            right margin. Below it the strip drops under the text and the cue
+            lands on top of the photographs — pointing at a scroll the reader
+            has already started, over the one thing worth looking at. */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: reduce ? 0 : 0.9, delay: 1.4, ease: SETTLE }}
-          className="absolute bottom-16 left-6 z-10 text-honey-500/60 md:left-12 lg:left-20"
+          className="absolute bottom-16 left-6 z-10 hidden text-honey-500/60 md:left-12 lg:left-20 xl:block"
           aria-hidden="true"
         >
           <motion.div

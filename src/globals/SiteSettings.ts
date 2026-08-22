@@ -27,6 +27,19 @@ export const SiteSettings: GlobalConfig = {
                 "Een warm eetcafé in het hart van Zuilen waar creativiteit, verbinding en lekker eten samenkomen.",
             },
             {
+              name: "keywords",
+              label: "Zoekwoorden (SEO)",
+              type: "text",
+              localized: true,
+              admin: {
+                description:
+                  "Komma-gescheiden, bijvoorbeeld: eetcafé Utrecht, lunch Zuilen, borrel. " +
+                  "Google negeert deze tag sinds 2009 en gebruikt hem niet voor de " +
+                  "ranking — de Beschrijving hierboven en de tekst op de pagina's " +
+                  "doen dat werk wel.",
+              },
+            },
+            {
               name: "cuisines",
               label: "Keukens (voor SEO)",
               type: "text",

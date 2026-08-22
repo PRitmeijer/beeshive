@@ -41,7 +41,14 @@
   .paper-ground {
     position: absolute;
     inset: 0;
-    z-index: 60;
+    /* Above the page (z-10/z-20) and below the fixed chrome (z-50+). It used
+       to be 60, over the header — which on iOS is not a tinting question but
+       a compositing one: this layer is document-height, it scrolls, and it
+       blends. Safari has to rasterise it together with whatever it blends
+       over, so the fixed header joined the scrolling group and, when the URL
+       bar collapses mid-scroll, was repainted in document order underneath
+       the page. The menu vanished behind the content. */
+    z-index: 30;
     pointer-events: none;
     mix-blend-mode: multiply;
     /* Fibre carries the character; the tonal drift underneath is held to a
