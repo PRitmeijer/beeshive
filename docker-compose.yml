@@ -1,12 +1,24 @@
 services:
-  web:
+  # Named for what it is rather than the generic "web": this container sits on
+  # a reverse-proxy network shared with other stacks, and the service name
+  # becomes its DNS name there. Two stacks both calling themselves "web" on one
+  # network is a coin toss over which one the proxy reaches.
+  beeshive:
+    container_name: beeshive
     build:
       context: .
       args:
         # Baked into the client bundle; see the Dockerfile for why.
         NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://debeeshive.nl}
-    ports:
-      - "3000:3000"
+    # No ports published. Nginx Proxy Manager reaches the container over the
+    # shared network, so nothing needs to be open on the host — which is also
+    # why the host's port 3000 being taken does not matter.
+    #
+    # In Nginx Proxy Manager, the Proxy Host forwards to:
+    #     hostname  beeshive
+    #     port      3000
+    networks:
+      - reverse-proxy
     environment:
       # Pinned to the mounted volume, not something to override per host.
       - DATABASE_URI=file:/app/data/database.db
@@ -23,12 +35,17 @@ services:
       - SMTP_USER=${SMTP_USER:-}
       - SMTP_PASS=${SMTP_PASS:-}
       - SMTP_SECURE=${SMTP_SECURE:-}
-      - EMAIL_FROM=${EMAIL_FROM:-no-reply@debeeshive.nl}
+      - EMAIL_FROM=${EMAIL_FROM:-info@debeeshive.nl}
       - EMAIL_FROM_NAME=${EMAIL_FROM_NAME:-De Bee's Hive}
     volumes:
       - db-data:/app/data
       - media-uploads:/app/media
     restart: unless-stopped
+
+networks:
+  # Created and owned by the proxy stack, not by this one.
+  reverse-proxy:
+    external: true
 
 volumes:
   db-data:
