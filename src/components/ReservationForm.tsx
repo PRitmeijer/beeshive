@@ -259,16 +259,13 @@ export function ReservationForm({
             id="reserve-email"
             name="email"
             type="email"
+            required
             maxLength={200}
-            aria-describedby="reserve-email-hint"
             autoComplete="email"
             value={form.email}
             onChange={(e) => set("email")(e.target.value)}
             className={fieldClass}
           />
-          <p id="reserve-email-hint" className="mt-2 text-sm text-hive-400">
-            {t.emailHint}
-          </p>
         </div>
       </div>
 

@@ -73,14 +73,14 @@ export async function POST(request: Request) {
     if (!name) return fail("nameRequired");
     if (name.length > MAX.name) return fail("nameTooLong");
 
-    // The phone number is the one contact detail that has to be here: the
-    // café confirms a table by ringing back. An email address is welcome but
-    // optional, and only has to be well formed if it was given at all.
+    // The phone number is how the café confirms a table, so it is no longer
+    // optional — which is also why nothing asks the guest to ring up about a
+    // large party any more.
     if (!phone) return fail("phoneRequired");
     if (phone.length > MAX.phone) return fail("phoneTooLong");
 
-    if (email && (email.length > MAX.email ||
-        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+    if (!email) return fail("emailRequired");
+    if (email.length > MAX.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return fail("emailInvalid");
     }
     if (occasion.length > MAX.occasion) return fail("occasionTooLong");
@@ -143,7 +143,7 @@ export async function POST(request: Request) {
       collection: "reservations",
       data: {
         name,
-        email: email || undefined,
+        email,
         phone,
         // Stored at midday UTC: a dayOnly field must not slide to the day
         // before or after when it is rendered in another timezone.
@@ -171,7 +171,7 @@ export async function POST(request: Request) {
 
       const lines = [
         `Naam:        ${name}`,
-        `E-mail:      ${email || "-"}`,
+        `E-mail:      ${email}`,
         `Telefoon:    ${phone || "-"}`,
         `Datum:       ${date}`,
         `Tijd:        ${time}`,
@@ -188,9 +188,8 @@ export async function POST(request: Request) {
 
       await payload.sendEmail({
         to,
-        // Answering goes straight back to the guest, when they left an
-        // address to answer to.
-        ...(email ? { replyTo: `${name} <${email}>` } : {}),
+        // Answering goes straight back to the guest.
+        replyTo: `${name} <${email}>`,
         subject: `Reserveringsaanvraag: ${name}, ${date} om ${time} (${guests}p)`,
         text: lines.join("\n"),
       });

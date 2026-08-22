@@ -51,10 +51,8 @@ export const Reservations: CollectionConfig = {
           name: "email",
           label: "E-mailadres",
           type: "email",
-          admin: {
-            width: "50%",
-            description: "Optioneel; we bellen liever even",
-          },
+          required: true,
+          admin: { width: "50%" },
         },
       ],
     },

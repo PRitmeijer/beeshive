@@ -419,10 +419,7 @@ export interface MailingList {
 export interface Reservation {
   id: number;
   name: string;
-  /**
-   * Optioneel; we bellen liever even
-   */
-  email?: string | null;
+  email: string;
   /**
    * Hierop bevestigen we de tafel
    */

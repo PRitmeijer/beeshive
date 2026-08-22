@@ -16,6 +16,7 @@ export const RESERVATION_ERRORS = [
   "nameRequired",
   "nameTooLong",
   "phoneRequired",
+  "emailRequired",
   "emailInvalid",
   "phoneTooLong",
   "occasionTooLong",
