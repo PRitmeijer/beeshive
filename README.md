@@ -41,6 +41,23 @@ replying reaches them rather than the website.
   failed send *is* reported. Anything else would tell the visitor a message had
   been delivered that never left the building.
 
+### When the login is rejected
+
+`535 Authentication failed` with `Error verifying Nodemailer transport` is
+logged at startup and is **not** fatal: the site serves normally and
+reservations are still stored, only the mail does not go out.
+
+Check what the container actually received before re-reading the password:
+
+```bash
+docker compose exec beeshive printenv SMTP_USER SMTP_PASS
+```
+
+Compose interpolates `.env`, so a `$` in the password is read as the start of a
+variable name and quietly eaten — `abc$def` arrives as `abc`. Double it:
+`abc$$def`. `SMTP_USER` has to be the full address, and on Strato it is the
+mailbox's own password, not the account login.
+
 Sending needs SMTP credentials in the environment (`SMTP_HOST` and friends, see
 `.env.example`). Without them Payload writes mail to the console instead —
 correct for local work, and worth knowing about before the first deploy, since
