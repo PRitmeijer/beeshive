@@ -25,6 +25,11 @@ services:
     # below. Change HOST_PORT and the Proxy Host's Forward Port together.
     ports:
       - "${HOST_PORT:-3100}:${HOST_PORT:-3100}"
+    # Also joined to the proxy's own network, so NPM can reach the container by
+    # name whether or not it can reach this host's published port. Whichever
+    # route NPM uses, the port is 3100 now — beeshive:3100, or <host>:3100.
+    networks:
+      - reverse-proxy
     environment:
       # What the Next server binds to inside the container. Kept equal to the
       # published port above; the Dockerfile's 3000 is the standalone default
@@ -51,6 +56,12 @@ services:
       - db-data:/app/data
       - media-uploads:/app/media
     restart: unless-stopped
+
+networks:
+  # Created and owned by the proxy stack, not by this one. If it does not exist
+  # on a host, `docker network create reverse-proxy` before the first up.
+  reverse-proxy:
+    external: true
 
 volumes:
   db-data:
