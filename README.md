@@ -108,6 +108,17 @@ if present and everything else is ignored. Addresses are matched
 case-insensitively and an address already on the list is left alone, so running
 it twice is safe.
 
+## The gallery's categories
+
+Gallery categories are their own collection (Inhoud → Galerij Categorieën), so
+the owners add or rename one in the admin instead of asking for a deploy. Each
+carries a name per language and a sort order, and an image points at one. The
+filter bar on /galerij is built from the categories actually in use, in that
+order, so an unused category never shows up as an empty button.
+
+A fresh install starts with none. Make a few before uploading photographs, or
+the category field has nothing to choose from.
+
 ## Database schema and migrations
 
 The schema lives in `src/migrations/`, generated from the collections and the
