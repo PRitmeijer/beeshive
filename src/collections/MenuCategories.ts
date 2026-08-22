@@ -19,6 +19,7 @@ export const MenuCategories: CollectionConfig = {
       label: "Naam",
       type: "text",
       required: true,
+      localized: true,
       admin: {
         description: "Bijv. 'Voorgerechten', 'Hoofdgerechten', 'Desserts'",
       },
@@ -27,6 +28,7 @@ export const MenuCategories: CollectionConfig = {
       name: "description",
       label: "Beschrijving",
       type: "textarea",
+      localized: true,
       admin: {
         description:
           "Optionele korte tekst onder de categorienaam op de kaart, bijv. 'Om te beginnen'",

@@ -19,6 +19,7 @@ export const BlogPosts: CollectionConfig = {
       label: "Titel",
       type: "text",
       required: true,
+      localized: true,
     },
     {
       name: "slug",
@@ -36,6 +37,7 @@ export const BlogPosts: CollectionConfig = {
       label: "Samenvatting",
       type: "textarea",
       required: true,
+      localized: true,
       maxLength: 300,
       admin: {
         description:
@@ -47,13 +49,16 @@ export const BlogPosts: CollectionConfig = {
       label: "Uitgelichte afbeelding",
       type: "upload",
       relationTo: "media",
-      required: true,
+      // Optional on purpose: the listing and the article both render a
+      // drawn placeholder when there is no photograph yet.
+      required: false,
     },
     {
       name: "content",
       label: "Inhoud",
       type: "richText",
       required: true,
+      localized: true,
     },
     {
       name: "category",

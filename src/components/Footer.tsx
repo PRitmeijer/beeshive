@@ -1,8 +1,12 @@
 import Link from "next/link";
 import { getSiteSettings } from "@/lib/payload";
+import { TornEdge } from "@/components/TornEdge";
+import { getDict } from "@/i18n/dictionaries";
+import { localeHref, localeTags, type Locale } from "@/i18n/config";
 
-export async function Footer() {
-  const s = await getSiteSettings();
+export async function Footer({ locale }: { locale: Locale }) {
+  const s = await getSiteSettings(locale);
+  const t = getDict(locale);
 
   const socialLinks = [
     {
@@ -34,36 +38,79 @@ export async function Footer() {
     },
   ].filter((l) => l.url);
 
+  // The country is one address field Payload does not keep per language, so it
+  // is stored once as "Nederland". The ISO code beside it does carry the
+  // meaning, so the reader's own language can supply the word.
+  const country = (() => {
+    try {
+      return (
+        new Intl.DisplayNames([localeTags[locale]], { type: "region" }).of(
+          s.address.countryCode,
+        ) || s.address.country
+      );
+    } catch {
+      return s.address.country;
+    }
+  })();
+
+  // Written as the Dutch paths the site is indexed under; localeHref adds the
+  // /en prefix on the English side.
+  const navItems: [string, string][] = [
+    ["/", t.nav.home],
+    ["/over-ons", t.nav.about],
+    ["/kaart", t.nav.menu],
+    ["/galerij", t.nav.gallery],
+    ["/blog", t.nav.blog],
+    ["/contact", t.nav.contact],
+    ["/reserveren", t.nav.reserve],
+  ];
+
   return (
-    <footer className="bg-hive-800 text-honey-100">
-      <div className="max-w-7xl mx-auto px-6 md:px-12 py-16">
-        <div className="grid md:grid-cols-4 gap-12">
-          {/* Brand */}
-          <div className="md:col-span-1">
-            <h3 className="font-display text-2xl font-bold text-honey-400 mb-4">
-              {s.siteName}
-            </h3>
-            <p className="text-honey-200/70 text-sm leading-relaxed">
+    <footer className="relative bg-hive-800 text-honey-100">
+      {/* The back cover: the one dark sheet left in the book. It tears UP into
+          whatever paper section ends the page, so it is anchored at bottom-full
+          outside the footer box. The footer must therefore never carry
+          `overflow-hidden`, and the last section of every page must not draw a
+          competing edge of its own. */}
+      <TornEdge
+        color="#331E0C"
+        lip="rgba(216,190,126,0.3)"
+        variant={1}
+        className="absolute inset-x-0 bottom-full z-10"
+      />
+
+      <div
+        aria-hidden="true"
+        className="honeycomb-frame absolute inset-0 pointer-events-none opacity-60"
+      />
+
+      <div className="relative max-w-6xl mx-auto px-6 md:px-12 py-20 md:py-24">
+        <div className="grid md:grid-cols-12 gap-x-8 gap-y-14">
+          {/* Brand: the widest measure, the rest hangs off to the right */}
+          <div className="md:col-span-4">
+            <h3 className="heading-md text-honey-200">{s.siteName}</h3>
+            <div className="rule-ink-light w-14 mt-5 mb-5" aria-hidden="true" />
+            <p className="text-honey-200/70 text-sm leading-relaxed max-w-sm">
               {s.description}
             </p>
           </div>
 
           {/* Links */}
-          <div>
-            <h4 className="font-semibold text-honey-300 mb-4">Navigatie</h4>
-            <ul className="space-y-2 text-sm">
-              {[
-                ["/", "Home"],
-                ["/over-ons", "Over Ons"],
-                ["/kaart", "Kaart"],
-                ["/galerij", "Galerij"],
-                ["/blog", "Blog"],
-                ["/contact", "Contact"],
-              ].map(([href, label]) => (
-                <li key={href}>
+          <div className="md:col-start-6 md:col-span-2">
+            <h4 className="label-light">{t.footer.navigation}</h4>
+            <div className="rule-ink-light mt-3 mb-4" aria-hidden="true" />
+            <ul className="space-y-2.5 text-sm">
+              {navItems.map(([href, label], i) => (
+                <li key={href} className="flex items-baseline gap-3">
+                  <span
+                    aria-hidden="true"
+                    className="figures-old text-[0.6875rem] tracking-label text-honey-300/70"
+                  >
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
                   <Link
-                    href={href}
-                    className="text-honey-200/60 hover:text-honey-400 transition-colors"
+                    href={localeHref(locale, href)}
+                    className="text-honey-200/70 hover:text-honey-300 transition-colors duration-500 ease-settle"
                   >
                     {label}
                   </Link>
@@ -73,48 +120,52 @@ export async function Footer() {
           </div>
 
           {/* Contact */}
-          <div>
-            <h4 className="font-semibold text-honey-300 mb-4">Contact</h4>
-            <ul className="space-y-2 text-sm text-honey-200/60">
-              <li>
-                <a
-                  href={`mailto:${s.contactEmail}`}
-                  className="hover:text-honey-400 transition-colors"
-                >
-                  {s.contactEmail}
-                </a>
-              </li>
-              {s.phone && (
+          <div className="md:col-span-3">
+            <h4 className="label-light">{t.footer.contact}</h4>
+            <div className="rule-ink-light mt-3 mb-4" aria-hidden="true" />
+            <address className="not-italic">
+              <ul className="space-y-2.5 text-sm text-honey-200/70">
                 <li>
                   <a
-                    href={`tel:${s.phone.replace(/\s/g, "")}`}
-                    className="hover:text-honey-400 transition-colors"
+                    href={`mailto:${s.contactEmail}`}
+                    className="hover:text-honey-300 transition-colors duration-500 ease-settle break-words"
                   >
-                    {s.phone}
+                    {s.contactEmail}
                   </a>
                 </li>
-              )}
-              <li>
-                {s.address.area
-                  ? `${s.address.area}, ${s.address.city}`
-                  : s.address.city}
-              </li>
-              <li>{s.address.country}</li>
-            </ul>
+                {s.phone && (
+                  <li>
+                    <a
+                      href={`tel:${s.phone.replace(/\s/g, "")}`}
+                      className="figures-old hover:text-honey-300 transition-colors duration-500 ease-settle"
+                    >
+                      {s.phone}
+                    </a>
+                  </li>
+                )}
+                <li>
+                  {s.address.area
+                    ? `${s.address.area}, ${s.address.city}`
+                    : s.address.city}
+                </li>
+                <li>{country}</li>
+              </ul>
+            </address>
           </div>
 
           {/* Social */}
           {socialLinks.length > 0 && (
-            <div>
-              <h4 className="font-semibold text-honey-300 mb-4">Volg Ons</h4>
-              <div className="flex gap-4">
+            <div className="md:col-span-2">
+              <h4 className="label-light">{t.footer.follow}</h4>
+              <div className="rule-ink-light mt-3 mb-4" aria-hidden="true" />
+              <div className="flex gap-2.5">
                 {socialLinks.map((link) => (
                   <a
                     key={link.name}
                     href={link.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="w-10 h-10 rounded-full bg-honey-400/10 flex items-center justify-center text-honey-400 hover:bg-honey-400 hover:text-hive-800 transition-all"
+                    className="w-10 h-10 rounded-[2px] border border-honey-300/25 flex items-center justify-center text-honey-300 hover:border-honey-400 hover:bg-honey-400 hover:text-hive-800 transition-colors duration-500 ease-settle"
                     aria-label={link.name}
                   >
                     {link.icon}
@@ -125,12 +176,20 @@ export async function Footer() {
           )}
         </div>
 
-        <div className="mt-16 pt-8 border-t border-honey-400/10 flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-honey-200/40 text-sm">
-            &copy; {new Date().getFullYear()} {s.siteName}. Alle rechten
-            voorbehouden.
+        {/* Colophon line */}
+        <div className="rule-ink-light mt-20" aria-hidden="true" />
+        <div className="pt-6 grid md:grid-cols-12 gap-3 items-baseline">
+          {/* Pale gold on the dark cover still has to be readable: honey-200
+              at 70% is 6.0:1 on hive-800, the tagline at full honey-300 is
+              8.7:1. The old /45 and /55 sat at 3.3 and 3.6. */}
+          <p className="md:col-span-7 text-honey-200/70 text-sm">
+            &copy;{" "}
+            <span className="figures-old">{new Date().getFullYear()}</span>{" "}
+            {s.siteName}. {t.footer.rights}
           </p>
-          <p className="text-honey-200/40 text-xs">{s.footerTagline}</p>
+          <p className="md:col-start-9 md:col-span-4 md:text-right label-light">
+            {s.footerTagline}
+          </p>
         </div>
       </div>
     </footer>

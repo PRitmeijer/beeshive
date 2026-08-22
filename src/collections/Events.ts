@@ -19,6 +19,7 @@ export const Events: CollectionConfig = {
       label: "Titel",
       type: "text",
       required: true,
+      localized: true,
     },
     {
       type: "row",
@@ -54,6 +55,7 @@ export const Events: CollectionConfig = {
       label: "Beschrijving",
       type: "textarea",
       required: true,
+      localized: true,
     },
     {
       name: "image",

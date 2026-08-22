@@ -27,6 +27,7 @@ export const Media: CollectionConfig = {
       label: "Alt-tekst",
       type: "text",
       required: true,
+      localized: true,
       admin: {
         description:
           "Beschrijf de afbeelding kort voor slechtzienden en zoekmachines, bijv. 'Gerecht met seizoensgroenten op een houten bord'",
@@ -36,6 +37,7 @@ export const Media: CollectionConfig = {
       name: "caption",
       label: "Bijschrift",
       type: "text",
+      localized: true,
       admin: {
         description: "Optioneel bijschrift dat onder de afbeelding kan verschijnen",
       },

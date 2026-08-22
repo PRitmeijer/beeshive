@@ -22,12 +22,14 @@ export const SiteSettings: GlobalConfig = {
               name: "tagline",
               label: "Slogan",
               type: "text",
+              localized: true,
               defaultValue: "Waar eten en creativiteit samenkomen",
             },
             {
               name: "description",
               label: "Beschrijving (SEO)",
               type: "textarea",
+              localized: true,
               defaultValue:
                 "Een warm eetcafé in het hart van Zuilen waar creativiteit, verbinding en lekker eten samenkomen.",
             },
@@ -133,12 +135,14 @@ export const SiteSettings: GlobalConfig = {
                   label: "Dag",
                   type: "text",
                   required: true,
+                  localized: true,
                 },
                 {
                   name: "hours",
                   label: "Tijden",
                   type: "text",
                   required: true,
+                  localized: true,
                   admin: {
                     description: "Bijv. '12:00 – 22:00' of 'Gesloten'",
                   },
@@ -153,6 +157,19 @@ export const SiteSettings: GlobalConfig = {
                 { day: "Zaterdag", hours: "12:00 – 22:00" },
                 { day: "Zondag", hours: "12:00 – 22:00" },
               ],
+            },
+            {
+              name: "openingHoursNote",
+              label: "Afwijkende openingstijden",
+              type: "textarea",
+              localized: true,
+              admin: {
+                description:
+                  "Vrij veld voor alles wat niet in het weekschema past. Bijvoorbeeld: "
+                  + "'Elke laatste zondag van de maand zijn we open' of een aangepaste "
+                  + "tijd rond de feestdagen. Laat leeg als er niets bijzonders is: dan "
+                  + "toont de site hier ook niets.",
+              },
             },
             {
               name: "googleMapsEmbedUrl",
@@ -197,6 +214,7 @@ export const SiteSettings: GlobalConfig = {
               name: "heroTitle",
               label: "Hero Titel",
               type: "text",
+              localized: true,
               defaultValue: "De Bee's Hive",
               admin: {
                 description:
@@ -207,6 +225,7 @@ export const SiteSettings: GlobalConfig = {
               name: "heroSubtitle",
               label: "Hero Ondertitel",
               type: "text",
+              localized: true,
               defaultValue:
                 "Waar eten en creativiteit samenkomen. Een warm eetcafé in het hart van Zuilen.",
             },
@@ -214,12 +233,14 @@ export const SiteSettings: GlobalConfig = {
               name: "introTitle",
               label: "Introductie Titel",
               type: "text",
+              localized: true,
               defaultValue: "De kunst van het leven",
             },
             {
               name: "introText",
               label: "Introductie Tekst",
               type: "textarea",
+              localized: true,
               defaultValue:
                 "De Bee's Hive ontstond uit een liefde voor alle vormen van kunst en creativiteit in het dagelijks leven. Begonnen in Zuid-Afrika, keerden wij terug naar onze Nederlandse roots om een plek te creëren waar het 'kunst van het leven' kan floreren.",
             },
@@ -241,8 +262,8 @@ export const SiteSettings: GlobalConfig = {
                 },
                 {
                   icon: "🤝",
-                  title: "Verbinding",
-                  text: "Meer dan een restaurant — een gemeenschap waar iedereen welkom is.",
+                  title: "Gemeenschap",
+                  text: "Meer dan een restaurant. Een gemeenschap waar iedereen welkom is.",
                 },
               ],
               fields: [
@@ -257,12 +278,14 @@ export const SiteSettings: GlobalConfig = {
                   label: "Titel",
                   type: "text",
                   required: true,
+                  localized: true,
                 },
                 {
                   name: "text",
                   label: "Tekst",
                   type: "textarea",
                   required: true,
+                  localized: true,
                 },
               ],
             },
@@ -270,6 +293,7 @@ export const SiteSettings: GlobalConfig = {
               name: "quote",
               label: "Quote",
               type: "text",
+              localized: true,
               defaultValue:
                 "Eten is kunst, en iedereen is welkom om hun creatieve zelf te zijn",
             },
@@ -277,18 +301,21 @@ export const SiteSettings: GlobalConfig = {
               name: "quoteAttribution",
               label: "Quote Toeschrijving",
               type: "text",
+              localized: true,
               defaultValue: "De Bee's Hive",
             },
             {
               name: "newsletterTitle",
               label: "Nieuwsbrief Titel",
               type: "text",
+              localized: true,
               defaultValue: "Schrijf je in",
             },
             {
               name: "newsletterText",
               label: "Nieuwsbrief Tekst",
               type: "text",
+              localized: true,
               defaultValue:
                 "Ontvang als eerste nieuws over speciale evenementen, nieuwe gerechten en aanbiedingen.",
             },
@@ -303,13 +330,15 @@ export const SiteSettings: GlobalConfig = {
               name: "aboutIntro",
               label: "Intro Tekst",
               type: "textarea",
+              localized: true,
               defaultValue:
-                "De Bee's Hive is meer dan een restaurant — het is een plek waar kunst, creativiteit en lekker eten samenkomen in het hart van Zuilen, Utrecht.",
+                "De Bee's Hive is meer dan een restaurant. Het is een plek waar kunst, creativiteit en lekker eten samenkomen in het hart van Zuilen, Utrecht.",
             },
             {
               name: "aboutStory",
               label: "Ons Verhaal",
               type: "richText",
+              localized: true,
               admin: {
                 description:
                   "Het volledige verhaal op de Over Ons pagina. Gebruik de editor voor opmaak.",
@@ -319,6 +348,7 @@ export const SiteSettings: GlobalConfig = {
               name: "aboutQuote",
               label: "Quote",
               type: "text",
+              localized: true,
               defaultValue:
                 "Wij zijn een familie met een passie voor eten, kunst en verbinding.",
             },
@@ -331,7 +361,7 @@ export const SiteSettings: GlobalConfig = {
                 {
                   icon: "🌍",
                   title: "Onze Roots",
-                  text: "Van Zuid-Afrika naar Zuilen — onze culturele reis vormt de basis van alles wat we doen.",
+                  text: "Van Zuid-Afrika naar Zuilen. Onze culturele reis vormt de basis van alles wat we doen.",
                 },
                 {
                   icon: "🌿",
@@ -341,7 +371,7 @@ export const SiteSettings: GlobalConfig = {
                 {
                   icon: "💛",
                   title: "Gemeenschap",
-                  text: "Een warme plek voor iedereen — buren, families, kunstenaars en dromers.",
+                  text: "Een warme plek voor iedereen: buren, families, kunstenaars en dromers.",
                 },
               ],
               fields: [
@@ -356,12 +386,14 @@ export const SiteSettings: GlobalConfig = {
                   label: "Titel",
                   type: "text",
                   required: true,
+                  localized: true,
                 },
                 {
                   name: "text",
                   label: "Tekst",
                   type: "textarea",
                   required: true,
+                  localized: true,
                 },
               ],
             },
@@ -376,6 +408,7 @@ export const SiteSettings: GlobalConfig = {
               name: "footerTagline",
               label: "Footer Slogan",
               type: "text",
+              localized: true,
               defaultValue: "Gemaakt met liefde in Zuilen",
             },
           ],

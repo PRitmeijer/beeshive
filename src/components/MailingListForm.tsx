@@ -1,14 +1,30 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
+import { CraftIcon } from "@/components/CraftIcon";
+import { getDict } from "@/i18n/dictionaries";
+import { defaultLocale, type Locale } from "@/i18n/config";
 
-export function MailingListForm() {
+/** Letterpress field: no box, just a rule the ink sits on. Paper ground. */
+const fieldClass =
+  "mt-2 block w-full rounded-none border-0 border-b border-hive-700/25 bg-transparent " +
+  "px-0 py-3 font-body text-hive-700 placeholder:text-hive-300/70 outline-none " +
+  "transition-colors duration-300 ease-settle " +
+  "focus:border-honey-400 focus:shadow-[inset_0_-2px_0_0_#B4735E]";
+
+export function MailingListForm({
+  locale = defaultLocale,
+}: {
+  locale?: Locale;
+}) {
+  const t = getDict(locale).newsletter;
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [status, setStatus] = useState<
     "idle" | "loading" | "success" | "error"
   >("idle");
+  const reduce = useReducedMotion();
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -34,50 +50,87 @@ export function MailingListForm() {
   if (status === "success") {
     return (
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="text-center py-8"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: reduce ? 0 : 0.8, ease: [0.16, 0.84, 0.28, 1] }}
+        role="status"
+        className="max-w-md mx-auto py-6 text-left"
       >
-        <div className="text-4xl mb-3">🐝</div>
-        <p className="font-display text-xl text-honey-600 font-bold">
-          Bedankt voor je aanmelding!
+        <CraftIcon
+          name="bee"
+          size={44}
+          weight={1}
+          className="text-sage-500"
+        />
+        <div className="rule-ink w-14 mt-5" aria-hidden="true" />
+        <p className="font-display text-xl text-hive-700 mt-5">
+          {t.successTitle}
         </p>
-        <p className="text-hive-400 mt-1 text-sm">
-          Je hoort snel van ons.
-        </p>
+        <p className="text-hive-400 mt-2 text-sm">{t.successText}</p>
       </motion.div>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 max-w-md mx-auto">
-      <input
-        type="text"
-        placeholder="Je naam"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        className="w-full px-4 py-3 rounded-xl border border-honey-200 bg-white/80
-                   focus:border-honey-400 focus:ring-2 focus:ring-honey-400/20 outline-none transition-all"
-      />
-      <input
-        type="email"
-        required
-        placeholder="Je e-mailadres"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        className="w-full px-4 py-3 rounded-xl border border-honey-200 bg-white/80
-                   focus:border-honey-400 focus:ring-2 focus:ring-honey-400/20 outline-none transition-all"
-      />
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-8 max-w-md mx-auto text-left"
+    >
+      <div>
+        <label htmlFor="newsletter-name" className="label block">
+          {t.name}
+        </label>
+        <input
+          id="newsletter-name"
+          type="text"
+          placeholder={t.name}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className={fieldClass}
+        />
+      </div>
+      <div>
+        <label htmlFor="newsletter-email" className="label block">
+          {t.email}
+        </label>
+        <input
+          id="newsletter-email"
+          type="email"
+          required
+          placeholder={t.email}
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className={fieldClass}
+        />
+      </div>
       <button
         type="submit"
         disabled={status === "loading"}
         className="btn-primary w-full disabled:opacity-50"
       >
-        {status === "loading" ? "Bezig..." : "Aanmelden"}
+        {status === "loading" ? t.submitting : t.submit}
       </button>
       {status === "error" && (
-        <p className="text-red-500 text-sm text-center">
-          Er ging iets mis. Probeer het opnieuw.
+        <p
+          role="alert"
+          className="flex items-center gap-2 text-sm text-honey-600"
+        >
+          <svg
+            viewBox="0 0 12 12"
+            width="12"
+            height="12"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+            aria-hidden="true"
+            focusable="false"
+            className="shrink-0"
+          >
+            <path d="M2.2 2.4 L9.8 9.6" />
+            <path d="M9.7 2.3 L2.3 9.7" />
+          </svg>
+          {t.error}
         </p>
       )}
     </form>

@@ -19,6 +19,7 @@ export const Notifications: CollectionConfig = {
       label: "Titel",
       type: "text",
       required: true,
+      localized: true,
       admin: {
         description: "Korte, opvallende titel voor de melding",
       },
@@ -28,6 +29,7 @@ export const Notifications: CollectionConfig = {
       label: "Bericht",
       type: "textarea",
       required: true,
+      localized: true,
       admin: {
         description: "Het volledige bericht dat bezoekers zien",
       },

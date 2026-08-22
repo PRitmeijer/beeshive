@@ -11,7 +11,7 @@ export const MailingList: CollectionConfig = {
     defaultColumns: ["email", "name", "subscribedAt", "active"],
     description:
       "Alle e-mailadressen van bezoekers die zich hebben aangemeld voor de nieuwsbrief. Exporteer deze lijst om nieuwsbrieven te versturen.",
-    group: "Marketing",
+    group: "Gasten",
   },
   fields: [
     {

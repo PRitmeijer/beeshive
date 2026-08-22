@@ -2,89 +2,327 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ==========================================================================
+   MATERIAL
+   Built from the printed menu: handmade mill stock with plant fibre suspended
+   in it, mottled tone, a feathery deckle on every edge, and terracotta ink.
+   Everything below exists to make the screen behave like that sheet.
+   ========================================================================== */
+
 @layer base {
+  :root {
+    --paper: #f1ece1;
+    --paper-deep: #e8e2d4;
+    --paper-shade: #ddd5c3;
+    --paper-cover: #c6c49b;
+    --ink: #422810;
+    --clay: #b4735e;
+    --gold: #c9a55b;
+    --edge: rgba(66, 40, 16, 0.15);
+    --edge-soft: rgba(66, 40, 16, 0.08);
+    --ease-settle: cubic-bezier(0.16, 0.84, 0.28, 1);
+  }
+
   html {
     scroll-behavior: smooth;
   }
 
   body {
-    @apply bg-cream text-hive-700 font-body;
+    @apply relative bg-paper text-hive-500 font-body;
+    font-feature-settings: "kern" 1, "liga" 1;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* The stock itself.
+     Sections paint their own opaque grounds, so the fibre cannot live behind
+     them: it has to multiply over the top, the way ink and pulp actually
+     share a surface. Absolute rather than fixed, so it travels with the page:
+     fixed texture reads as dirt on the screen, not fibre in the sheet. */
+  .paper-ground {
+    position: absolute;
+    inset: 0;
+    z-index: 60;
+    pointer-events: none;
+    mix-blend-mode: multiply;
+    /* Fibre carries the character; the tonal drift underneath is held to a
+       whisper. feTurbulence only tiles seamlessly when the filter region is
+       pinned to the tile in user space, without that you get a hard seam
+       every 900px. */
+    background-image: url("/paper/fibre-inner.svg"),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1200' height='1200'%3E%3Cfilter id='m' x='0' y='0' width='1200' height='1200' filterUnits='userSpaceOnUse'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.0035' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='0.16'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='1200' height='1200' filter='url(%23m)'/%3E%3C/svg%3E");
+    background-size: 520px 520px, 1200px 1200px;
+    background-repeat: repeat, repeat;
+    opacity: 0.85;
+  }
+
+  /* Surface tooth over the whole page, so ink and photographs pick up the
+     same grain. Kept light: the fibre layers do the heavy lifting. */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 9998;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23g)' opacity='0.5'/%3E%3C/svg%3E");
+    background-size: 220px 220px;
+    opacity: 0.2;
+    mix-blend-mode: multiply;
   }
 
   ::selection {
-    @apply bg-honey-400/30 text-hive-800;
+    @apply bg-honey-200/60 text-hive-800;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 3px;
   }
 }
 
 @layer components {
-  .btn-primary {
-    @apply inline-flex items-center justify-center px-8 py-3 bg-honey-400 text-hive-800 font-semibold rounded-full
-           hover:bg-honey-500 transition-all duration-300 hover:shadow-lg hover:shadow-honey-400/25
-           active:scale-95;
+  /* ---- Paper grounds ----------------------------------------------------
+     Three stacked signals make a sheet read as handmade: suspended fibre,
+     uneven tone across the sheet, and surface tooth. Applied together as
+     `.stock-*`, which any element can wear. */
+
+  .stock,
+  .stock-deep,
+  .stock-cover {
+    position: relative;
+    isolation: isolate;
   }
 
-  .btn-secondary {
-    @apply inline-flex items-center justify-center px-8 py-3 border-2 border-honey-400 text-honey-600 font-semibold rounded-full
-           hover:bg-honey-400 hover:text-hive-800 transition-all duration-300
-           active:scale-95;
+  .stock::before,
+  .stock-deep::before,
+  .stock-cover::before,
+  .stock::after,
+  .stock-deep::after,
+  .stock-cover::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: -1;
   }
 
-  .section-padding {
-    @apply py-20 md:py-32 px-6 md:px-12 lg:px-20;
+  /* Suspended plant fibre: the single strongest handmade cue. */
+  .stock::before,
+  .stock-deep::before {
+    background-image: url("/paper/fibre-inner.svg");
+    background-size: 520px 520px;
+    opacity: 0.55;
+    mix-blend-mode: multiply;
   }
+
+  .stock-cover::before {
+    background-image: url("/paper/fibre-cover.svg");
+    background-size: 460px 460px;
+    opacity: 0.75;
+    mix-blend-mode: multiply;
+  }
+
+  /* Slow tonal drift across the sheet, the way pulp settles unevenly. */
+  .stock::after,
+  .stock-deep::after,
+  .stock-cover::after {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='900'%3E%3Cfilter id='m'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='900' height='900' filter='url(%23m)' opacity='0.55'/%3E%3C/svg%3E");
+    background-size: 900px 900px;
+    opacity: 0.14;
+    mix-blend-mode: multiply;
+  }
+
+  .stock {
+    @apply bg-paper;
+  }
+  .stock-deep {
+    @apply bg-paper-deep;
+  }
+  .stock-cover {
+    @apply bg-paper-cover;
+  }
+
+  /* A cut sheet: fibre plus a feathery deckle edge (see <Sheet>). */
+  .paper-panel,
+  .glass {
+    @apply stock-deep text-hive-500;
+    border: 1px solid var(--edge-soft);
+    box-shadow: theme("boxShadow.sheet");
+  }
+
+  .glass-dark {
+    @apply relative bg-hive-800 text-honey-100;
+    border: 1px solid rgba(201, 154, 136, 0.16);
+  }
+
+  /* ---- Type -------------------------------------------------------------
+     One geometric sans doing the structural work, exactly as the menu does. */
 
   .heading-xl {
-    @apply font-display text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight;
+    @apply font-display text-4xl md:text-6xl lg:text-7xl font-medium leading-[1.02] tracking-[-0.015em];
   }
 
   .heading-lg {
-    @apply font-display text-3xl md:text-5xl font-bold tracking-tight;
+    @apply font-display text-3xl md:text-5xl font-medium leading-[1.06] tracking-[-0.012em];
   }
 
   .heading-md {
-    @apply font-display text-2xl md:text-3xl font-bold;
+    @apply font-display text-xl md:text-2xl font-semibold leading-[1.2] tracking-[-0.005em];
   }
 
-  .text-balance {
-    text-wrap: balance;
+  /* The brush script from the card titles. Large, short, and rare, it stops
+     being charming the moment it has to carry a sentence. */
+  .title-hand {
+    @apply font-hand text-honey-600 font-normal leading-[1.15];
+    text-rendering: optimizeLegibility;
   }
 
-  /* Hexagon clip path */
+  .label {
+    @apply font-body text-[0.6875rem] font-semibold uppercase tracking-label text-honey-600;
+  }
+
+  .label-light {
+    @apply font-body text-[0.6875rem] font-semibold uppercase tracking-label text-honey-300;
+  }
+
+  .figures-old {
+    font-feature-settings: "tnum" 1, "kern" 1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .drop-cap::first-letter {
+    float: left;
+    font-family: "Kaushan Script", cursive;
+    font-size: 3.4em;
+    line-height: 0.9;
+    margin: 0.02em 0.14em 0 0;
+    color: theme("colors.honey.600");
+  }
+
+  /* ---- The category bar -------------------------------------------------
+     Lifted straight off the menu: a solid terracotta band with the category
+     name in pale ink. It is the most recognisable thing they print. */
+
+  .section-bar {
+    @apply flex items-baseline justify-between gap-4 bg-clay-500 text-paper
+           px-4 py-[0.35rem] font-display text-[0.9rem] md:text-base font-semibold tracking-bar;
+  }
+
+  /* The small centred running head at the top of each printed page. */
+  .sheet-head {
+    @apply text-center font-display text-[0.8rem] font-medium tracking-bar text-hive-600 pb-2;
+    border-bottom: 1px solid var(--edge);
+  }
+
+  /* ---- Menu setting -----------------------------------------------------
+     Name left, price right-aligned in its own column, description hanging
+     underneath. No dot leaders: the printed menu doesn't use them. */
+
+  .menu-row {
+    @apply grid gap-x-6 items-baseline;
+    grid-template-columns: 1fr auto;
+  }
+
+  .menu-name {
+    @apply font-display text-[0.95rem] md:text-base font-semibold text-hive-700 tracking-[0.005em];
+  }
+
+  .menu-desc {
+    @apply font-display text-[0.8rem] md:text-[0.85rem] font-light italic text-hive-300 leading-snug mt-0.5;
+  }
+
+  .menu-price {
+    @apply font-display text-[0.95rem] md:text-base font-normal text-hive-700 tabular-nums whitespace-nowrap;
+  }
+
+  /* Retained as an invisible flexible spacer so any leftover markup still
+     pushes its price to the right margin. The dots are gone deliberately. */
+  .dot-leader {
+    flex: 1 1 auto;
+    min-width: 1rem;
+  }
+
+  /* ---- Marks ------------------------------------------------------------ */
+
+  .btn-primary {
+    @apply relative inline-flex items-center justify-center gap-2 px-8 py-3.5
+           bg-hive-700 text-paper font-display text-[0.72rem] font-semibold uppercase tracking-label
+           rounded-[2px] transition-colors duration-300 ease-settle
+           hover:bg-hive-800 active:translate-y-px;
+  }
+
+  .btn-secondary {
+    @apply relative inline-flex items-center justify-center gap-2 px-8 py-3.5
+           bg-transparent text-hive-600 font-display text-[0.72rem] font-semibold uppercase tracking-label
+           rounded-[2px] transition-colors duration-300 ease-settle
+           hover:bg-hive-700 hover:text-paper active:translate-y-px;
+    border: 1px solid var(--edge);
+  }
+
+  .section-padding {
+    @apply py-16 md:py-24 px-6 md:px-12 lg:px-20;
+  }
+
+  /* Printed rules are straight; the unevenness belongs to the paper, not the
+     rule. Only a whisper of variation here. */
+  .rule-ink {
+    height: 1px;
+    border: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='2' viewBox='0 0 240 2' preserveAspectRatio='none'%3E%3Cpath d='M0 1.1 C60 0.8, 120 1.3, 240 1' fill='none' stroke='%23422810' stroke-opacity='0.32' stroke-width='1'/%3E%3C/svg%3E");
+    background-repeat: repeat-x;
+    background-size: 240px 2px;
+  }
+
+  .rule-ink-light {
+    height: 1px;
+    border: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='2' viewBox='0 0 240 2' preserveAspectRatio='none'%3E%3Cpath d='M0 1.1 C60 0.8, 120 1.3, 240 1' fill='none' stroke='%23D8BE7E' stroke-opacity='0.45' stroke-width='1'/%3E%3C/svg%3E");
+    background-repeat: repeat-x;
+    background-size: 240px 2px;
+  }
+
+  .ink-link {
+    @apply relative inline-block text-honey-600 transition-colors duration-300 ease-settle hover:text-honey-700;
+    background-image: linear-gradient(currentColor, currentColor);
+    background-repeat: no-repeat;
+    background-position: 0 100%;
+    background-size: 0% 1px;
+    transition: background-size 0.45s var(--ease-settle), color 0.3s ease;
+  }
+
+  .ink-link:hover,
+  .ink-link:focus-visible {
+    background-size: 100% 1px;
+  }
+
   .clip-hexagon {
     clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
   }
 
-  /* Honey gradient */
-  .gradient-honey {
-    @apply bg-gradient-to-br from-honey-300 via-honey-400 to-honey-600;
-  }
-
-  /* Glass effect */
-  .glass {
-    @apply bg-white/70 backdrop-blur-md border border-white/20;
-  }
-
-  .glass-dark {
-    @apply bg-hive-800/70 backdrop-blur-md border border-hive-600/20;
+  /* Purely decorative motion. Hidden in CSS rather than unmounted in React,
+     so the server and client always agree on the tree. */
+  .motion-only {
+    display: block;
   }
 }
 
-/* Hexagon background pattern */
+/* ==========================================================================
+   PATTERNS
+   ========================================================================== */
+
 .hex-pattern {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cg fill-rule='evenodd'%3E%3Cg fill='%23d4a017' fill-opacity='0.06'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9zM0 15l12.98-7.5V0h-2v6.35L0 12.69v2.3zm0 18.5L12.98 41v8h-2v-6.85L0 35.81v-2.3zM15 0v7.5L27.99 15H28v-2.31h-.01L17 6.35V0h-2zm0 49v-8l12.99-7.5H28v2.31h-.01L17 42.15V49h-2z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
-}
-
-/* Honeycomb hive framework – stroke-only cells */
-.honeycomb-frame {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='100' viewBox='0 0 56 100'%3E%3Cpath d='M28 66L0 50L0 16L28 0L56 16L56 50Z' fill='none' stroke='%23d4a017' stroke-opacity='0.12' stroke-width='1'/%3E%3Cpath d='M28 166L0 150L0 116L28 100L56 116L56 150Z' fill='none' stroke='%23d4a017' stroke-opacity='0.12' stroke-width='1'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='100' viewBox='0 0 56 100'%3E%3Cpath d='M28 66L0 50L0 16L28 0L56 16L56 50Z' fill='none' stroke='%23422810' stroke-opacity='0.06' stroke-width='0.9'/%3E%3Cpath d='M28 166L0 150L0 116L28 100L56 116L56 150Z' fill='none' stroke='%23422810' stroke-opacity='0.06' stroke-width='0.9'/%3E%3C/svg%3E");
   background-size: 56px 100px;
 }
 
-/* Smooth scroll sections */
+.honeycomb-frame {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='100' viewBox='0 0 56 100'%3E%3Cpath d='M28 66L0 50L0 16L28 0L56 16L56 50Z' fill='none' stroke='%23D8BE7E' stroke-opacity='0.14' stroke-width='0.9' stroke-linejoin='round'/%3E%3Cpath d='M28 166L0 150L0 116L28 100L56 116L56 150Z' fill='none' stroke='%23D8BE7E' stroke-opacity='0.14' stroke-width='0.9' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-size: 56px 100px;
+}
+
 .reveal {
   opacity: 0;
-  transform: translateY(30px);
-  transition: opacity 0.8s ease, transform 0.8s ease;
+  transform: translateY(18px);
+  transition: opacity 0.9s var(--ease-settle), transform 0.9s var(--ease-settle);
 }
 
 .reveal.visible {
@@ -92,19 +330,47 @@
   transform: translateY(0);
 }
 
-/* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-honey-50;
+  background: var(--paper-deep);
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-honey-400/50 rounded-full;
+  background: rgba(66, 40, 16, 0.2);
+  border: 3px solid var(--paper-deep);
+  border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-honey-500;
+  background: rgba(66, 40, 16, 0.36);
+}
+
+/* ==========================================================================
+   REDUCED MOTION: the paper stays, the movement goes.
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+
+  .motion-only {
+    display: none !important;
+  }
 }

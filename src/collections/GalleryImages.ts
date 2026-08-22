@@ -19,6 +19,7 @@ export const GalleryImages: CollectionConfig = {
       label: "Titel",
       type: "text",
       required: true,
+      localized: true,
       admin: {
         description: "Beschrijvende titel voor de foto",
       },
@@ -67,6 +68,7 @@ export const GalleryImages: CollectionConfig = {
       name: "description",
       label: "Beschrijving",
       type: "textarea",
+      localized: true,
       admin: {
         description: "Optioneel bijschrift dat in de lightbox verschijnt",
       },

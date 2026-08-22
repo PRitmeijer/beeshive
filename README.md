@@ -1,10 +1,10 @@
-# De Bee's Hive — Website
+# De Bee's Hive: Website
 
 Eetcafé website built with **Next.js 15** and **Payload CMS 3** (self-hosted, SQLite).
 
 ## Features
 
-- **CMS Admin Panel** at `/admin` — manage blog posts, gallery, menu, notifications, and mailing list
+- **CMS Admin Panel** at `/admin`: manage blog posts, gallery, menu, notifications, and mailing list
 - **Immersive frontend** with parallax scrolling, hexagon animations, and smooth transitions
 - **Mailing list** subscription with API endpoint
 - **Notification banners** managed via CMS (info, offers, events, important)

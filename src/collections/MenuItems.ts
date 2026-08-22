@@ -19,11 +19,13 @@ export const MenuItems: CollectionConfig = {
       label: "Naam",
       type: "text",
       required: true,
+      localized: true,
     },
     {
       name: "description",
       label: "Beschrijving",
       type: "textarea",
+      localized: true,
       admin: {
         description:
           "Korte beschrijving van het gerecht, bijv. ingrediënten of bereidingswijze",
@@ -100,6 +102,7 @@ export const MenuItems: CollectionConfig = {
       name: "allergens",
       label: "Allergenen",
       type: "text",
+      localized: true,
       admin: {
         description:
           "Vrij tekstveld voor allergenen, bijv. 'Bevat noten, gluten, ei'",

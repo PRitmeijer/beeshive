@@ -24,6 +24,7 @@ export const TeamMembers: CollectionConfig = {
       label: "Functie",
       type: "text",
       required: true,
+      localized: true,
       admin: {
         description: "Bijv. 'Chef-kok', 'Eigenaar', 'Barista'",
       },
@@ -32,6 +33,7 @@ export const TeamMembers: CollectionConfig = {
       name: "bio",
       label: "Korte Bio",
       type: "textarea",
+      localized: true,
     },
     {
       name: "photo",

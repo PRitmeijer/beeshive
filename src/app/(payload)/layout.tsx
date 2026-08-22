@@ -10,7 +10,7 @@ import { importMap } from "./admin/importMap";
 import "@payloadcms/next/css";
 
 export const metadata: Metadata = {
-  title: "Admin — De Bee's Hive",
+  title: "Admin: De Bee's Hive",
 };
 
 const serverFunction = async (args: any) => {

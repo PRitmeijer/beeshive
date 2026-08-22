@@ -46,6 +46,7 @@ export const Testimonials: CollectionConfig = {
       label: "Review Tekst",
       type: "textarea",
       required: true,
+      localized: true,
     },
     {
       name: "source",
