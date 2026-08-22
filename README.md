@@ -59,6 +59,38 @@ split service such as `12:00-16:00, 17:00-22:00` are all read correctly. A cell
 with no times in it counts as closed. The rows are matched **by position**,
 Monday first, so keep them in weekday order.
 
+## Importing the old newsletter subscribers
+
+The previous site kept subscribers in a MySQL table called `subscriptions` on
+IONOS shared hosting. That database cannot be reached from outside IONOS's own
+network — `database-*.webspace-host.com` has no public DNS record — so the only
+way to it is phpMyAdmin in the IONOS control panel, or a script running on the
+old webspace.
+
+Check whether there is anything worth moving first:
+
+```sql
+SELECT COUNT(*) FROM subscriptions;
+SHOW COLUMNS FROM subscriptions;
+```
+
+There may well be nothing. The `subscribe.php` that was actually deployed opens
+a database connection and never inserts anything — it only mails
+`info@debeeshive.nl` — so unless an earlier version wrote to the table, that
+inbox is the only record of who signed up.
+
+If there are rows, export the table as CSV and run:
+
+```bash
+npm run import:subscribers -- subscriptions.csv --dry-run   # reports, writes nothing
+npm run import:subscribers -- subscriptions.csv
+```
+
+It needs a header row with an `email` column; `name` and a date column are used
+if present and everything else is ignored. Addresses are matched
+case-insensitively and an address already on the list is left alone, so running
+it twice is safe.
+
 ## Database schema and migrations
 
 The schema lives in `src/migrations/`, generated from the collections and the
