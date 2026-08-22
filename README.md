@@ -176,20 +176,24 @@ database, such as a new Docker volume, simply runs it.
 docker compose up -d --build
 ```
 
-The container listens on 3000 and is published on host port **3100** (3000 was
-already taken); set `HOST_PORT` to move it. In Nginx Proxy Manager, point the
-Proxy Host at:
+The container publishes **host port 3000**. Nginx Proxy Manager lives outside
+this stack and reaches the site by the host's own name, so that port has to be
+open on the host: an unpublished container is unreachable from NPM however the
+Proxy Host is written. The Proxy Host is:
 
 | | |
 |---|---|
-| Forward hostname | the host's LAN IP, e.g. `192.168.1.10` |
-| Forward port | `3100` |
+| Forward hostname | `beeshive` — the **host machine**, not the container |
+| Forward port | `3000` |
 | Scheme | `http` |
 | Websockets Support | on |
 
-Not `127.0.0.1` or `localhost`: NPM runs in a container of its own, where those
-mean NPM. The container name only works as a hostname if NPM shares a Docker
-network with this stack, which it does not here.
+`HOST_PORT` moves the published port, but the Proxy Host has to move with it.
+Once, this stack dropped the published port in favour of reaching the container
+by name over a shared `reverse-proxy` network. That needs NPM to be *on* that
+network, which it is not, and the failure is silent and total: the Proxy Host
+still looks right, and the site is simply gone. If you go back to that, connect
+NPM to the network first and change the Proxy Host to the container name.
 
 Then on the SSL tab request a Let's Encrypt certificate and turn on Force SSL —
 `NEXT_PUBLIC_SITE_URL` is baked in as `https://…`, so the canonical URLs,

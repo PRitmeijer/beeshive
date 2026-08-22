@@ -10,18 +10,19 @@ services:
       args:
         # Baked into the client bundle; see the Dockerfile for why.
         NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://debeeshive.nl}
-    # Published on the host because Nginx Proxy Manager runs outside this
-    # stack's network and cannot resolve the container by name. 3100 rather
-    # than 3000 because 3000 is already spoken for on the host; change
-    # HOST_PORT if 3100 is too.
+    # Published on the host. Nginx Proxy Manager runs outside this stack and
+    # reaches the site over the network by the host's own name, so the port
+    # has to be open on the host — an unpublished container is invisible to
+    # it however the Proxy Host is written.
     #
     # In Nginx Proxy Manager, the Proxy Host forwards to:
-    #     hostname  <the host's LAN IP, e.g. 192.168.1.10>
-    #     port      3100
+    #     hostname  beeshive     <- the host machine, not the container
+    #     port      3000
     #
-    # Not 127.0.0.1: NPM is itself in a container, where that is NPM.
+    # Keep this on 3000 unless you also edit that Proxy Host: moving it is
+    # silent, and looks from the outside exactly like the site being down.
     ports:
-      - "${HOST_PORT:-3100}:3000"
+      - "${HOST_PORT:-3000}:3000"
     environment:
       # Pinned to the mounted volume, not something to override per host.
       - DATABASE_URI=file:/app/data/database.db
