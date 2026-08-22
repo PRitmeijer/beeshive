@@ -14,6 +14,22 @@ export const getPayloadClient = () => getPayload({ config });
  * cover the case where the CMS has no value in either language, or is not
  * reachable at all.
  */
+/**
+ * What an upload field hands back once Payload has populated it. Only the
+ * parts anything actually renders are named; the rest of the document is real
+ * but of no interest here.
+ */
+export interface MediaRef {
+  url?: string | null;
+  alt?: string | null;
+  width?: number | null;
+  height?: number | null;
+  sizes?: {
+    card?: { url?: string | null } | null;
+    hero?: { url?: string | null } | null;
+  } | null;
+}
+
 const nlDefaults = {
   siteName: "De Bee's Hive",
   tagline: "Waar eten en creativiteit samenkomen",
@@ -23,7 +39,7 @@ const nlDefaults = {
   priceRange: "€€",
   reservationUrl: "",
   contactEmail: "info@debeeshive.nl",
-  phone: "",
+  phone: "030 785 2199",
   address: {
     street: "",
     city: "Utrecht",
@@ -32,18 +48,21 @@ const nlDefaults = {
     country: "Nederland",
     countryCode: "NL",
   },
+  // Monday first, always: ContactClient and ReserverenClient find a row by its
+  // position in this list rather than by the day's name, so a translated or
+  // re-typed label still lands on the right day.
   openingHours: [
-    { day: "Maandag", hours: "Gesloten" },
+    { day: "Maandag", hours: "11:00 – 21:00" },
     { day: "Dinsdag", hours: "Gesloten" },
-    { day: "Woensdag", hours: "12:00 – 22:00" },
-    { day: "Donderdag", hours: "12:00 – 22:00" },
-    { day: "Vrijdag", hours: "12:00 – 22:00" },
-    { day: "Zaterdag", hours: "12:00 – 22:00" },
-    { day: "Zondag", hours: "12:00 – 22:00" },
+    { day: "Woensdag", hours: "Gesloten" },
+    { day: "Donderdag", hours: "11:00 – 21:00" },
+    { day: "Vrijdag", hours: "11:00 – 21:00" },
+    { day: "Zaterdag", hours: "11:00 – 21:00" },
+    { day: "Zondag", hours: "Gesloten" },
   ],
   socialMedia: {
-    instagram: "https://instagram.com/debeeshive",
-    facebook: "",
+    instagram: "https://www.instagram.com/debeeshive",
+    facebook: "https://www.facebook.com/people/De-Bees-Hive/61573726474222",
     tripadvisor: "",
   },
   heroTitle: "De Bee's Hive",
@@ -79,6 +98,9 @@ const nlDefaults = {
   aboutStory: null as string | null,
   aboutQuote:
     "Wij zijn een familie met een passie voor eten, kunst en verbinding.",
+  aboutImage: null as MediaRef | null,
+  aboutVideoUrl: "",
+  aboutMediaCaption: "",
   values: [
     {
       icon: "🌍",
@@ -97,7 +119,11 @@ const nlDefaults = {
     },
   ],
   footerTagline: "Gemaakt met liefde in Zuilen",
-  googleMapsEmbedUrl: "",
+  // Taken from their own previous site. The listing behind it is what carries
+  // the reviews, so the same URL serves the review block on /contact.
+  googleMapsEmbedUrl:
+    "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2450.3781318959013!2d5.086582076321947!3d52.10924836655966!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x47c66f402cf74da3%3A0xf5db732de51fc331!2sDe%20Bee%27s%20Hive!5e0!3m2!1snl!2snl!4v1756807839954!5m2!1snl!2snl",
+  googleReviewUrl: "https://maps.app.goo.gl/6VEMHL3Jq9vgAWnw8",
   openingHoursNote: "Elke laatste zondag van de maand zijn wij extra geopend.",
 };
 
@@ -112,7 +138,7 @@ const enDefaults: SiteSettingsData = {
   priceRange: "€€",
   reservationUrl: "",
   contactEmail: "info@debeeshive.nl",
-  phone: "",
+  phone: "030 785 2199",
   address: {
     street: "",
     city: "Utrecht",
@@ -122,17 +148,17 @@ const enDefaults: SiteSettingsData = {
     countryCode: "NL",
   },
   openingHours: [
-    { day: "Monday", hours: "Closed" },
+    { day: "Monday", hours: "11:00 – 21:00" },
     { day: "Tuesday", hours: "Closed" },
-    { day: "Wednesday", hours: "12:00 – 22:00" },
-    { day: "Thursday", hours: "12:00 – 22:00" },
-    { day: "Friday", hours: "12:00 – 22:00" },
-    { day: "Saturday", hours: "12:00 – 22:00" },
-    { day: "Sunday", hours: "12:00 – 22:00" },
+    { day: "Wednesday", hours: "Closed" },
+    { day: "Thursday", hours: "11:00 – 21:00" },
+    { day: "Friday", hours: "11:00 – 21:00" },
+    { day: "Saturday", hours: "11:00 – 21:00" },
+    { day: "Sunday", hours: "Closed" },
   ],
   socialMedia: {
-    instagram: "https://instagram.com/debeeshive",
-    facebook: "",
+    instagram: "https://www.instagram.com/debeeshive",
+    facebook: "https://www.facebook.com/people/De-Bees-Hive/61573726474222",
     tripadvisor: "",
   },
   heroTitle: "De Bee's Hive",
@@ -167,6 +193,9 @@ const enDefaults: SiteSettingsData = {
     "De Bee's Hive is more than a restaurant. It is a place where art, creativity and good food come together in the heart of Zuilen, Utrecht.",
   aboutStory: null as string | null,
   aboutQuote: "We are a family with a passion for food, art and connection.",
+  aboutImage: null as MediaRef | null,
+  aboutVideoUrl: "",
+  aboutMediaCaption: "",
   values: [
     {
       icon: "🌍",
@@ -185,7 +214,11 @@ const enDefaults: SiteSettingsData = {
     },
   ],
   footerTagline: "Made with love in Zuilen",
-  googleMapsEmbedUrl: "",
+  // Taken from their own previous site. The listing behind it is what carries
+  // the reviews, so the same URL serves the review block on /contact.
+  googleMapsEmbedUrl:
+    "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2450.3781318959013!2d5.086582076321947!3d52.10924836655966!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x47c66f402cf74da3%3A0xf5db732de51fc331!2sDe%20Bee%27s%20Hive!5e0!3m2!1snl!2snl!4v1756807839954!5m2!1snl!2snl",
+  googleReviewUrl: "https://maps.app.goo.gl/6VEMHL3Jq9vgAWnw8",
   openingHoursNote: "We are also open on the last Sunday of every month.",
 };
 
@@ -241,12 +274,14 @@ export async function getSiteSettings(
     const data = await payload.findGlobal({
       slug: "site-settings",
       locale,
-      ...(locale === defaultLocale ? {} : { fallbackLocale: "none" as const }),
+      // `false` is the Local API's way of saying "no fallback"; "none" is the
+      // REST query string spelling of the same thing, and is not in the type.
+      ...(locale === defaultLocale ? {} : { fallbackLocale: false as const }),
     });
     // Merge CMS data over defaults, keeping defaults for any missing fields
     return {
       ...defaults,
-      ...filled(data as Record<string, unknown>),
+      ...filled(data as unknown as Record<string, unknown>),
       address: {
         ...defaults.address,
         ...filled((data as any).address),
@@ -256,7 +291,13 @@ export async function getSiteSettings(
         ...filled((data as any).socialMedia),
       },
     } as SiteSettingsData;
-  } catch {
+  } catch (error) {
+    // Falling back to the defaults keeps the site up when the CMS is
+    // unreachable, which is the point — but it also means a schema that has
+    // drifted from the collections serves stock copy while looking perfectly
+    // healthy. Say so in the log, or the next person will spend an afternoon
+    // wondering why their CMS edits do nothing.
+    console.error("site settings unavailable, serving defaults", error);
     return defaults;
   }
 }

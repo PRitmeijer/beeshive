@@ -2,8 +2,7 @@ import "../../globals.css";
 import { notFound } from "next/navigation";
 import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
-import { MobileReserveBar } from "@/components/MobileReserveBar";
-import { getDict } from "@/i18n/dictionaries";
+import { MobileReserveButton } from "@/components/MobileReserveButton";
 import { NotificationBanner } from "@/components/NotificationBanner";
 import { PaperDefs } from "@/components/Sheet";
 import { getSiteSettings } from "@/lib/payload";
@@ -52,7 +51,7 @@ export default async function FrontendLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-screen flex flex-col antialiased pb-[4.75rem] md:pb-0">
+      <body className="min-h-screen flex flex-col antialiased">
         <PaperDefs />
         <NotificationBanner locale={locale} />
         <Navigation
@@ -62,10 +61,10 @@ export default async function FrontendLayout({
         />
         <main className="flex-1">{children}</main>
         <Footer locale={locale} />
-        <MobileReserveBar
+        <MobileReserveButton
           locale={locale}
-          label={getDict(locale).nav.reserve}
           reservationUrl={s.reservationUrl || undefined}
+          openingHours={s.openingHours}
         />
         <div className="paper-ground" aria-hidden="true" />
       </body>

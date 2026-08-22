@@ -16,6 +16,12 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
+# NEXT_PUBLIC_* is inlined into the client bundle at build time, so setting it
+# only at runtime would leave the canonical URLs, hreflang tags and sitemap
+# pointing at the fallback. It has to be known here.
+ARG NEXT_PUBLIC_SITE_URL=https://debeeshive.nl
+ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
+
 RUN npm run build
 
 # Production image

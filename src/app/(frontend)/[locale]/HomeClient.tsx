@@ -6,12 +6,9 @@ import Link from "next/link";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { MailingListForm } from "@/components/MailingListForm";
 import { SketchBee } from "@/components/SketchBee";
-import { RosemarySprig } from "@/components/RosemarySprig";
 import { LogoSvg } from "@/components/LogoSvg";
-import { CraftIcon } from "@/components/CraftIcon";
 import { TornEdge } from "@/components/TornEdge";
-import { Sheet } from "@/components/Sheet";
-import { StampStrip } from "@/components/StampStrip";
+import { StampStrip, type StampPanel } from "@/components/StampStrip";
 import type { SiteSettingsData } from "@/lib/payload";
 import { getDict } from "@/i18n/dictionaries";
 import { localeHref, type Locale } from "@/i18n/config";
@@ -26,15 +23,13 @@ interface Props {
 
 const SETTLE = [0.16, 0.84, 0.28, 1] as const;
 
-// The grounds the landing page is printed on: cream sheet, second sheet, the
-// sand of their existing site, and one band of chocolate brown.
-const PAPER = "#F1ECE1";
-const PAPER_DEEP = "#E8E2D4";
+// The two grounds the landing page is printed on: the cream sheet, and the
+// sand of their existing site under the sign-up. A torn edge is the incoming
+// section's fill painted into the outgoing one, so SAND must stay in step with
+// `bg-paper-shade` in tailwind.config.ts.
 const SAND = "#DCD5AC";
-const COCOA = "#331E0C";
 const INK = "#422810";
 const LIP_LIGHT = "rgba(255,255,255,0.5)";
-const LIP_GOLD = "rgba(216,190,126,0.3)";
 
 /** A drawn line-arrow, replacing the arrow glyph the old cards used. */
 function DrawnArrow({ className = "" }: { className?: string }) {
@@ -142,11 +137,23 @@ export function HomeClient({ locale, settings: s, today }: Props) {
   const titleMain = titleParts[0];
   const titleAccent = titleParts[1] || "";
 
-  const features = (s.features as { icon: string; title: string; text: string }[]) || [];
-
-  // Deliberate baseline stagger across the index, set here so the columns
-  // don't line up like a table.
-  const indexOffset = ["", "md:mt-10", "md:mt-20"];
+  const panels: StampPanel[] = [
+    {
+      src: "/food-34.jpg",
+      alt: t.home.stamps.kitchenAlt,
+      caption: t.home.stamps.kitchenCaption,
+    },
+    {
+      src: "/family.jpg",
+      alt: t.home.stamps.familyAlt,
+      caption: t.home.stamps.familyCaption,
+    },
+    {
+      src: "/food-03.jpg",
+      alt: t.home.stamps.seasonAlt,
+      caption: t.home.stamps.seasonCaption,
+    },
+  ];
 
   return (
     <>
@@ -165,13 +172,6 @@ export function HomeClient({ locale, settings: s, today }: Props) {
           className="relative z-10 w-full px-6 py-24 md:px-12 md:py-32 lg:px-20"
         >
           <div className="relative mx-auto w-full max-w-6xl">
-            <div
-              className="pointer-events-none absolute bottom-[34%] left-[44%] z-0 hidden -rotate-[10deg] text-sage-500/60 lg:block"
-              aria-hidden="true"
-            >
-              <RosemarySprig size={112} />
-            </div>
-
             <div className="relative z-10 max-w-3xl">
               <motion.div
                 initial={{ opacity: 0, y: -14 }}
@@ -258,31 +258,29 @@ export function HomeClient({ locale, settings: s, today }: Props) {
 
             {/* One strip torn from a sheet, rather than three loose stamps:
                 shared format, one angle, perforations punched through between
-                the panels. */}
+                the panels.
+
+                Wide enough for a side column, it hangs in the right margin.
+                Below that there is no margin to hang in, so it is torn off
+                sideways instead and runs across the measure: three panels
+                shoulder to shoulder, rather than a thin tower of three with a
+                page-height gutter of nothing beside it. */}
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: reduce ? 0 : 1.1, delay: 0.9, ease: SETTLE }}
-              className="mt-16 w-[172px] sm:w-[196px] xl:absolute xl:right-2 xl:top-0 xl:mt-0 xl:w-[214px]"
+              className="mt-14 xl:absolute xl:right-2 xl:top-0 xl:mt-0"
             >
               <StampStrip
-                panels={[
-                  {
-                    src: "/food-34.jpg",
-                    alt: t.home.stamps.kitchenAlt,
-                    caption: t.home.stamps.kitchenCaption,
-                  },
-                  {
-                    src: "/family.jpg",
-                    alt: t.home.stamps.familyAlt,
-                    caption: t.home.stamps.familyCaption,
-                  },
-                  {
-                    src: "/food-03.jpg",
-                    alt: t.home.stamps.seasonAlt,
-                    caption: t.home.stamps.seasonCaption,
-                  },
-                ]}
+                panels={panels}
+                orientation="horizontal"
+                tilt={-1.4}
+                className="w-full max-w-[34rem] xl:hidden"
+              />
+              <StampStrip
+                panels={panels}
+                orientation="vertical"
+                className="hidden w-[214px] xl:block"
               />
             </motion.div>
           </div>
@@ -304,181 +302,18 @@ export function HomeClient({ locale, settings: s, today }: Props) {
         </motion.div>
 
         <TornEdge
-          color={PAPER_DEEP}
-          lip={LIP_LIGHT}
-          variant={0}
-          className="absolute inset-x-0 bottom-0 z-20"
-        />
-      </section>
-
-      {/* ===== INTRODUCTION ===== */}
-      <section
-        className="section-padding relative overflow-hidden bg-paper-deep"
-        aria-label={t.home.introLabel}
-      >
-        <div className="relative mx-auto max-w-6xl">
-          <div className="grid gap-y-8 md:grid-cols-12 md:gap-x-10">
-            {/* Eyebrow set in its own narrow rail, beside the heading */}
-            <div className="md:col-span-3 md:pt-4">
-              <ScrollReveal>
-                <span className="label">{t.home.welcome}</span>
-                <div className="rule-ink mt-5 w-12" aria-hidden="true" />
-              </ScrollReveal>
-            </div>
-
-            <div className="md:col-span-8 md:col-start-5">
-              <ScrollReveal delay={0.1}>
-                <h2 className="heading-lg text-hive-800">{s.introTitle}</h2>
-                <p className="drop-cap mt-8 max-w-2xl text-lg leading-[1.8] text-hive-400">
-                  {s.introText}
-                </p>
-              </ScrollReveal>
-            </div>
-          </div>
-
-          {features.length > 0 && (
-            <ol className="mt-24 grid gap-x-10 gap-y-16 md:grid-cols-3">
-              {features.map((item, i) => (
-                <li key={item.title} className={indexOffset[i % 3]}>
-                  {/* The hanging indent lives on the revealed element itself:
-                      framer-motion's transform makes it the containing block,
-                      so the index would otherwise sit inside the indent while
-                      the reveal is running. */}
-                  <ScrollReveal delay={i * 0.12} className="relative pl-12 md:pl-14">
-                    <article>
-                      <span
-                        className="figures-old absolute left-0 top-0 text-[1.65rem] leading-none text-honey-500"
-                        aria-hidden="true"
-                      >
-                        {String(i + 1).padStart(2, "0")}
-                      </span>
-                      <CraftIcon name={item.icon} size={38} className="text-honey-600" />
-                      <div className="rule-ink mt-6 w-full" aria-hidden="true" />
-                      <h3 className="heading-md mt-6 text-hive-700">{item.title}</h3>
-                      <p className="mt-4 leading-relaxed text-hive-400">{item.text}</p>
-                    </article>
-                  </ScrollReveal>
-                </li>
-              ))}
-            </ol>
-          )}
-        </div>
-
-        <TornEdge
-          color={COCOA}
-          lip={LIP_GOLD}
-          variant={1}
-          className="absolute inset-x-0 bottom-0 z-20"
-        />
-      </section>
-
-      {/* ===== PULL-QUOTE: the one coloured band, printed like a menu bar ===== */}
-      <section
-        className="relative overflow-hidden bg-hive-800 px-6 py-28 md:py-36"
-        aria-label={t.home.quoteLabel}
-      >
-        <div className="relative z-10 mx-auto max-w-3xl text-center">
-          <ScrollReveal>
-            <SketchBee size={44} className="mx-auto text-honey-300/60" strokeWidth={1} />
-            <blockquote className="mt-9">
-              <p className="title-hand text-3xl leading-[1.3] !text-honey-300 md:text-5xl">
-                &ldquo;{s.quote}&rdquo;
-              </p>
-              <cite className="label mt-9 block !text-honey-200 not-italic">
-                {s.quoteAttribution}
-              </cite>
-            </blockquote>
-          </ScrollReveal>
-        </div>
-
-        <TornEdge
-          color={PAPER}
-          lip={LIP_LIGHT}
-          variant={0}
-          className="absolute inset-x-0 bottom-0 z-20"
-        />
-      </section>
-
-      {/* ===== FEATURED SECTION ===== */}
-      <section
-        className="section-padding relative overflow-hidden bg-paper"
-        aria-label={t.home.discoverLabel}
-      >
-        <div className="relative mx-auto max-w-6xl">
-          <ScrollReveal>
-            <div className="mb-20 flex flex-col gap-7 md:flex-row md:items-end md:justify-between md:gap-14">
-              <div>
-                <span className="label">{t.home.discoverEyebrow}</span>
-                <h2 className="heading-lg mt-4 text-hive-800">
-                  {t.home.discoverTitle}
-                </h2>
-              </div>
-              <div className="rule-ink w-full md:mb-4 md:w-1/3" aria-hidden="true" />
-            </div>
-          </ScrollReveal>
-
-          <div className="grid gap-x-12 gap-y-16 md:grid-cols-2">
-            {[
-              {
-                title: t.home.cards.menuTitle,
-                desc: t.home.cards.menuText,
-                link: "/kaart",
-                label: t.home.cards.menuLink,
-                icon: "pan",
-              },
-              {
-                title: t.home.cards.eventsTitle,
-                desc: t.home.cards.eventsText,
-                link: "/blog",
-                label: t.home.cards.eventsLink,
-                icon: "palette",
-              },
-            ].map((card, i) => (
-              <ScrollReveal
-                key={card.title}
-                delay={i * 0.12}
-                className={i === 1 ? "md:mt-16" : ""}
-              >
-                {/* A real cut sheet, deckle and all, laid on the page. */}
-                <Sheet tone="deep" edge="soft" className="group h-full">
-                  <div className="relative p-8 md:p-10">
-                    <span
-                      className="figures-old absolute right-8 top-8 text-sm text-honey-500 md:right-10 md:top-10"
-                      aria-hidden="true"
-                    >
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                    <CraftIcon name={card.icon} size={44} className="text-honey-600" />
-                    <h3 className="heading-md mt-8 text-hive-700 transition-colors duration-500 ease-settle group-hover:text-honey-600">
-                      {card.title}
-                    </h3>
-                    <div className="rule-ink mt-5 w-14" aria-hidden="true" />
-                    <p className="mt-5 leading-relaxed text-hive-400">{card.desc}</p>
-                    <Link
-                      href={localeHref(locale, card.link)}
-                      className="group/link mt-8 inline-flex items-center gap-3 text-honey-600 transition-colors duration-500 ease-settle hover:text-honey-700"
-                    >
-                      <span className="label ink-link !text-current group-hover/link:[background-size:100%_1px]">
-                        {card.label}
-                      </span>
-                      <DrawnArrow className="transition-transform duration-500 ease-settle group-hover/link:translate-x-1" />
-                    </Link>
-                  </div>
-                </Sheet>
-              </ScrollReveal>
-            ))}
-          </div>
-        </div>
-
-        <TornEdge
           color={SAND}
           lip={LIP_LIGHT}
-          variant={1}
+          variant={0}
           className="absolute inset-x-0 bottom-0 z-20"
         />
       </section>
 
-      {/* ===== MAILING LIST ===== */}
+      {/* ===== MAILING LIST =====
+           The one thing that still follows the landing page. Everything the
+           old middle of this page said — the introduction, the pull-quote,
+           the two cards — is said properly on /over-ons, /kaart and /blog,
+           and saying it twice only made the front door long. */}
       <section
         className="section-padding relative overflow-hidden bg-paper-shade"
         aria-label={t.home.newsletterLabel}

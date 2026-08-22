@@ -25,11 +25,103 @@ Visit `http://localhost:3000` for the site, `http://localhost:3000/admin` for th
 
 On first visit to `/admin`, you'll create your admin account.
 
+## Mail
+
+Two forms send mail, both to the address in Site Instellingen → Contact, which
+defaults to `info@debeeshive.nl`, and both with `Reply-To` set to the sender so
+replying reaches them rather than the website.
+
+- **A reservation request** is stored in the `reservations` collection *and*
+  emailed, with every field the guest filled in and a link straight to the
+  request in `/admin`. The send is deliberately not allowed to fail a booking:
+  the request is written to the database first, and a mail server having a bad
+  afternoon is logged and swallowed rather than shown to the guest as an error
+  they would retry.
+- **A contact message** is only emailed — there is nothing to store — so here a
+  failed send *is* reported. Anything else would tell the visitor a message had
+  been delivered that never left the building.
+
+Sending needs SMTP credentials in the environment (`SMTP_HOST` and friends, see
+`.env.example`). Without them Payload writes mail to the console instead —
+correct for local work, and worth knowing about before the first deploy, since
+the site will otherwise take bookings silently.
+
+## Opening hours drive the booking form
+
+The times the reservation form offers are read from Site Instellingen →
+Openingstijden, per weekday, rather than hard-coded. Change the hours in the
+admin and the form follows: a closed day offers nothing and says so, and the
+last table on offer is one hour before closing. `/api/reserve` checks the same
+rows, so the rule holds for anything posting to it directly as well.
+
+Free text is fine — `11:00 – 21:00`, `11.00-21.00`, `Gesloten`, `Closed`, or a
+split service such as `12:00-16:00, 17:00-22:00` are all read correctly. A cell
+with no times in it counts as closed. The rows are matched **by position**,
+Monday first, so keep them in weekday order.
+
+## Database schema and migrations
+
+The schema lives in `src/migrations/`, generated from the collections and the
+`localization` block in `src/payload.config.ts`.
+
+Development still pushes the schema straight from the collection definitions,
+which is what keeps local iteration quick. Production does not: `push` is off
+whenever `NODE_ENV=production`. A push on SQLite rewrites tables in place, and
+for a field that has just been marked `localized: true` that means dropping the
+column before its values have moved into the `_locales` side table — which is
+exactly the change this project made when it went bilingual, and exactly the
+data it would have cost.
+
+In production the adapter is given `prodMigrations`, so Payload applies anything
+outstanding itself when it connects. Nothing has to be run by hand on deploy,
+and the container logs which migration it applied. That matters here because the
+image is a standalone Next build with no Payload CLI inside it.
+
+**Run `npm run dev` in a real terminal.** The dev push asks for confirmation
+whenever it spots a change it considers risky, and `prompts` treats a missing
+TTY as a cancel — whose handler is `process.exit(0)`. Started under `nohup`, in
+CI, or inside a build worker, the push therefore dies silently with a success
+code and the schema is quietly left behind, which is very hard to tell apart
+from "nothing needed doing". If the CMS suddenly serves stock copy, look for
+`site settings unavailable, serving defaults` in the log: that is this.
+
+Locally, after changing a collection:
+
+```bash
+npm run migrate:create   # record the change as a migration
+npm run generate:types   # refresh src/payload-types.ts
+npm run migrate:status   # what has and has not been applied
+npm run migrate          # apply outstanding migrations by hand
+```
+
+Two caveats. `migrate:create` generates the SQL with drizzle-kit, and its
+SQLite table-rebuild strategy emits an `INSERT ... SELECT` naming columns that
+the *old* table does not have yet, so an incremental migration on this adapter
+can be born broken. Always run a new migration against an empty database before
+trusting it:
+
+```bash
+DATABASE_URI=file:/tmp/probe.db PAYLOAD_SECRET=x npm run migrate
+```
+
+And for a database that already exists and was built by dev push: it
+already has these tables, so the first migration would fail on `CREATE TABLE`.
+Mark it as applied rather than running it — insert a row into
+`payload_migrations` with the migration's `name` and `batch` 1. A fresh
+database, such as a new Docker volume, simply runs it.
+
 ## Docker
 
 ```bash
 docker compose up --build
 ```
+
+`.dockerignore` keeps the local `.next`, `node_modules`, `.env` and
+`database.db` out of the build context. Leaving `.next` in it is not a tidiness
+matter: `COPY . .` drops a dev-server build tree into the image and the
+production `next build` then runs on top of manifests that describe a different
+router. `npm run build` also clears `.next` first (the `prebuild` script), for
+the same reason.
 
 ## Deploy to Vercel
 

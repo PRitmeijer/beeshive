@@ -5,8 +5,10 @@ import Link from "next/link";
 import { CraftIcon } from "@/components/CraftIcon";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { Sheet } from "@/components/Sheet";
+import { SocialRow, socialLinks } from "@/components/SocialMarks";
 import { TornEdge } from "@/components/TornEdge";
 import type { SiteSettingsData } from "@/lib/payload";
+import { isContactError } from "@/lib/contactErrors";
 import { getDict } from "@/i18n/dictionaries";
 import { localeHref, type Locale } from "@/i18n/config";
 
@@ -18,7 +20,7 @@ interface Props {
 
 /**
  * Letterpress field: no box, just a rule the ink sits on. Paper ground.
- * Kept byte-identical to <MailingListForm> so the two forms on the site are
+ * Kept byte-identical to <MailingListForm> so the forms on the site are
  * demonstrably the same piece of printing.
  */
 const fieldClass =
@@ -27,10 +29,9 @@ const fieldClass =
   "transition-colors duration-300 ease-settle " +
   "focus:border-honey-400 focus:shadow-[inset_0_-2px_0_0_#B4735E]";
 
-// The grounds this sheet is printed on, cream sheet, second sheet, then the
-// sand of their existing site under the map mount. These must stay in step
-// with `bg-paper-deep` / `bg-paper-shade` in tailwind.config.ts, since a torn
-// edge is the incoming section's fill painted into the outgoing one.
+// Must stay in step with `bg-paper-deep` / `bg-paper-shade` in
+// tailwind.config.ts: a torn edge is the incoming section's fill painted into
+// the outgoing one.
 const PAPER_DEEP = "#E8E2D4";
 const SAND = "#DCD5AC";
 const LIP_LIGHT = "rgba(255,255,255,0.5)";
@@ -60,19 +61,44 @@ export function ContactClient({ locale, settings: s }: Props) {
       return s.address.country;
     }
   })();
-  const [form, setForm] = useState({ name: "", email: "", message: "" });
-  const [status, setStatus] = useState<"idle" | "sent">("idle");
 
-  const handleSubmit = (e: FormEvent) => {
+  const [form, setForm] = useState({ name: "", email: "", message: "" });
+  // Honeypot, kept out of `form` so it can never be mistaken for real input.
+  const [website, setWebsite] = useState("");
+  const [status, setStatus] = useState<
+    "idle" | "loading" | "sent" | "error"
+  >("idle");
+  const [error, setError] = useState(t.contact.genericError);
+
+  /** The endpoint answers a refusal with a code; the words come from here. */
+  const messageFrom = (data: unknown): string => {
+    const code =
+      data && typeof data === "object"
+        ? (data as { error?: unknown }).error
+        : undefined;
+    return isContactError(code) ? t.contact.errors[code] : t.contact.genericError;
+  };
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    // Both halves are encoded: the translated subject and sign-off carry
-    // characters a mail client would otherwise read as query syntax.
-    const subject = encodeURIComponent(t.contact.mailSubject(form.name));
-    const body = encodeURIComponent(
-      `${form.message}\n\n${t.contact.mailFrom}: ${form.name} (${form.email})`,
-    );
-    window.location.href = `mailto:${s.contactEmail}?subject=${subject}&body=${body}`;
-    setStatus("sent");
+    setStatus("loading");
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, website }),
+      });
+      if (res.ok) {
+        setStatus("sent");
+        setForm({ name: "", email: "", message: "" });
+        return;
+      }
+      setError(messageFrom(await res.json().catch(() => null)));
+      setStatus("error");
+    } catch {
+      setError(t.contact.genericError);
+      setStatus("error");
+    }
   };
 
   // The CMS stores one row per weekday with a Dutch name. Match on position in
@@ -89,25 +115,15 @@ export function ContactClient({ locale, settings: s }: Props) {
     day: string;
     hours: string;
   }[];
-
-  const hasMap = Boolean(s.googleMapsEmbedUrl);
-
-  // Extract Instagram handle from URL
-  const instagramHandle = s.socialMedia.instagram
-    ? "@" +
-      s.socialMedia.instagram
-        .replace(/\/$/, "")
-        .split("/")
-        .pop()
-    : "";
+  const links = socialLinks(s);
 
   return (
     <>
-      {/* ===== HERO: the sheet itself ===== */}
-      <section className="relative flex min-h-[38vh] items-end overflow-hidden bg-paper">
-        <div className="relative z-10 mx-auto w-full max-w-6xl px-6 pb-12 pt-32 md:px-12 md:pb-16 lg:px-20">
+      {/* ===== HERO: shallow. This page is a reference, not an essay. ===== */}
+      <section className="relative overflow-hidden bg-paper">
+        <div className="relative z-10 mx-auto w-full max-w-6xl px-6 pb-10 pt-28 md:px-12 md:pb-12 lg:px-20">
           <p className="label">{t.contact.eyebrow}</p>
-          <div className="rule-ink my-5 w-14" aria-hidden="true" />
+          <div className="rule-ink my-4 w-14" aria-hidden="true" />
           <h1 className="heading-xl text-hive-800">{t.contact.title}</h1>
         </div>
         <TornEdge
@@ -118,99 +134,21 @@ export function ContactClient({ locale, settings: s }: Props) {
         />
       </section>
 
-      {/* ===== DETAILS + FORM ===== */}
-      <section className="section-padding relative overflow-hidden bg-paper-deep">
+      {/* ===== EVERYTHING YOU CAME FOR, ON ONE SCREEN =====
+           Hours, where we are, how to reach us and a message box used to be
+           four numbered chapters down a long page. They are four short
+           columns; the page is a reference card, so it is set as one. */}
+      <section className="relative overflow-hidden bg-paper-deep px-6 py-14 md:px-12 md:py-20 lg:px-20">
         <div className="mx-auto max-w-6xl">
-          {/* Heading hangs left, the rule runs out to the right margin. */}
-          <ScrollReveal>
-            <div className="grid gap-y-8 md:grid-cols-12 md:items-end md:gap-x-10">
-              <h2 className="heading-lg max-w-[15ch] text-hive-800 md:col-span-7">
-                {t.contact.heading}
-              </h2>
-              <div
-                className="rule-ink w-full md:col-span-4 md:col-start-9 md:mb-4"
-                aria-hidden="true"
-              />
-            </div>
-          </ScrollReveal>
-
-          <div className="mt-14 grid gap-y-16 md:mt-20 md:grid-cols-12 md:gap-x-10 lg:gap-x-16">
-            {/* -- 01 · the narrow rail ------------------------------------ */}
-            <ScrollReveal className="md:col-span-4">
-              <span className="label figures-old mb-6 block" aria-hidden="true">
-                01
-              </span>
-
-              <address className="space-y-7 not-italic text-hive-500">
-                <div>
-                  <h3 className="label">{t.contact.address}</h3>
-                  <p className="mt-2.5 leading-relaxed">
-                    {s.address.street && (
-                      <>
-                        {s.address.street}
-                        <br />
-                      </>
-                    )}
-                    {s.address.postalCode && `${s.address.postalCode} `}
-                    {s.address.area
-                      ? `${s.address.area}, ${s.address.city}`
-                      : s.address.city}
-                    <br />
-                    {countryName}
-                  </p>
-                </div>
-
-                <div className="rule-ink" aria-hidden="true" />
-
-                <div>
-                  <h3 className="label">{t.contact.email}</h3>
-                  <a
-                    href={`mailto:${s.contactEmail}`}
-                    className="ink-link mt-2.5 break-words"
-                  >
-                    {s.contactEmail}
-                  </a>
-                </div>
-
-                {s.phone && (
-                  <>
-                    <div className="rule-ink" aria-hidden="true" />
-                    <div>
-                      <h3 className="label">{t.contact.phone}</h3>
-                      <a
-                        href={`tel:${s.phone.replace(/\s/g, "")}`}
-                        className="ink-link figures-old mt-2.5"
-                      >
-                        {s.phone}
-                      </a>
-                    </div>
-                  </>
-                )}
-
-                {s.socialMedia.instagram && (
-                  <>
-                    <div className="rule-ink" aria-hidden="true" />
-                    <div>
-                      <h3 className="label">{t.contact.follow}</h3>
-                      <a
-                        href={s.socialMedia.instagram}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="ink-link mt-2.5"
-                      >
-                        {instagramHandle}
-                      </a>
-                    </div>
-                  </>
-                )}
-              </address>
-
+          <div className="grid gap-x-10 gap-y-12 md:grid-cols-12 lg:gap-x-14">
+            {/* -- when ------------------------------------------------- */}
+            <ScrollReveal className="md:col-span-5 lg:col-span-4">
               {openingHours.length > 0 && (
-                <div className="mt-10">
+                <>
                   {/* The printed category bar, straight off the menu. */}
-                  <h3 className="section-bar">{t.hours.heading}</h3>
+                  <h2 className="section-bar">{t.hours.heading}</h2>
                   {/* Day left, hours right. No leaders, the menu has none. */}
-                  <dl className="mt-5 grid grid-cols-[1fr_auto] gap-x-12 gap-y-3 text-sm">
+                  <dl className="mt-4 grid grid-cols-[1fr_auto] gap-x-8 gap-y-2 text-sm">
                     {openingHours.map((h) => (
                       <Fragment key={h.day}>
                         <dt className="text-hive-500">{dayName(h.day)}</dt>
@@ -225,57 +163,101 @@ export function ContactClient({ locale, settings: s }: Props) {
                       {s.openingHoursNote}
                     </p>
                   ) : null}
-                </div>
+                </>
               )}
 
-              {/* A table is a separate errand from a message, so it gets its
-                  own pointer rather than a line buried in the form. */}
-              <div className="mt-10">
-                <div className="rule-ink" aria-hidden="true" />
-                <h3 className="label mt-7">{t.contact.reserveHeading}</h3>
-                <p className="mt-2.5 leading-relaxed text-hive-500">
-                  {t.contact.reserveText}
-                </p>
-                <Link
-                  href={localeHref(locale, "/reserveren")}
-                  className="btn-secondary mt-5"
-                >
-                  {t.contact.reserveCta}
-                </Link>
-              </div>
+              <Link
+                href={localeHref(locale, "/reserveren")}
+                className="btn-secondary mt-6"
+              >
+                {t.contact.reserveCta}
+              </Link>
             </ScrollReveal>
 
-            {/* -- 02 · the wide column ----------------------------------- */}
-            <ScrollReveal delay={0.15} className="md:col-span-7 md:col-start-6">
-              <span className="label figures-old mb-6 block" aria-hidden="true">
-                02
-              </span>
+            {/* -- where, and how ---------------------------------------- */}
+            <ScrollReveal delay={0.08} className="md:col-span-4 lg:col-span-3">
+              <h2 className="section-bar">{t.contact.detailsHeading}</h2>
+              <address className="mt-4 space-y-4 text-sm not-italic leading-relaxed text-hive-500">
+                <p>
+                  {s.address.street && (
+                    <>
+                      {s.address.street}
+                      <br />
+                    </>
+                  )}
+                  {s.address.postalCode && `${s.address.postalCode} `}
+                  {s.address.area
+                    ? `${s.address.area}, ${s.address.city}`
+                    : s.address.city}
+                  <br />
+                  {countryName}
+                </p>
+                <p className="flex flex-col gap-1">
+                  {s.phone && (
+                    <a
+                      href={`tel:${s.phone.replace(/\s/g, "")}`}
+                      className="ink-link figures-old"
+                    >
+                      {s.phone}
+                    </a>
+                  )}
+                  <a
+                    href={`mailto:${s.contactEmail}`}
+                    className="ink-link break-words"
+                  >
+                    {s.contactEmail}
+                  </a>
+                </p>
+              </address>
+
+              {links.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="label">{t.contact.follow}</h3>
+                  {/* Marks, not a list of handles: one row that reads as one
+                      thing, and the same marks the footer prints. */}
+                  <SocialRow
+                    links={links}
+                    size={19}
+                    gap="gap-4"
+                    className="block text-hive-400 transition-colors duration-500 ease-settle hover:text-honey-600"
+                  />
+                </div>
+              )}
+            </ScrollReveal>
+
+            {/* -- and a word, if you want one --------------------------- */}
+            <ScrollReveal delay={0.14} className="md:col-span-12 lg:col-span-5">
+              <h2 className="section-bar">{t.contact.messageHeading}</h2>
 
               {status === "sent" ? (
-                <div role="status" className="py-2">
+                <div role="status" className="pt-6">
                   <CraftIcon
                     name="bee"
-                    size={48}
+                    size={40}
                     weight={1}
                     className="text-honey-600"
                   />
-                  <div className="rule-ink mt-6 w-16" aria-hidden="true" />
-                  <p className="mt-6 font-display text-2xl text-hive-700">
+                  <p className="mt-5 font-display text-xl text-hive-700">
                     {t.contact.sentTitle}
                   </p>
-                  <p className="mt-2 text-hive-400">{t.contact.sentText}</p>
+                  <p className="mt-2 text-sm text-hive-400">
+                    {t.contact.sentText}
+                  </p>
                 </div>
               ) : (
-                <form onSubmit={handleSubmit} className="space-y-9">
-                  <div className="grid gap-9 sm:grid-cols-2">
+                <form onSubmit={handleSubmit} className="relative mt-5 space-y-6">
+                  <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-1">
                     <div>
                       <label htmlFor="contact-name" className="label block">
                         {t.contact.formName}
                       </label>
                       <input
                         id="contact-name"
+                        name="name"
                         type="text"
                         required
+                        maxLength={120}
+                        autoComplete="name"
                         value={form.name}
                         onChange={(e) =>
                           setForm({ ...form, name: e.target.value })
@@ -289,8 +271,11 @@ export function ContactClient({ locale, settings: s }: Props) {
                       </label>
                       <input
                         id="contact-email"
+                        name="email"
                         type="email"
                         required
+                        maxLength={200}
+                        autoComplete="email"
                         value={form.email}
                         onChange={(e) =>
                           setForm({ ...form, email: e.target.value })
@@ -305,8 +290,10 @@ export function ContactClient({ locale, settings: s }: Props) {
                     </label>
                     <textarea
                       id="contact-message"
+                      name="message"
                       required
-                      rows={5}
+                      rows={4}
+                      maxLength={4000}
                       value={form.message}
                       onChange={(e) =>
                         setForm({ ...form, message: e.target.value })
@@ -314,18 +301,65 @@ export function ContactClient({ locale, settings: s }: Props) {
                       className={`${fieldClass} resize-none`}
                     />
                   </div>
-                  <div className="pt-2">
-                    <button type="submit" className="btn-primary">
-                      {t.contact.formSubmit}
-                    </button>
+
+                  {/* Honeypot. Off screen rather than display:none, and hidden
+                      from the accessibility tree, so only a bot reaches it. */}
+                  <div
+                    aria-hidden="true"
+                    className="absolute left-[-9999px] top-auto h-px w-px overflow-hidden"
+                  >
+                    <label htmlFor="contact-website">{t.contact.honeypot}</label>
+                    <input
+                      id="contact-website"
+                      name="website"
+                      type="text"
+                      tabIndex={-1}
+                      autoComplete="off"
+                      value={website}
+                      onChange={(e) => setWebsite(e.target.value)}
+                    />
                   </div>
+
+                  <button
+                    type="submit"
+                    disabled={status === "loading"}
+                    className="btn-primary disabled:opacity-50"
+                  >
+                    {status === "loading"
+                      ? t.contact.formSubmitting
+                      : t.contact.formSubmit}
+                  </button>
+
+                  {status === "error" && (
+                    <p
+                      role="alert"
+                      className="flex items-center gap-2 text-sm text-honey-600"
+                    >
+                      <svg
+                        viewBox="0 0 12 12"
+                        width="12"
+                        height="12"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.4"
+                        strokeLinecap="round"
+                        aria-hidden="true"
+                        focusable="false"
+                        className="shrink-0"
+                      >
+                        <path d="M2.2 2.4 L9.8 9.6" />
+                        <path d="M9.7 2.3 L2.3 9.7" />
+                      </svg>
+                      {error}
+                    </p>
+                  )}
                 </form>
               )}
             </ScrollReveal>
           </div>
         </div>
 
-        {hasMap && (
+        {s.googleMapsEmbedUrl && (
           <TornEdge
             color={SAND}
             lip={LIP_LIGHT}
@@ -335,47 +369,33 @@ export function ContactClient({ locale, settings: s }: Props) {
         )}
       </section>
 
-      {/* ===== 03 · THE MAP, MOUNTED ON A CUT SHEET ===== */}
+      {/* ===== THE MAP, MOUNTED ON A CUT SHEET ===== */}
       {s.googleMapsEmbedUrl && (
-        <section className="section-padding relative overflow-hidden bg-paper-shade">
+        <section className="relative overflow-hidden bg-paper-shade px-6 py-14 md:px-12 md:py-16 lg:px-20">
           <div className="mx-auto max-w-6xl">
-            <div className="grid gap-y-8 md:grid-cols-12 md:gap-x-10">
-              <div className="md:col-span-2 md:pt-1">
-                <ScrollReveal>
-                  <span
-                    className="label figures-old block"
-                    aria-hidden="true"
-                  >
-                    03
-                  </span>
-                  <div className="rule-ink mt-5 w-12" aria-hidden="true" />
-                </ScrollReveal>
-              </div>
-
-              <ScrollReveal delay={0.1} className="md:col-span-9 md:col-start-4">
-                <figure>
-                  <Sheet tone="deep" edge="soft">
-                    <div className="p-3 md:p-4">
-                      <iframe
-                        src={s.googleMapsEmbedUrl}
-                        width="100%"
-                        height="400"
-                        // Sepia pulls the map into the pigment range of the page.
-                        style={{
-                          border: 0,
-                          filter: "sepia(0.22) saturate(0.85) contrast(0.96)",
-                        }}
-                        allowFullScreen
-                        loading="lazy"
-                        referrerPolicy="no-referrer-when-downgrade"
-                        title={t.contact.mapTitle}
-                        className="block w-full"
-                      />
-                    </div>
-                  </Sheet>
-                </figure>
-              </ScrollReveal>
-            </div>
+            <ScrollReveal>
+              <figure>
+                <Sheet tone="deep" edge="soft">
+                  <div className="p-3 md:p-4">
+                    <iframe
+                      src={s.googleMapsEmbedUrl}
+                      width="100%"
+                      height="320"
+                      // Sepia pulls the map into the pigment range of the page.
+                      style={{
+                        border: 0,
+                        filter: "sepia(0.22) saturate(0.85) contrast(0.96)",
+                      }}
+                      allowFullScreen
+                      loading="lazy"
+                      referrerPolicy="no-referrer-when-downgrade"
+                      title={t.contact.mapTitle}
+                      className="block w-full"
+                    />
+                  </div>
+                </Sheet>
+              </figure>
+            </ScrollReveal>
           </div>
         </section>
       )}

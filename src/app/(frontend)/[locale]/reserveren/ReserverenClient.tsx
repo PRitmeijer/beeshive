@@ -73,7 +73,11 @@ export function ReserverenClient({ locale, settings: s, today }: Props) {
       <section className="section-padding relative overflow-hidden bg-paper-deep">
         <div className="mx-auto grid max-w-6xl gap-y-14 md:grid-cols-12 md:gap-x-12 lg:gap-x-16">
           <ScrollReveal className="md:col-span-7">
-            <ReservationForm locale={locale} minDate={today} />
+            <ReservationForm
+              locale={locale}
+              minDate={today}
+              openingHours={openingHours}
+            />
           </ScrollReveal>
 
           <ScrollReveal delay={0.12} className="md:col-span-4 md:col-start-9">

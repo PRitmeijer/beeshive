@@ -99,6 +99,8 @@ const nl = {
   },
 
   about: {
+    /** Accessible name for the photo or video, when no caption is set. */
+    mediaTitle: "De Bee's Hive",
     metaTitle: (name: string) => `Over Ons | ${name}`,
     metaDescription: (name: string, intro: string) =>
       `Ontdek het verhaal achter ${name}. ${intro}`,
@@ -241,24 +243,35 @@ const nl = {
       `Neem contact op met ${name} in ${area}, ${city}. Stuur ons een bericht of kom langs.`,
     eyebrow: "Neem contact op",
     title: "Contact",
-    heading: "Kom langs of stuur een bericht",
-    address: "Adres",
-    email: "E-mail",
-    phone: "Telefoon",
     follow: "Volg ons",
     mapTitle: "Google Maps locatie",
-    reserveHeading: "Een tafel reserveren",
-    reserveText:
-      "Wil je bij ons komen eten? Doe een aanvraag, dan bellen of mailen we je persoonlijk terug om het vast te leggen.",
+    detailsHeading: "Waar je ons vindt",
+    messageHeading: "Stuur ons een bericht",
+    messageText:
+      "Een vraag, een idee of gewoon even hallo: schrijf het hieronder, dan opent je mailprogramma met het bericht klaar.",
     reserveCta: "Tafel aanvragen",
     formName: "Naam",
     formEmail: "E-mail",
     formMessage: "Bericht",
     formSubmit: "Verstuur bericht",
+    formSubmitting: "Bezig...",
+    honeypot: "Laat dit veld leeg",
     sentTitle: "Bedankt voor je bericht!",
     sentText: "We nemen zo snel mogelijk contact met je op.",
-    mailSubject: (name: string) => `Bericht van ${name}`,
-    mailFrom: "Van",
+    /** Keys are the codes in src/lib/contactErrors.ts. */
+    errors: {
+      rateLimited:
+        "Je hebt net al een bericht gestuurd. Probeer het over een paar minuten opnieuw.",
+      badRequest: "We konden het formulier niet lezen. Probeer het opnieuw.",
+      tooLarge: "Je bericht is te lang. Kort het wat in en probeer het opnieuw.",
+      nameRequired: "Vul je naam in.",
+      emailRequired: "Vul je e-mailadres in.",
+      emailInvalid: "Vul een geldig e-mailadres in.",
+      messageRequired: "Schrijf even een bericht.",
+      messageTooLong: "Je bericht is te lang, houd het onder 4000 tekens.",
+      server: "Het versturen lukte niet. Mail ons gerust rechtstreeks.",
+    },
+    genericError: "Het versturen lukte niet. Mail ons gerust rechtstreeks.",
   },
 
   reserve: {
@@ -286,8 +299,15 @@ const nl = {
     date: "Datum",
     time: "Tijd",
     timePlaceholder: "Kies een tijd",
+    timeNeedsDate: "Kies eerst een datum",
+    timeNoneThatDay: "Deze dag zijn we gesloten",
     timeOption: (slot: string) => `${slot} uur`,
-    timeHint: "We serveren van 12:00 tot 22:00 uur.",
+    /** Shown before a date has been picked, when the day is still unknown. */
+    timeHint: "Kies een datum, dan laten we zien welke tijden vrij zijn.",
+    /** Once the day is known, the hours come straight uit de openingstijden. */
+    timeHintForDay: (hours: string, last: string) =>
+      `Open ${hours}. Laatste tafel om ${last} uur.`,
+    closedThatDay: "Op deze dag zijn we gesloten. Kies een andere datum.",
     occasion: "Gelegenheid",
     occasionPlaceholder: "Verjaardag, familiediner, zomaar",
     notes: "Opmerkingen",
@@ -296,6 +316,34 @@ const nl = {
     submit: "Reserveren",
     submitting: "Bezig...",
     error: "Er ging iets mis. Probeer het opnieuw.",
+    /**
+     * One line per refusal /api/reserve can answer with. The keys are the
+     * codes in src/lib/reservationErrors.ts; the server picks the code, this
+     * table picks the words. Anything unrecognised falls back to `error`.
+     */
+    errors: {
+      rateLimited:
+        "Je hebt net al een aanvraag gestuurd. Probeer het over een paar minuten opnieuw.",
+      badRequest: "We konden het formulier niet lezen. Probeer het opnieuw.",
+      tooLarge: "Je bericht is te lang. Kort het wat in en probeer het opnieuw.",
+      nameRequired: "Vul je naam in.",
+      nameTooLong: "Je naam is te lang.",
+      emailRequired: "Vul je e-mailadres in.",
+      emailInvalid: "Vul een geldig e-mailadres in.",
+      phoneTooLong: "Je telefoonnummer is te lang.",
+      occasionTooLong: "De gelegenheid is te lang.",
+      notesTooLong: "Je opmerking is te lang, houd het onder 2000 tekens.",
+      guestsInvalid: "Vul een aantal personen in tussen 1 en 30.",
+      dateRequired: "Kies een datum.",
+      dateInvalid: "Die datum bestaat niet. Kies een geldige datum.",
+      datePast: "Kies een datum vanaf vandaag.",
+      dateTooFar: "Kies een datum binnen een jaar, bel ons voor later.",
+      timeInvalid: "Kies een tijd.",
+      dayClosed: "Op die dag zijn we gesloten. Kies een andere datum.",
+      timeOutsideHours:
+        "Die tijd valt buiten onze openingstijden. Kies een tijd uit de lijst.",
+      server: "Er ging iets mis aan onze kant. Probeer het opnieuw.",
+    },
     successTitle: "Bedankt, we hebben het ontvangen",
     successText: "We nemen contact met je op om de tafel te bevestigen.",
     successAgain: "Nog een tafel reserveren",
@@ -395,6 +443,7 @@ const en: Dict = {
   },
 
   about: {
+    mediaTitle: "De Bee's Hive",
     metaTitle: (name: string) => `About Us | ${name}`,
     metaDescription: (name: string, intro: string) =>
       `Discover the story behind ${name}. ${intro}`,
@@ -532,24 +581,34 @@ const en: Dict = {
       `Get in touch with ${name} in ${area}, ${city}. Send us a message or simply drop by.`,
     eyebrow: "Get in touch",
     title: "Contact",
-    heading: "Drop by or send a message",
-    address: "Address",
-    email: "Email",
-    phone: "Phone",
     follow: "Follow us",
     mapTitle: "Google Maps location",
-    reserveHeading: "Booking a table",
-    reserveText:
-      "Would you like to eat with us? Send a request and we will call or email you back personally to confirm it.",
+    detailsHeading: "Where to find us",
+    messageHeading: "Send us a message",
+    messageText:
+      "A question, an idea, or simply hello: write it below and your mail app opens with the message ready to send.",
     reserveCta: "Request a table",
     formName: "Name",
     formEmail: "Email",
     formMessage: "Message",
     formSubmit: "Send message",
+    formSubmitting: "Sending...",
+    honeypot: "Leave this field empty",
     sentTitle: "Thank you for your message!",
     sentText: "We will get back to you as soon as we can.",
-    mailSubject: (name: string) => `Message from ${name}`,
-    mailFrom: "From",
+    errors: {
+      rateLimited:
+        "You have just sent a message. Please try again in a few minutes.",
+      badRequest: "We could not read the form. Please try again.",
+      tooLarge: "Your message is too long. Shorten it and try again.",
+      nameRequired: "Please fill in your name.",
+      emailRequired: "Please fill in your email address.",
+      emailInvalid: "Please fill in a valid email address.",
+      messageRequired: "Please write us a message.",
+      messageTooLong: "Your message is too long, please keep it under 4000 characters.",
+      server: "We could not send it. Do email us directly.",
+    },
+    genericError: "We could not send it. Do email us directly.",
   },
 
   reserve: {
@@ -577,8 +636,13 @@ const en: Dict = {
     date: "Date",
     time: "Time",
     timePlaceholder: "Choose a time",
+    timeNeedsDate: "Choose a date first",
+    timeNoneThatDay: "We are closed that day",
     timeOption: (slot: string) => `${slot}`,
-    timeHint: "We serve from 12:00 to 22:00.",
+    timeHint: "Choose a date and we will show you which times are free.",
+    timeHintForDay: (hours: string, last: string) =>
+      `Open ${hours}. Last table at ${last}.`,
+    closedThatDay: "We are closed that day. Please choose another date.",
     occasion: "Occasion",
     occasionPlaceholder: "Birthday, family dinner, no reason at all",
     notes: "Notes",
@@ -587,6 +651,29 @@ const en: Dict = {
     submit: "Book a table",
     submitting: "Sending...",
     error: "Something went wrong. Please try again.",
+    errors: {
+      rateLimited:
+        "You have just sent a request. Please try again in a few minutes.",
+      badRequest: "We could not read the form. Please try again.",
+      tooLarge: "Your message is too long. Shorten it and try again.",
+      nameRequired: "Please fill in your name.",
+      nameTooLong: "Your name is too long.",
+      emailRequired: "Please fill in your email address.",
+      emailInvalid: "Please fill in a valid email address.",
+      phoneTooLong: "Your phone number is too long.",
+      occasionTooLong: "The occasion is too long.",
+      notesTooLong: "Your note is too long, please keep it under 2000 characters.",
+      guestsInvalid: "Please enter a number of guests between 1 and 30.",
+      dateRequired: "Please choose a date.",
+      dateInvalid: "That date does not exist. Please choose a valid date.",
+      datePast: "Please choose a date from today onwards.",
+      dateTooFar: "Please choose a date within a year, and call us for anything later.",
+      timeInvalid: "Please choose a time.",
+      dayClosed: "We are closed that day. Please choose another date.",
+      timeOutsideHours:
+        "That time falls outside our opening hours. Please pick one from the list.",
+      server: "Something went wrong on our side. Please try again.",
+    },
     successTitle: "Thank you, we have got it",
     successText: "We will be in touch to confirm your table.",
     successAgain: "Book another table",

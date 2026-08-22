@@ -1,8 +1,8 @@
 "use client";
 
-import { CraftIcon } from "@/components/CraftIcon";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { SketchBee } from "@/components/SketchBee";
+import { Sheet } from "@/components/Sheet";
 import { TornEdge } from "@/components/TornEdge";
 import type { SiteSettingsData } from "@/lib/payload";
 import { getDict } from "@/i18n/dictionaries";
@@ -16,8 +16,15 @@ interface Props {
 
 export function OverOnsClient({ locale, settings: s }: Props) {
   const t = getDict(locale);
-  const values =
-    (s.values as { icon: string; title: string; text: string }[]) || [];
+  // One plate under the quote: a video if the owners have pasted one in,
+  // otherwise a photo, otherwise nothing at all. A video wins because it is
+  // the more deliberate thing to have gone and made.
+  const video = s.aboutVideoUrl?.trim();
+  // Payload hands back the whole document once populated; if it ever hands
+  // back a bare id there is no url on it and this reads as "no picture".
+  const image = video ? null : s.aboutImage;
+  const imageSrc = image?.sizes?.hero?.url || image?.url || "";
+  const mediaCaption = s.aboutMediaCaption?.trim();
 
   return (
     <>
@@ -40,11 +47,15 @@ export function OverOnsClient({ locale, settings: s }: Props) {
       {/* Story: narrow measure on the right, marginalia rail on the left */}
       <section className="section-padding relative overflow-hidden bg-paper-deep">
         <div className="mx-auto grid max-w-6xl gap-x-8 gap-y-10 md:grid-cols-12">
-          <ScrollReveal direction="right" className="md:col-span-3">
-            {/* The rail carries no label any more: the story eyebrow sits in
-                the hero. What is left is the printed rule and the drawn mark,
-                the way the menu marks a margin. */}
+          {/* The margin rail. Wider than a rail needs to be for a rule and a
+              drawn bee, because it also carries the picture: on an About page
+              the photograph belongs beside the story, in the margin the eye
+              starts from, not buried underneath it. */}
+          <ScrollReveal direction="right" className="md:col-span-4">
             <aside>
+              {/* The rail carries no label any more: the story eyebrow sits in
+                  the hero. What is left is the printed rule and the drawn
+                  mark, the way the menu marks a margin. */}
               <div className="rule-ink w-12" aria-hidden="true" />
               <SketchBee
                 size={56}
@@ -52,10 +63,52 @@ export function OverOnsClient({ locale, settings: s }: Props) {
                 strokeWidth={1}
                 className="mt-8 text-sage-500"
               />
+
+              {/* Mounted on a cut sheet, the same way the map is on /contact. */}
+              {(video || imageSrc) && (
+                <figure className="mt-10 md:mt-12">
+                  <Sheet tone="deep" edge="soft">
+                    <div className="p-3 md:p-4">
+                      {video ? (
+                        // 16:9, held by the padding trick rather than a fixed
+                        // height, so it keeps its shape at every width.
+                        <div className="relative w-full pt-[56.25%]">
+                          <iframe
+                            src={video}
+                            title={mediaCaption || t.about.mediaTitle}
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                            loading="lazy"
+                            referrerPolicy="strict-origin-when-cross-origin"
+                            className="absolute inset-0 h-full w-full border-0"
+                          />
+                        </div>
+                      ) : (
+                        // Plain <img>, as the gallery does: these come off the
+                        // Payload media store, already resized.
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={imageSrc}
+                          alt={image?.alt || t.about.mediaTitle}
+                          width={image?.width || undefined}
+                          height={image?.height || undefined}
+                          loading="lazy"
+                          className="block h-auto w-full"
+                        />
+                      )}
+                    </div>
+                  </Sheet>
+                  {mediaCaption && (
+                    <figcaption className="label mt-4 !text-hive-400">
+                      {mediaCaption}
+                    </figcaption>
+                  )}
+                </figure>
+              )}
             </aside>
           </ScrollReveal>
 
-          <div className="md:col-span-8 md:col-start-5">
+          <div className="md:col-span-7 md:col-start-6">
             <ScrollReveal>
               <div className="max-w-[34rem] space-y-7 text-lg leading-[1.75] text-hive-500">
                 <p className="drop-cap text-xl leading-[1.7] text-hive-600">
@@ -82,75 +135,9 @@ export function OverOnsClient({ locale, settings: s }: Props) {
                 )}
               </div>
             </ScrollReveal>
-
-            {/* Pull quote: the brush script from the printed cards, set wider
-                than the measure and pulled left so it breaks the column. */}
-            <ScrollReveal delay={0.1}>
-              <figure className="mt-16 max-w-[37rem] md:-ml-8 md:mt-20 lg:-ml-16">
-                <div className="rule-ink w-full" aria-hidden="true" />
-                <blockquote className="py-10 md:py-14">
-                  <p className="title-hand text-[2rem] leading-[1.3] [text-indent:-0.24em] md:text-[3rem]">
-                    &ldquo;{s.aboutQuote}&rdquo;
-                  </p>
-                </blockquote>
-                <div className="rule-ink w-full" aria-hidden="true" />
-              </figure>
-            </ScrollReveal>
           </div>
         </div>
-
-        {values.length > 0 && (
-          <TornEdge
-            color="#F1ECE1"
-            lip="rgba(255,255,255,0.5)"
-            variant={1}
-            className="absolute inset-x-0 bottom-0 z-20"
-          />
-        )}
       </section>
-
-      {/* Values: a printed index: number and mark in the rail, text offset */}
-      {values.length > 0 && (
-        <section className="section-padding relative overflow-hidden bg-paper">
-          <ol className="mx-auto max-w-6xl space-y-14 md:space-y-20">
-            {values.map((v, i) => (
-              <li key={v.title} className="relative pt-14 first:pt-0 md:pt-20">
-                {i > 0 && (
-                  <div
-                    className="rule-ink absolute inset-x-0 top-0"
-                    aria-hidden="true"
-                  />
-                )}
-                <ScrollReveal delay={i * 0.12}>
-                  <article className="grid items-start gap-x-8 gap-y-6 md:grid-cols-12">
-                    <div className="flex items-center gap-5 md:col-span-3 md:block">
-                      <span
-                        className="figures-old text-[1.65rem] leading-none text-honey-500"
-                        aria-hidden="true"
-                      >
-                        {String(i + 1).padStart(2, "0")}
-                      </span>
-                      <CraftIcon
-                        name={v.icon}
-                        size={44}
-                        className="text-honey-600 md:mt-7"
-                      />
-                    </div>
-
-                    <div className="md:col-span-7 md:col-start-5">
-                      <h3 className="heading-md text-hive-700">{v.title}</h3>
-                      <div className="rule-ink my-5 w-10" aria-hidden="true" />
-                      <p className="max-w-[30rem] leading-relaxed text-hive-400">
-                        {v.text}
-                      </p>
-                    </div>
-                  </article>
-                </ScrollReveal>
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
     </>
   );
 }

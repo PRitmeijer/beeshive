@@ -87,6 +87,7 @@ export const SiteSettings: GlobalConfig = {
               name: "phone",
               label: "Telefoonnummer",
               type: "text",
+              defaultValue: "030 785 2199",
             },
             {
               name: "address",
@@ -144,18 +145,20 @@ export const SiteSettings: GlobalConfig = {
                   required: true,
                   localized: true,
                   admin: {
-                    description: "Bijv. '12:00 – 22:00' of 'Gesloten'",
+                    description: "Bijv. '11:00 – 21:00' of 'Gesloten'",
                   },
                 },
               ],
+              // Monday first. The pages match a row by its position here, not
+              // by the day's name, so this order is load-bearing.
               defaultValue: [
-                { day: "Maandag", hours: "Gesloten" },
+                { day: "Maandag", hours: "11:00 – 21:00" },
                 { day: "Dinsdag", hours: "Gesloten" },
-                { day: "Woensdag", hours: "12:00 – 22:00" },
-                { day: "Donderdag", hours: "12:00 – 22:00" },
-                { day: "Vrijdag", hours: "12:00 – 22:00" },
-                { day: "Zaterdag", hours: "12:00 – 22:00" },
-                { day: "Zondag", hours: "12:00 – 22:00" },
+                { day: "Woensdag", hours: "Gesloten" },
+                { day: "Donderdag", hours: "11:00 – 21:00" },
+                { day: "Vrijdag", hours: "11:00 – 21:00" },
+                { day: "Zaterdag", hours: "11:00 – 21:00" },
+                { day: "Zondag", hours: "Gesloten" },
               ],
             },
             {
@@ -175,9 +178,24 @@ export const SiteSettings: GlobalConfig = {
               name: "googleMapsEmbedUrl",
               label: "Google Maps Embed URL",
               type: "text",
+              defaultValue:
+                "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2450.3781318959013!2d5.086582076321947!3d52.10924836655966!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x47c66f402cf74da3%3A0xf5db732de51fc331!2sDe%20Bee%27s%20Hive!5e0!3m2!1snl!2snl!4v1756807839954!5m2!1snl!2snl",
               admin: {
                 description:
-                  "Plak hier de Google Maps embed URL. Ga naar Google Maps → Delen → Insluiten → kopieer de src URL uit de iframe code (begint met https://www.google.com/maps/embed).",
+                  "Plak hier de Google Maps embed URL. Ga naar Google Maps → Delen → Insluiten → kopieer de src URL uit de iframe code (begint met https://www.google.com/maps/embed). "
+                  + "Let op: kopieer alleen de URL zelf, niet de hele iframe-code, en zorg dat er geen &#39; of &amp; in staat.",
+              },
+            },
+            {
+              name: "googleReviewUrl",
+              label: "Google Reviews URL",
+              type: "text",
+              defaultValue: "https://maps.app.goo.gl/6VEMHL3Jq9vgAWnw8",
+              admin: {
+                description:
+                  "Link naar jullie Google-vermelding, waar gasten de beoordelingen lezen "
+                  + "en er zelf een achterlaten. Ga naar Google Maps → jullie zaak → Delen "
+                  + "→ Link kopiëren. Laat leeg als je dit blok niet op de contactpagina wilt.",
               },
             },
             {
@@ -189,12 +207,14 @@ export const SiteSettings: GlobalConfig = {
                   name: "instagram",
                   label: "Instagram URL",
                   type: "text",
-                  defaultValue: "https://instagram.com/debeeshive",
+                  defaultValue: "https://www.instagram.com/debeeshive",
                 },
                 {
                   name: "facebook",
                   label: "Facebook URL",
                   type: "text",
+                  defaultValue:
+                    "https://www.facebook.com/people/De-Bees-Hive/61573726474222",
                 },
                 {
                   name: "tripadvisor",
@@ -351,6 +371,40 @@ export const SiteSettings: GlobalConfig = {
               localized: true,
               defaultValue:
                 "Wij zijn een familie met een passie voor eten, kunst en verbinding.",
+            },
+            {
+              name: "aboutImage",
+              label: "Foto",
+              type: "upload",
+              relationTo: "media",
+              admin: {
+                description:
+                  "Eén foto op de Over Ons pagina, onder de quote. Bijvoorbeeld de familie, "
+                  + "de keuken of de zaak. Laat leeg als je hier niets wilt tonen. "
+                  + "Staat er ook een video-URL ingevuld, dan wint de video.",
+              },
+            },
+            {
+              name: "aboutVideoUrl",
+              label: "Video (YouTube of Vimeo)",
+              type: "text",
+              admin: {
+                description:
+                  "Plak de embed-URL van de video, bijv. https://www.youtube.com/embed/XXXXXXXXXXX "
+                  + "of https://player.vimeo.com/video/123456789. Op YouTube: Delen → Insluiten → "
+                  + "kopieer de src uit de iframe-code. Een gewone youtube.com/watch?v=... link "
+                  + "werkt niet. Video's zelf uploaden kan hier niet, die worden te groot.",
+              },
+            },
+            {
+              name: "aboutMediaCaption",
+              label: "Bijschrift bij foto of video",
+              type: "text",
+              localized: true,
+              admin: {
+                description:
+                  "Eén korte regel onder de foto of video. Laat leeg voor geen bijschrift.",
+              },
             },
             {
               name: "values",

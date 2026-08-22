@@ -127,12 +127,12 @@ export function GalerijClient({
         />
       </section>
 
-      {/* ===== INDEX STRIP: the rank of categories, plate count in the rail ===== */}
+      {/* ===== INDEX STRIP: the rank of categories ===== */}
       <section className="section-padding relative overflow-hidden bg-paper-deep">
         <ScrollReveal className="mx-auto max-w-6xl">
           <div className="grid gap-y-8 md:grid-cols-12 md:items-end md:gap-x-10">
             {/* Identical treatment to the category rank on /kaart. */}
-            <div className="flex flex-wrap items-start gap-x-8 gap-y-5 md:col-span-8">
+            <div className="flex flex-wrap items-start gap-x-8 gap-y-5 md:col-span-12">
               <button
                 type="button"
                 onClick={() => setFilter(null)}
@@ -183,13 +183,6 @@ export function GalerijClient({
               ))}
             </div>
 
-            {/* Plate count, set as an index numeral in the right rail. */}
-            <div className="hidden md:col-span-3 md:col-start-10 md:block md:text-right" aria-hidden="true">
-              <div className="rule-ink mb-3 ml-auto w-16" />
-              <span className="figures-old font-display text-2xl text-honey-500">
-                {String(filtered.length).padStart(2, "0")}
-              </span>
-            </div>
           </div>
         </ScrollReveal>
 

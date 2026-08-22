@@ -1,12 +1,30 @@
 services:
   web:
-    build: .
+    build:
+      context: .
+      args:
+        # Baked into the client bundle; see the Dockerfile for why.
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://debeeshive.nl}
     ports:
       - "3000:3000"
     environment:
+      # Pinned to the mounted volume, not something to override per host.
       - DATABASE_URI=file:/app/data/database.db
-      - PAYLOAD_SECRET=${PAYLOAD_SECRET:-change-me-in-production}
-      - NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+      # No default on purpose. A committed fallback is a signing key anyone
+      # who can read this repository could forge sessions with, so an unset
+      # secret has to stop the container rather than quietly weaken it.
+      - PAYLOAD_SECRET=${PAYLOAD_SECRET}
+      - NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL:-https://debeeshive.nl}
+      # Outgoing mail: reservation requests and contact messages. Leave these
+      # blank and Payload writes mail to the container log instead of sending
+      # it — the site will take bookings that nobody is told about.
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_SECURE=${SMTP_SECURE:-}
+      - EMAIL_FROM=${EMAIL_FROM:-no-reply@debeeshive.nl}
+      - EMAIL_FROM_NAME=${EMAIL_FROM_NAME:-De Bee's Hive}
     volumes:
       - db-data:/app/data
       - media-uploads:/app/media

@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
-import { getPayloadClient } from "@/lib/payload";
+import { getPayloadClient, getSiteSettings } from "@/lib/payload";
 import { rateLimit, readJsonBody } from "@/lib/apiGuard";
+import type { ReservationError } from "@/lib/reservationErrors";
+import { siteUrl } from "@/i18n/config";
+import {
+  isBookable,
+  parseWeek,
+  weekIsEmpty,
+  weekdayIndex,
+} from "@/lib/openingHours";
 
 /**
  * Public endpoint for reservation requests.
@@ -9,6 +17,10 @@ import { rateLimit, readJsonBody } from "@/lib/apiGuard";
  * convenience, not a gate. The document is assembled field by field on
  * purpose, never spread from the request body, so a caller cannot smuggle in
  * `status`, `source` or any other field the form has no business setting.
+ *
+ * Refusals answer with a code from src/lib/reservationErrors.ts rather than a
+ * sentence. The site is bilingual, and a Dutch sentence is not something the
+ * English page can do anything sensible with.
  */
 
 const MAX = {
@@ -20,15 +32,15 @@ const MAX = {
   notes: 2000,
 };
 
-const bad = (message: string) =>
-  NextResponse.json({ error: message }, { status: 400 });
+const fail = (code: ReservationError, status = 400) =>
+  NextResponse.json({ error: code }, { status });
 
 /** Trims and caps; anything that is not a string becomes an empty string. */
 function str(value: unknown, max: number): string {
   return typeof value === "string" ? value.trim().slice(0, max + 1) : "";
 }
 
-/** Today in Amsterdam as YYYY-MM-DD, so "vandaag" means the guest's today. */
+/** Today in Amsterdam as YYYY-MM-DD, so "today" means the guest's today. */
 function todayInAmsterdam(): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Amsterdam",
@@ -40,15 +52,12 @@ function todayInAmsterdam(): string {
 
 export async function POST(request: Request) {
   if (!rateLimit(request, "reserve")) {
-    return NextResponse.json(
-      { error: "Te veel aanvragen. Probeer het over een paar minuten opnieuw." },
-      { status: 429 },
-    );
+    return fail("rateLimited", 429);
   }
 
   const read = await readJsonBody(request);
   if (!read.ok) {
-    return NextResponse.json({ error: read.error }, { status: read.status });
+    return fail(read.status === 413 ? "tooLarge" : "badRequest", read.status);
   }
   const input = read.data;
 
@@ -57,7 +66,7 @@ export async function POST(request: Request) {
     // Honeypot: a field no human ever sees, let alone fills in. Answer 200 so
     // a bot cannot tell a swallowed submission from a stored one.
     if (str(input.website, 200)) {
-      return NextResponse.json({ message: "Aanvraag ontvangen" });
+      return NextResponse.json({ ok: true });
     }
 
     const name = str(input.name, MAX.name);
@@ -68,19 +77,17 @@ export async function POST(request: Request) {
     const occasion = str(input.occasion, MAX.occasion);
     const notes = str(input.notes, MAX.notes);
 
-    if (!name) return bad("Vul je naam in");
-    if (name.length > MAX.name) return bad("Je naam is te lang");
+    if (!name) return fail("nameRequired");
+    if (name.length > MAX.name) return fail("nameTooLong");
 
-    if (!email) return bad("Vul je e-mailadres in");
+    if (!email) return fail("emailRequired");
     if (email.length > MAX.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return bad("Vul een geldig e-mailadres in");
+      return fail("emailInvalid");
     }
 
-    if (phone.length > MAX.phone) return bad("Je telefoonnummer is te lang");
-    if (occasion.length > MAX.occasion) return bad("De gelegenheid is te lang");
-    if (notes.length > MAX.notes) {
-      return bad("Je opmerking is te lang, houd het onder 2000 tekens");
-    }
+    if (phone.length > MAX.phone) return fail("phoneTooLong");
+    if (occasion.length > MAX.occasion) return fail("occasionTooLong");
+    if (notes.length > MAX.notes) return fail("notesTooLong");
 
     // Guests: a whole number, and a party bigger than 30 needs a phone call.
     const guestsRaw = input.guests;
@@ -91,30 +98,43 @@ export async function POST(request: Request) {
           ? Number(guestsRaw)
           : NaN;
     if (!Number.isInteger(guests) || guests < 1 || guests > 30) {
-      return bad("Vul een aantal personen in tussen 1 en 30");
+      return fail("guestsInvalid");
     }
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return bad("Kies een datum");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail("dateRequired");
     const parsed = new Date(`${date}T12:00:00.000Z`);
-    if (Number.isNaN(parsed.getTime())) return bad("Kies een geldige datum");
+    if (Number.isNaN(parsed.getTime())) return fail("dateInvalid");
     // Round trip check, so 2026-02-31 is caught instead of rolling into March.
     if (parsed.toISOString().slice(0, 10) !== date) {
-      return bad("Kies een geldige datum");
+      return fail("dateInvalid");
     }
     if (date < todayInAmsterdam()) {
-      return bad("Kies een datum vanaf vandaag");
+      return fail("datePast");
     }
     const horizon = new Date();
     horizon.setFullYear(horizon.getFullYear() + 1);
     if (date > horizon.toISOString().slice(0, 10)) {
-      return bad("Kies een datum binnen een jaar, bel ons voor later");
+      return fail("dateTooFar");
     }
 
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return bad("Kies een tijd");
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return fail("timeInvalid");
+
+    // The form only offers times the café is actually open for, but the form
+    // is a convenience and not a gate: check the same schedule here, against
+    // the same CMS rows, so a hand-rolled request cannot book a table for a
+    // Tuesday when the doors are shut.
+    const settings = await getSiteSettings();
+    const week = parseWeek(settings.openingHours);
+    if (!weekIsEmpty(week)) {
+      const index = weekdayIndex(date);
+      const ranges = index === null ? [] : week[index];
+      if (ranges.length === 0) return fail("dayClosed");
+      if (!isBookable(ranges, time)) return fail("timeOutsideHours");
+    }
 
     const payload = await getPayloadClient();
 
-    await payload.create({
+    const created = await payload.create({
       collection: "reservations",
       data: {
         name,
@@ -133,16 +153,47 @@ export async function POST(request: Request) {
       },
     });
 
-    // No notification mail is sent: this project has no email adapter
-    // configured in payload.config.ts. Once one is added, send the owners a
-    // heads up here (and keep the guest reply worded as a received request,
-    // not as a confirmation).
+    // Tell the owners. Deliberately after the create and inside its own catch:
+    // the request is already safely in the database and visible in the admin,
+    // so a mail server having a bad afternoon must not turn a stored booking
+    // into an error the guest sees and retries.
+    //
+    // The address comes from the CMS (Site Instellingen -> Contact), which
+    // defaults to info@debeeshive.nl, so the owners can redirect it themselves
+    // without a deploy.
+    try {
+      const to = settings.contactEmail || "info@debeeshive.nl";
 
-    return NextResponse.json({ message: "Aanvraag ontvangen" });
+      const lines = [
+        `Naam:        ${name}`,
+        `E-mail:      ${email}`,
+        `Telefoon:    ${phone || "-"}`,
+        `Datum:       ${date}`,
+        `Tijd:        ${time}`,
+        `Personen:    ${guests}`,
+        `Gelegenheid: ${occasion || "-"}`,
+        "",
+        "Opmerkingen:",
+        notes || "-",
+        "",
+        `Bekijk en bevestig: ${siteUrl}/admin/collections/reservations/${created.id}`,
+        "",
+        "Let op: dit is een aanvraag, nog geen bevestiging. De gast wacht op bericht.",
+      ];
+
+      await payload.sendEmail({
+        to,
+        // Answering goes straight back to the guest.
+        replyTo: `${name} <${email}>`,
+        subject: `Reserveringsaanvraag: ${name}, ${date} om ${time} (${guests}p)`,
+        text: lines.join("\n"),
+      });
+    } catch (error) {
+      console.error("reservation notification mail failed", error);
+    }
+
+    return NextResponse.json({ ok: true });
   } catch {
-    return NextResponse.json(
-      { error: "Er ging iets mis. Probeer het opnieuw." },
-      { status: 500 },
-    );
+    return fail("server", 500);
   }
 }

@@ -1,0 +1,240 @@
+"use client";
+
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { usePathname } from "next/navigation";
+import { ReservationForm } from "@/components/ReservationForm";
+import { getDict } from "@/i18n/dictionaries";
+import { localeHref, type Locale } from "@/i18n/config";
+import type { HoursRow } from "@/lib/openingHours";
+
+/**
+ * The standing reservation control on phones.
+ *
+ * The desktop navigation carries one, but on a phone that lives behind the
+ * hamburger, so the single thing a visitor most often wants is two taps away.
+ *
+ * It used to be a full width bar pinned along the bottom edge, which cost a
+ * strip of every page and sat on top of whatever you were reading. This is a
+ * small square mark in the bottom right corner instead, and it opens the
+ * booking form in place rather than throwing the reader onto another page and
+ * losing their scroll position. Hidden on /reserveren, where the form is the
+ * page.
+ */
+
+const SETTLE = [0.16, 0.84, 0.28, 1] as const;
+
+/** A drawn calendar, in the same line weight as the rest of the artwork. */
+function CalendarMark({ size = 22 }: { size?: number }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M3.4 6.6 C3.3 5.8 3.9 5.2 4.7 5.2 L19.3 5.2 C20.1 5.2 20.7 5.8 20.6 6.6 L20.6 19.2 C20.6 20 20 20.6 19.2 20.6 L4.8 20.6 C4 20.6 3.4 20 3.4 19.2 Z" />
+      <path d="M3.6 9.7 C9 9.4 15 9.5 20.4 9.6" />
+      <path d="M8 2.9 L8 7" />
+      <path d="M16 2.9 L16 7" />
+      <path d="M7.6 13.4 L11 13.3" />
+      <path d="M7.6 16.6 L14.6 16.5" />
+    </svg>
+  );
+}
+
+/** The cross on the close control, drawn rather than set as a glyph. */
+function CloseMark() {
+  return (
+    <svg
+      viewBox="0 0 14 14"
+      width="14"
+      height="14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M2.6 2.8 L11.4 11.2" />
+      <path d="M11.3 2.7 L2.7 11.3" />
+    </svg>
+  );
+}
+
+const squareClass =
+  "fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center " +
+  "rounded-[3px] bg-hive-700 text-paper shadow-[0_8px_20px_rgba(51,30,12,0.34)] " +
+  "ring-1 ring-honey-200/25 transition-colors duration-300 ease-settle " +
+  "hover:bg-hive-800 active:translate-y-px md:hidden";
+
+/** Today in the café's own timezone as YYYY-MM-DD. */
+function todayInAmsterdam(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Amsterdam",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+export function MobileReserveButton({
+  locale,
+  reservationUrl,
+  openingHours,
+}: {
+  locale: Locale;
+  /** An external booking system, if the owners ever plug one in. */
+  reservationUrl?: string;
+  /** The week as typed into the CMS; the form reads its times off this. */
+  openingHours?: HoursRow[];
+}) {
+  const t = getDict(locale);
+  const label = t.nav.reserve;
+  const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+  // Read once the sheet is up rather than on the server: the pages around this
+  // one are prerendered, and a build-time date would go stale by the next day.
+  // Nothing is rendered from it before the first click, so there is no markup
+  // for it to disagree with.
+  const [minDate, setMinDate] = useState<string | undefined>(undefined);
+  const titleId = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const reduce = useReducedMotion();
+
+  const close = useCallback(() => setOpen(false), []);
+
+  // Escape closes, and the page behind must not scroll while the sheet is up.
+  useEffect(() => {
+    if (!open) return;
+    setMinDate(todayInAmsterdam());
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    document.addEventListener("keydown", onKey);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    // Move the caret into the sheet, so a keyboard or screen reader lands on
+    // the form rather than staying on the button behind it.
+    panelRef.current?.focus();
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previous;
+    };
+  }, [open, close]);
+
+  // Send focus back to the mark that opened the sheet — but only once the
+  // sheet has actually been opened. This effect also runs on mount, where
+  // `open` is false too, and focusing there would yank the caret to a corner
+  // button on every page load.
+  const opened = useRef(false);
+  useEffect(() => {
+    if (open) {
+      opened.current = true;
+    } else if (opened.current) {
+      triggerRef.current?.focus({ preventScroll: true });
+    }
+  }, [open]);
+
+  const target = localeHref(locale, "/reserveren");
+  if (pathname === target || pathname.endsWith("/reserveren")) return null;
+
+  // An external booking system owns the whole flow, so there is nothing to
+  // put in a sheet: the mark is simply a link out.
+  if (reservationUrl) {
+    return (
+      <a
+        href={reservationUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={label}
+        title={label}
+        className={squareClass}
+      >
+        <CalendarMark />
+      </a>
+    );
+  }
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label={label}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        title={label}
+        className={squareClass}
+      >
+        <CalendarMark />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <div className="fixed inset-0 z-50 flex items-end md:hidden">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: reduce ? 0 : 0.28 }}
+              onClick={close}
+              className="absolute inset-0 bg-hive-900/55"
+              aria-hidden="true"
+            />
+
+            <motion.div
+              ref={panelRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={titleId}
+              tabIndex={-1}
+              initial={{ y: reduce ? 0 : "6%", opacity: reduce ? 0 : 1 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: reduce ? 0 : "6%", opacity: 0 }}
+              transition={{ duration: reduce ? 0 : 0.42, ease: SETTLE }}
+              className="relative flex max-h-[92vh] w-full flex-col rounded-t-[4px] bg-paper outline-none"
+            >
+              <div className="flex items-start justify-between gap-4 border-b border-hive-700/12 px-6 pb-4 pt-6">
+                <div>
+                  <p className="label">{t.reserve.eyebrow}</p>
+                  <h2
+                    id={titleId}
+                    className="mt-1.5 font-display text-2xl text-hive-800"
+                  >
+                    {t.reserve.heading}
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={close}
+                  aria-label={t.notifications.close}
+                  className="-mr-1 -mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-[3px] text-hive-500 transition-colors duration-300 ease-settle hover:bg-hive-700/8 hover:text-hive-700"
+                >
+                  <CloseMark />
+                </button>
+              </div>
+
+              <div className="overflow-y-auto overscroll-contain px-6 pb-10 pt-7">
+                <ReservationForm
+                  locale={locale}
+                  minDate={minDate}
+                  openingHours={openingHours}
+                />
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
