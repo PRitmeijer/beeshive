@@ -35,8 +35,12 @@ services:
       # published port above; the Dockerfile's 3000 is the standalone default
       # for a plain `docker run`, and this overrides it.
       - PORT=${HOST_PORT:-3100}
-      # Pinned to the mounted volume, not something to override per host.
+      # Both pinned to the mounted volumes, not something to override per
+      # host. MEDIA_DIR must be absolute and must be the volume: Payload
+      # resolves a relative staticDir against the working directory, which
+      # from /app pointed at the image's own root-level /media.
       - DATABASE_URI=file:/app/data/database.db
+      - MEDIA_DIR=/app/media
       # No default on purpose. A committed fallback is a signing key anyone
       # who can read this repository could forge sessions with, so an unset
       # secret has to stop the container rather than quietly weaken it.

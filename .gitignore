@@ -37,3 +37,6 @@ next-env.d.ts
 /database.db
 /media
 .env
+
+# Uploaded media (dev). Production keeps these in a Docker volume.
+media/
