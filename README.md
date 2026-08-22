@@ -145,8 +145,27 @@ database, such as a new Docker volume, simply runs it.
 ## Docker
 
 ```bash
-docker compose up --build
+docker compose up -d --build
 ```
+
+The container publishes **no host port**. It joins an existing external network
+called `reverse-proxy` — created and owned by the proxy stack, not by this one —
+and Nginx Proxy Manager reaches it container-to-container. In NPM, point the
+Proxy Host at:
+
+| | |
+|---|---|
+| Forward hostname | `beeshive` |
+| Forward port | `3000` |
+| Scheme | `http` |
+
+The service is named `beeshive` rather than the usual `web` on purpose: on a
+shared proxy network the service name is the container's DNS name, and two
+stacks both answering to `web` is a coin toss over which one the proxy reaches.
+
+`docker compose down` is safe; **`down -v` deletes the database and the
+uploads**, which live in the `db-data` and `media-uploads` volumes. The external
+network survives either way.
 
 `.dockerignore` keeps the local `.next`, `node_modules`, `.env` and
 `database.db` out of the build context. Leaving `.next` in it is not a tidiness
