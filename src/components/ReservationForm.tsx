@@ -1,15 +1,19 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { CraftIcon } from "@/components/CraftIcon";
 import { getDict } from "@/i18n/dictionaries";
 import { defaultLocale, type Locale } from "@/i18n/config";
 import { isReservationError } from "@/lib/reservationErrors";
 import {
+  LEAD_MINUTES,
+  availableDates,
   describe,
+  nowMinutesInAmsterdam,
   parseWeek,
   slotsFor,
+  todayInAmsterdam,
   weekdayIndex,
   type HoursRow,
 } from "@/lib/openingHours";
@@ -45,9 +49,15 @@ interface ReservationFormProps {
    */
   minDate?: string;
   /**
-   * The week as the owners typed it into the CMS. The times on offer are read
-   * off this rather than hard-coded, so changing the hours in the admin
-   * changes what a guest can book without anyone touching the code.
+   * Minutes past midnight in Amsterdam, from the same server render as
+   * `minDate`. Today's slots that have already gone are dropped, and today
+   * itself disappears once the last sitting is inside the lead time.
+   */
+  nowMinutes?: number;
+  /**
+   * The week as the owners typed it into the CMS. The dates and times on offer
+   * are read off this rather than hard-coded, so changing the hours in the
+   * admin changes what a guest can book without anyone touching the code.
    */
   openingHours?: HoursRow[];
 }
@@ -55,19 +65,64 @@ interface ReservationFormProps {
 export function ReservationForm({
   locale = defaultLocale,
   minDate,
+  nowMinutes: nowMinutes0,
   openingHours,
 }: ReservationFormProps) {
-  const t = getDict(locale).reservationForm;
+  const dict = getDict(locale);
+  const t = dict.reservationForm;
   const [form, setForm] = useState(EMPTY);
   const week = useMemo(() => parseWeek(openingHours), [openingHours]);
+
+  // The page that owns the form passes today in from the server, so the list
+  // of dates is decided once and the markup hydrates clean. The booking sheet
+  // on phones has no server render to disagree with, so it reads the clock
+  // here instead, after mount.
+  const [clientNow, setClientNow] = useState<
+    { date: string; minutes: number } | undefined
+  >(undefined);
+  useEffect(() => {
+    if (!minDate) {
+      setClientNow({ date: todayInAmsterdam(), minutes: nowMinutesInAmsterdam() });
+    }
+  }, [minDate]);
+  const today = minDate ?? clientNow?.date;
+  const nowMinutes = minDate ? nowMinutes0 : clientNow?.minutes;
+
+  const dates = useMemo(
+    () => (today ? availableDates(today, week, nowMinutes) : []),
+    [today, week, nowMinutes],
+  );
+
+  /**
+   * "Zaterdag 29 augustus", written from the dictionary rather than through
+   * Intl: the server and the browser must produce the same string to the
+   * character, and two ICU builds need not agree. The year is added only when
+   * the date is not in the current one, where leaving it off would be a
+   * genuine ambiguity rather than noise.
+   */
+  const dateLabel = (iso: string) => {
+    const d = new Date(`${iso}T12:00:00.000Z`);
+    const weekday = dict.weekdays[(d.getUTCDay() + 6) % 7];
+    const month = dict.months[d.getUTCMonth()];
+    const year = d.getUTCFullYear();
+    const thisYear = today ? Number(today.slice(0, 4)) : year;
+    return `${weekday} ${d.getUTCDate()} ${month}${
+      year === thisYear ? "" : ` ${year}`
+    }`;
+  };
 
   // Which day the guest picked, and therefore what is on offer. No date yet
   // means no list: offering times before knowing the day would be inventing
   // them, and half of them would be on a day the café is shut.
   const dayIndex = form.date ? weekdayIndex(form.date) : null;
   const dayRanges = dayIndex === null ? null : week[dayIndex];
-  const slots = dayRanges ? slotsFor(dayRanges) : [];
-  const closedThatDay = dayRanges !== null && slots.length === 0;
+  // Only today is measured against the clock; every other day is open from
+  // the door opening.
+  const notBefore =
+    form.date && form.date === today && typeof nowMinutes === "number"
+      ? nowMinutes + LEAD_MINUTES
+      : -1;
+  const slots = dayRanges ? slotsFor(dayRanges, notBefore) : [];
   // Honeypot. Kept out of `form` so it can never be confused for real input.
   const [website, setWebsite] = useState("");
   const [status, setStatus] = useState<
@@ -80,14 +135,18 @@ export function ReservationForm({
     setForm((prev) => ({ ...prev, [key]: value }));
 
   /**
-   * Changing the date can strand a time the new day does not offer — Friday
-   * evening is bookable, Tuesday is shut. Drop the time whenever it is no
-   * longer on the list rather than submitting something we know is refused.
+   * Days can differ from one another, so changing the date can strand a time
+   * the new day does not offer. Drop it whenever it is no longer on the list
+   * rather than submitting something we know is refused.
    */
   const setDate = (value: string) =>
     setForm((prev) => {
       const index = weekdayIndex(value);
-      const next = index === null ? [] : slotsFor(week[index]);
+      const cutoff =
+        value === today && typeof nowMinutes === "number"
+          ? nowMinutes + LEAD_MINUTES
+          : -1;
+      const next = index === null ? [] : slotsFor(week[index], cutoff);
       return {
         ...prev,
         date: value,
@@ -200,13 +259,16 @@ export function ReservationForm({
             id="reserve-email"
             name="email"
             type="email"
-            required
             maxLength={200}
+            aria-describedby="reserve-email-hint"
             autoComplete="email"
             value={form.email}
             onChange={(e) => set("email")(e.target.value)}
             className={fieldClass}
           />
+          <p id="reserve-email-hint" className="mt-2 text-sm text-hive-400">
+            {t.emailHint}
+          </p>
         </div>
       </div>
 
@@ -219,6 +281,7 @@ export function ReservationForm({
             id="reserve-phone"
             name="phone"
             type="tel"
+            required
             maxLength={40}
             autoComplete="tel"
             value={form.phone}
@@ -240,7 +303,7 @@ export function ReservationForm({
             type="number"
             required
             min={1}
-            max={30}
+            max={20}
             step={1}
             inputMode="numeric"
             value={form.guests}
@@ -259,26 +322,26 @@ export function ReservationForm({
           <label htmlFor="reserve-date" className="label block">
             {t.date}
           </label>
-          <input
+          <select
             id="reserve-date"
             name="date"
-            type="date"
             required
-            min={minDate}
+            disabled={dates.length === 0}
             value={form.date}
             onChange={(e) => setDate(e.target.value)}
-            aria-describedby={closedThatDay ? "reserve-date-closed" : undefined}
-            className={`${fieldClass} figures-old`}
-          />
-          {closedThatDay && (
-            <p
-              id="reserve-date-closed"
-              role="status"
-              className="mt-2 text-sm text-honey-600"
-            >
-              {t.closedThatDay}
-            </p>
-          )}
+            aria-describedby="reserve-date-hint"
+            className={`${fieldClass} disabled:opacity-50`}
+          >
+            <option value="">{t.datePlaceholder}</option>
+            {dates.map((iso) => (
+              <option key={iso} value={iso}>
+                {dateLabel(iso)}
+              </option>
+            ))}
+          </select>
+          <p id="reserve-date-hint" className="mt-2 text-sm text-hive-400">
+            {t.dateHint}
+          </p>
         </div>
         <div>
           <label htmlFor="reserve-time" className="label block">

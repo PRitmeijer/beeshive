@@ -34,6 +34,13 @@ export const LAST_SITTING_BEFORE_CLOSE = 60;
 
 const SLOT_MINUTES = 30;
 
+/**
+ * How far ahead of now the earliest same-day booking may be. Without it the
+ * form happily offers a table at 19:00 to someone filling the form in at
+ * 18:58, which is a phone call, not a booking.
+ */
+export const LEAD_MINUTES = 60;
+
 /** "9", "09:30", "9.30" -> minutes from midnight. */
 function toMinutes(hour: string, minute: string | undefined): number {
   return Number(hour) * 60 + Number(minute ?? 0);
@@ -97,25 +104,108 @@ export function weekdayIndex(isoDate: string): number | null {
 /**
  * Bookable half hours for one day: from the door opening up to an hour before
  * it closes, per range, with any overlap between ranges collapsed.
+ *
+ * `notBefore` is minutes from midnight, and drops everything earlier. It is
+ * how today differs from every other day: the slots that have already been
+ * and gone are not on offer.
  */
-export function slotsFor(ranges: Range[]): string[] {
+export function slotsFor(ranges: Range[], notBefore = -1): string[] {
   const found = new Set<number>();
   for (const { open, close } of ranges) {
     const last = close - LAST_SITTING_BEFORE_CLOSE;
-    for (let t = open; t <= last; t += SLOT_MINUTES) found.add(t);
+    // Walk the half-hour grid from the door opening, so the slots stay on
+    // :00 and :30 whatever `notBefore` happens to be, and keep the ones that
+    // have not already gone.
+    for (let t = open; t <= last; t += SLOT_MINUTES) {
+      if (t >= notBefore) found.add(t);
+    }
   }
   return [...found].sort((a, b) => a - b).map(formatTime);
 }
 
 /** Whether a HH:MM string is one of the day's bookable slots. */
-export function isBookable(ranges: Range[], time: string): boolean {
+export function isBookable(
+  ranges: Range[],
+  time: string,
+  notBefore = -1,
+): boolean {
   const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(time);
   if (!m) return false;
   const minutes = toMinutes(m[1], m[2]);
+  if (minutes < notBefore) return false;
   return ranges.some(
     ({ open, close }) =>
       minutes >= open && minutes <= close - LAST_SITTING_BEFORE_CLOSE,
   );
+}
+
+/** The time now in the café's own timezone, as minutes from midnight. */
+export function nowMinutesInAmsterdam(): number {
+  const [h, m] = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Amsterdam",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })
+    .format(new Date())
+    .split(":");
+  return Number(h) * 60 + Number(m);
+}
+
+/** Today in the café's own timezone, as YYYY-MM-DD. */
+export function todayInAmsterdam(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Amsterdam",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+/** How far ahead the form offers a table. The endpoint allows a year. */
+const HORIZON_DAYS = 90;
+
+/**
+ * The days a table can actually be had, starting today: every date inside the
+ * horizon whose weekday yields at least one bookable slot.
+ *
+ * A native date input cannot grey out individual days — `min` and `max` are
+ * all it understands — so a guest could pick a Tuesday, fill the whole form
+ * in and only then be told the café is shut. Offering the open dates and
+ * nothing else means the question never arises.
+ *
+ * If the hours cannot be read at all, every date is offered rather than none:
+ * a CMS someone has emptied should not silently close the bookings.
+ */
+export function availableDates(
+  today: string,
+  week: Week,
+  nowMinutes?: number,
+): string[] {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(today)) return [];
+  const anchor = new Date(`${today}T12:00:00.000Z`);
+  if (Number.isNaN(anchor.getTime())) return [];
+  const unknown = weekIsEmpty(week);
+
+  const dates: string[] = [];
+  for (let i = 0; i < HORIZON_DAYS; i++) {
+    // Stepping whole days from midday UTC stays at midday UTC, so no amount
+    // of daylight saving can nudge one of these onto the wrong date.
+    const day = new Date(anchor.getTime() + i * 86_400_000);
+    const iso = day.toISOString().slice(0, 10);
+    if (unknown) {
+      dates.push(iso);
+      continue;
+    }
+    const index = (day.getUTCDay() + 6) % 7;
+    // Today drops off the list once its last sitting is inside the lead time.
+    const notBefore =
+      i === 0 && typeof nowMinutes === "number"
+        ? nowMinutes + LEAD_MINUTES
+        : -1;
+    if (slotsFor(week[index], notBefore).length > 0) dates.push(iso);
+  }
+  return dates;
 }
 
 /** "11:00 – 21:00", or "12:00 – 16:00, 17:00 – 22:00" for a split day. */

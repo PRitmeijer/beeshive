@@ -4,7 +4,10 @@ import { rateLimit, readJsonBody } from "@/lib/apiGuard";
 import type { ReservationError } from "@/lib/reservationErrors";
 import { siteUrl } from "@/i18n/config";
 import {
+  LEAD_MINUTES,
   isBookable,
+  nowMinutesInAmsterdam,
+  todayInAmsterdam,
   parseWeek,
   weekIsEmpty,
   weekdayIndex,
@@ -40,16 +43,6 @@ function str(value: unknown, max: number): string {
   return typeof value === "string" ? value.trim().slice(0, max + 1) : "";
 }
 
-/** Today in Amsterdam as YYYY-MM-DD, so "today" means the guest's today. */
-function todayInAmsterdam(): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/Amsterdam",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-}
-
 export async function POST(request: Request) {
   if (!rateLimit(request, "reserve")) {
     return fail("rateLimited", 429);
@@ -80,16 +73,21 @@ export async function POST(request: Request) {
     if (!name) return fail("nameRequired");
     if (name.length > MAX.name) return fail("nameTooLong");
 
-    if (!email) return fail("emailRequired");
-    if (email.length > MAX.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    // The phone number is the one contact detail that has to be here: the
+    // café confirms a table by ringing back. An email address is welcome but
+    // optional, and only has to be well formed if it was given at all.
+    if (!phone) return fail("phoneRequired");
+    if (phone.length > MAX.phone) return fail("phoneTooLong");
+
+    if (email && (email.length > MAX.email ||
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
       return fail("emailInvalid");
     }
-
-    if (phone.length > MAX.phone) return fail("phoneTooLong");
     if (occasion.length > MAX.occasion) return fail("occasionTooLong");
     if (notes.length > MAX.notes) return fail("notesTooLong");
 
-    // Guests: a whole number, and a party bigger than 30 needs a phone call.
+    // Guests: a whole number, and a party bigger than 20 needs a phone call.
+    // Kept in step with `max` on the form field and with the hint beneath it.
     const guestsRaw = input.guests;
     const guests =
       typeof guestsRaw === "number"
@@ -97,7 +95,7 @@ export async function POST(request: Request) {
         : typeof guestsRaw === "string" && guestsRaw.trim() !== ""
           ? Number(guestsRaw)
           : NaN;
-    if (!Number.isInteger(guests) || guests < 1 || guests > 30) {
+    if (!Number.isInteger(guests) || guests < 1 || guests > 20) {
       return fail("guestsInvalid");
     }
 
@@ -129,7 +127,14 @@ export async function POST(request: Request) {
       const index = weekdayIndex(date);
       const ranges = index === null ? [] : week[index];
       if (ranges.length === 0) return fail("dayClosed");
+      // Today is measured against the clock as well: a table an hour from now
+      // is a phone call, and one this morning is not a booking at all.
+      const notBefore =
+        date === todayInAmsterdam()
+          ? nowMinutesInAmsterdam() + LEAD_MINUTES
+          : -1;
       if (!isBookable(ranges, time)) return fail("timeOutsideHours");
+      if (!isBookable(ranges, time, notBefore)) return fail("timePassed");
     }
 
     const payload = await getPayloadClient();
@@ -138,8 +143,8 @@ export async function POST(request: Request) {
       collection: "reservations",
       data: {
         name,
-        email,
-        phone: phone || undefined,
+        email: email || undefined,
+        phone,
         // Stored at midday UTC: a dayOnly field must not slide to the day
         // before or after when it is rendered in another timezone.
         date: parsed.toISOString(),
@@ -166,7 +171,7 @@ export async function POST(request: Request) {
 
       const lines = [
         `Naam:        ${name}`,
-        `E-mail:      ${email}`,
+        `E-mail:      ${email || "-"}`,
         `Telefoon:    ${phone || "-"}`,
         `Datum:       ${date}`,
         `Tijd:        ${time}`,
@@ -183,8 +188,9 @@ export async function POST(request: Request) {
 
       await payload.sendEmail({
         to,
-        // Answering goes straight back to the guest.
-        replyTo: `${name} <${email}>`,
+        // Answering goes straight back to the guest, when they left an
+        // address to answer to.
+        ...(email ? { replyTo: `${name} <${email}>` } : {}),
         subject: `Reserveringsaanvraag: ${name}, ${date} om ${time} (${guests}p)`,
         text: lines.join("\n"),
       });

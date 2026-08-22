@@ -122,14 +122,11 @@ export function BlogClient({ locale, posts: cmsPosts }: Props) {
                   href={localeHref(locale, `/blog/${post.slug}`)}
                   className="grid gap-6 md:grid-cols-12 md:gap-8"
                 >
-                  {/* Index rail: plate number over the date. */}
+                  {/* Index rail: the date, and a printed rule above it. The
+                      plate number that used to head this is gone: it numbered
+                      the position in a list that reorders itself every time a
+                      post is published, which is not a fact about the post. */}
                   <div className="md:col-span-2 flex items-baseline gap-4 md:flex-col md:items-start md:gap-3">
-                    <span
-                      className="figures-old font-display text-2xl leading-none text-honey-500"
-                      aria-hidden="true"
-                    >
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
                     <span
                       className="rule-ink hidden md:block w-8"
                       aria-hidden="true"

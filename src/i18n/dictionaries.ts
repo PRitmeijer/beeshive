@@ -51,6 +51,22 @@ const nl = {
     closed: "Gesloten",
   },
 
+  /** Month names, January first, for writing a date out in full. */
+  months: [
+    "januari",
+    "februari",
+    "maart",
+    "april",
+    "mei",
+    "juni",
+    "juli",
+    "augustus",
+    "september",
+    "oktober",
+    "november",
+    "december",
+  ],
+
   /** Weekday names, Monday first, used to match the CMS opening hours rows. */
   weekdays: [
     "Maandag",
@@ -192,15 +208,11 @@ const nl = {
     close: "Sluiten",
     placeholderTitle: (n: number) => `De Bee's Hive ${n}`,
     placeholderDescription: "Binnenkort echte foto's",
-    /** Keys match the `category` select in src/collections/GalleryImages.ts. */
-    categories: {
-      restaurant: "Restaurant",
-      food: "Eten & Drinken",
-      events: "Evenementen",
-      ambiance: "Sfeer",
-      art: "Kunst",
-      team: "Team",
-    },
+    /**
+     * Only for the stand-in plates shown before the CMS has any photographs.
+     * Real categories are their own collection, named by the owners.
+     */
+    placeholderCategories: ["Restaurant", "Eten & Drinken", "Sfeer", "Kunst"],
   },
 
   blog: {
@@ -244,12 +256,13 @@ const nl = {
     eyebrow: "Neem contact op",
     title: "Contact",
     follow: "Volg ons",
+    reviewsHeading: "Beoordelingen",
+    reviewsLink: "Lees ons op Google",
     mapTitle: "Google Maps locatie",
     detailsHeading: "Waar je ons vindt",
     messageHeading: "Stuur ons een bericht",
     messageText:
       "Een vraag, een idee of gewoon even hallo: schrijf het hieronder, dan opent je mailprogramma met het bericht klaar.",
-    reserveCta: "Tafel aanvragen",
     formName: "Naam",
     formEmail: "E-mail",
     formMessage: "Bericht",
@@ -292,11 +305,14 @@ const nl = {
   reservationForm: {
     name: "Naam",
     email: "E-mailadres",
+    emailHint: "Optioneel.",
     phone: "Telefoonnummer",
-    phoneHint: "Optioneel, maar dan kunnen we je even bellen.",
+    phoneHint: "Hierop bellen we je om de tafel te bevestigen.",
     guests: "Aantal personen",
-    guestsHint: "Met meer dan 30 personen: bel ons even.",
+    guestsHint: "Met meer dan 20 personen: bel ons even.",
     date: "Datum",
+    datePlaceholder: "Kies een dag",
+    dateHint: "Alleen de dagen waarop we open zijn staan in de lijst.",
     time: "Tijd",
     timePlaceholder: "Kies een tijd",
     timeNeedsDate: "Kies eerst een datum",
@@ -307,7 +323,6 @@ const nl = {
     /** Once the day is known, the hours come straight uit de openingstijden. */
     timeHintForDay: (hours: string, last: string) =>
       `Open ${hours}. Laatste tafel om ${last} uur.`,
-    closedThatDay: "Op deze dag zijn we gesloten. Kies een andere datum.",
     occasion: "Gelegenheid",
     occasionPlaceholder: "Verjaardag, familiediner, zomaar",
     notes: "Opmerkingen",
@@ -328,12 +343,12 @@ const nl = {
       tooLarge: "Je bericht is te lang. Kort het wat in en probeer het opnieuw.",
       nameRequired: "Vul je naam in.",
       nameTooLong: "Je naam is te lang.",
-      emailRequired: "Vul je e-mailadres in.",
+      phoneRequired: "Vul je telefoonnummer in, daarop bevestigen we de tafel.",
       emailInvalid: "Vul een geldig e-mailadres in.",
       phoneTooLong: "Je telefoonnummer is te lang.",
       occasionTooLong: "De gelegenheid is te lang.",
       notesTooLong: "Je opmerking is te lang, houd het onder 2000 tekens.",
-      guestsInvalid: "Vul een aantal personen in tussen 1 en 30.",
+      guestsInvalid: "Vul een aantal personen in tussen 1 en 20.",
       dateRequired: "Kies een datum.",
       dateInvalid: "Die datum bestaat niet. Kies een geldige datum.",
       datePast: "Kies een datum vanaf vandaag.",
@@ -342,6 +357,8 @@ const nl = {
       dayClosed: "Op die dag zijn we gesloten. Kies een andere datum.",
       timeOutsideHours:
         "Die tijd valt buiten onze openingstijden. Kies een tijd uit de lijst.",
+      timePassed:
+        "Die tijd is al geweest. Kies een latere tijd, of bel ons voor vandaag.",
       server: "Er ging iets mis aan onze kant. Probeer het opnieuw.",
     },
     successTitle: "Bedankt, we hebben het ontvangen",
@@ -395,6 +412,21 @@ const en: Dict = {
     allTimes: "All hours",
     closed: "Closed",
   },
+
+  months: [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ],
 
   weekdays: [
     "Monday",
@@ -531,14 +563,7 @@ const en: Dict = {
     close: "Close",
     placeholderTitle: (n: number) => `De Bee's Hive ${n}`,
     placeholderDescription: "Real photographs coming soon",
-    categories: {
-      restaurant: "Restaurant",
-      food: "Food & Drink",
-      events: "Events",
-      ambiance: "Atmosphere",
-      art: "Art",
-      team: "Team",
-    },
+    placeholderCategories: ["Restaurant", "Food & Drink", "Atmosphere", "Art"],
   },
 
   blog: {
@@ -582,12 +607,13 @@ const en: Dict = {
     eyebrow: "Get in touch",
     title: "Contact",
     follow: "Follow us",
+    reviewsHeading: "Reviews",
+    reviewsLink: "Read us on Google",
     mapTitle: "Google Maps location",
     detailsHeading: "Where to find us",
     messageHeading: "Send us a message",
     messageText:
       "A question, an idea, or simply hello: write it below and your mail app opens with the message ready to send.",
-    reserveCta: "Request a table",
     formName: "Name",
     formEmail: "Email",
     formMessage: "Message",
@@ -629,11 +655,14 @@ const en: Dict = {
   reservationForm: {
     name: "Name",
     email: "Email address",
+    emailHint: "Optional.",
     phone: "Phone number",
-    phoneHint: "Optional, but it lets us give you a quick call.",
+    phoneHint: "We ring this number to confirm your table.",
     guests: "Number of guests",
-    guestsHint: "For more than 30 guests: please call us.",
+    guestsHint: "For more than 20 guests: please call us.",
     date: "Date",
+    datePlaceholder: "Choose a day",
+    dateHint: "Only the days we are open are listed.",
     time: "Time",
     timePlaceholder: "Choose a time",
     timeNeedsDate: "Choose a date first",
@@ -642,7 +671,6 @@ const en: Dict = {
     timeHint: "Choose a date and we will show you which times are free.",
     timeHintForDay: (hours: string, last: string) =>
       `Open ${hours}. Last table at ${last}.`,
-    closedThatDay: "We are closed that day. Please choose another date.",
     occasion: "Occasion",
     occasionPlaceholder: "Birthday, family dinner, no reason at all",
     notes: "Notes",
@@ -658,12 +686,12 @@ const en: Dict = {
       tooLarge: "Your message is too long. Shorten it and try again.",
       nameRequired: "Please fill in your name.",
       nameTooLong: "Your name is too long.",
-      emailRequired: "Please fill in your email address.",
+      phoneRequired: "Please fill in your phone number; that is how we confirm the table.",
       emailInvalid: "Please fill in a valid email address.",
       phoneTooLong: "Your phone number is too long.",
       occasionTooLong: "The occasion is too long.",
       notesTooLong: "Your note is too long, please keep it under 2000 characters.",
-      guestsInvalid: "Please enter a number of guests between 1 and 30.",
+      guestsInvalid: "Please enter a number of guests between 1 and 20.",
       dateRequired: "Please choose a date.",
       dateInvalid: "That date does not exist. Please choose a valid date.",
       datePast: "Please choose a date from today onwards.",
@@ -672,6 +700,8 @@ const en: Dict = {
       dayClosed: "We are closed that day. Please choose another date.",
       timeOutsideHours:
         "That time falls outside our opening hours. Please pick one from the list.",
+      timePassed:
+        "That time has already passed. Pick a later one, or call us for today.",
       server: "Something went wrong on our side. Please try again.",
     },
     successTitle: "Thank you, we have got it",

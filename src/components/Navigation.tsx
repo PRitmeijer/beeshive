@@ -131,7 +131,12 @@ export function Navigation({
   );
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-paper">
+    // Sits under the notification bar when there is one: --notice-h is
+    // published by NotificationBanner, and is 0px the rest of the time.
+    <header
+      className="fixed left-0 right-0 z-50 bg-paper"
+      style={{ top: "var(--notice-h, 0px)" }}
+    >
       <div
         aria-hidden="true"
         className={`rule-ink absolute inset-x-0 bottom-0 transition-opacity duration-500 ease-settle ${

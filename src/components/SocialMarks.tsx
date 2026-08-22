@@ -27,16 +27,16 @@ export interface SocialLink {
 }
 
 /**
- * Every account the CMS has a URL for, in a fixed order, with the empty ones
- * dropped. The Google entry is their Maps listing, which is also where the
- * reviews are.
+ * The accounts you can actually follow, in a fixed order, with the empty ones
+ * dropped. Google is deliberately not among them: a Maps listing is somewhere
+ * you read reviews, not somewhere you follow anyone, and filing it under
+ * "Volg ons" told a small lie.
  */
-export function socialLinks(s: SiteSettingsData): SocialLink[] {
+export function followLinks(s: SiteSettingsData): SocialLink[] {
   return (
     [
       { name: "Instagram", url: s.socialMedia.instagram, path: PATHS.instagram },
       { name: "Facebook", url: s.socialMedia.facebook, path: PATHS.facebook },
-      { name: "Google", url: s.googleReviewUrl, path: PATHS.google },
       {
         name: "TripAdvisor",
         url: s.socialMedia.tripadvisor,
@@ -44,6 +44,19 @@ export function socialLinks(s: SiteSettingsData): SocialLink[] {
       },
     ] as SocialLink[]
   ).filter((l) => l.url);
+}
+
+/** Their Google listing, which is where the reviews live. */
+export function reviewLink(s: SiteSettingsData): SocialLink | null {
+  return s.googleReviewUrl
+    ? { name: "Google", url: s.googleReviewUrl, path: PATHS.google }
+    : null;
+}
+
+/** Everything at once, for the footer's single row of marks. */
+export function socialLinks(s: SiteSettingsData): SocialLink[] {
+  const review = reviewLink(s);
+  return [...followLinks(s), ...(review ? [review] : [])];
 }
 
 /**

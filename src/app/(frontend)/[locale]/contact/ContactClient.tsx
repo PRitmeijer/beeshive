@@ -1,16 +1,15 @@
 "use client";
 
 import { Fragment, useState, type FormEvent } from "react";
-import Link from "next/link";
 import { CraftIcon } from "@/components/CraftIcon";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { Sheet } from "@/components/Sheet";
-import { SocialRow, socialLinks } from "@/components/SocialMarks";
+import { SocialRow, followLinks, reviewLink } from "@/components/SocialMarks";
 import { TornEdge } from "@/components/TornEdge";
 import type { SiteSettingsData } from "@/lib/payload";
 import { isContactError } from "@/lib/contactErrors";
 import { getDict } from "@/i18n/dictionaries";
-import { localeHref, type Locale } from "@/i18n/config";
+import type { Locale } from "@/i18n/config";
 
 interface Props {
   /** The dictionary is looked up here rather than passed: it holds functions. */
@@ -29,11 +28,9 @@ const fieldClass =
   "transition-colors duration-300 ease-settle " +
   "focus:border-honey-400 focus:shadow-[inset_0_-2px_0_0_#B4735E]";
 
-// Must stay in step with `bg-paper-deep` / `bg-paper-shade` in
-// tailwind.config.ts: a torn edge is the incoming section's fill painted into
-// the outgoing one.
+// Must stay in step with `bg-paper-deep` in tailwind.config.ts: a torn edge is
+// the incoming section's fill painted into the outgoing one.
 const PAPER_DEEP = "#E8E2D4";
-const SAND = "#DCD5AC";
 const LIP_LIGHT = "rgba(255,255,255,0.5)";
 
 /** The weekday names the CMS stores, in order, used only for matching. */
@@ -115,7 +112,8 @@ export function ContactClient({ locale, settings: s }: Props) {
     day: string;
     hours: string;
   }[];
-  const links = socialLinks(s);
+  const follow = followLinks(s);
+  const review = reviewLink(s);
 
   return (
     <>
@@ -140,42 +138,170 @@ export function ContactClient({ locale, settings: s }: Props) {
            columns; the page is a reference card, so it is set as one. */}
       <section className="relative overflow-hidden bg-paper-deep px-6 py-14 md:px-12 md:py-20 lg:px-20">
         <div className="mx-auto max-w-6xl">
-          <div className="grid gap-x-10 gap-y-12 md:grid-cols-12 lg:gap-x-14">
-            {/* -- when ------------------------------------------------- */}
-            <ScrollReveal className="md:col-span-5 lg:col-span-4">
-              {openingHours.length > 0 && (
-                <>
-                  {/* The printed category bar, straight off the menu. */}
-                  <h2 className="section-bar">{t.hours.heading}</h2>
-                  {/* Day left, hours right. No leaders, the menu has none. */}
-                  <dl className="mt-4 grid grid-cols-[1fr_auto] gap-x-8 gap-y-2 text-sm">
-                    {openingHours.map((h) => (
-                      <Fragment key={h.day}>
-                        <dt className="text-hive-500">{dayName(h.day)}</dt>
-                        <dd className="figures-old text-right text-hive-400">
-                          {h.hours}
-                        </dd>
-                      </Fragment>
-                    ))}
-                  </dl>
-                  {s.openingHoursNote ? (
-                    <p className="mt-4 text-sm italic leading-snug text-hive-400">
-                      {s.openingHoursNote}
-                    </p>
-                  ) : null}
-                </>
-              )}
+          <div className="grid gap-x-10 gap-y-12 md:grid-cols-12 lg:gap-x-16">
+            {/* -- the two things you write down: when, and to whom --- */}
+            <div className="space-y-12 md:col-span-6">
+              {/* -- when ------------------------------------------------- */}
+              <ScrollReveal className="md:col-span-6">
+                {openingHours.length > 0 && (
+                  <>
+                    {/* The printed category bar, straight off the menu. */}
+                    <h2 className="section-bar">{t.hours.heading}</h2>
+                    {/* Day left, hours right. No leaders, the menu has none. */}
+                    <dl className="mt-4 grid grid-cols-[1fr_auto] gap-x-8 gap-y-2 text-sm">
+                      {openingHours.map((h) => (
+                        <Fragment key={h.day}>
+                          <dt className="text-hive-500">{dayName(h.day)}</dt>
+                          <dd className="figures-old text-right text-hive-400">
+                            {h.hours}
+                          </dd>
+                        </Fragment>
+                      ))}
+                    </dl>
+                    {s.openingHoursNote ? (
+                      <p className="mt-4 text-sm italic leading-snug text-hive-400">
+                        {s.openingHoursNote}
+                      </p>
+                    ) : null}
+                  </>
+                )}
 
-              <Link
-                href={localeHref(locale, "/reserveren")}
-                className="btn-secondary mt-6"
-              >
-                {t.contact.reserveCta}
-              </Link>
-            </ScrollReveal>
+              </ScrollReveal>
+              {/* -- and a word, if you want one --------------------------- */}
+              <ScrollReveal delay={0.14} className="md:col-span-12">
+                <h2 className="section-bar">{t.contact.messageHeading}</h2>
+
+                {status === "sent" ? (
+                  <div role="status" className="pt-6">
+                    <CraftIcon
+                      name="bee"
+                      size={40}
+                      weight={1}
+                      className="text-honey-600"
+                    />
+                    <p className="mt-5 font-display text-xl text-hive-700">
+                      {t.contact.sentTitle}
+                    </p>
+                    <p className="mt-2 text-sm text-hive-400">
+                      {t.contact.sentText}
+                    </p>
+                  </div>
+                ) : (
+                  <form onSubmit={handleSubmit} className="relative mt-5 space-y-6">
+                    <div className="grid gap-6 sm:grid-cols-2">
+                      <div>
+                        <label htmlFor="contact-name" className="label block">
+                          {t.contact.formName}
+                        </label>
+                        <input
+                          id="contact-name"
+                          name="name"
+                          type="text"
+                          required
+                          maxLength={120}
+                          autoComplete="name"
+                          value={form.name}
+                          onChange={(e) =>
+                            setForm({ ...form, name: e.target.value })
+                          }
+                          className={fieldClass}
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="contact-email" className="label block">
+                          {t.contact.formEmail}
+                        </label>
+                        <input
+                          id="contact-email"
+                          name="email"
+                          type="email"
+                          required
+                          maxLength={200}
+                          autoComplete="email"
+                          value={form.email}
+                          onChange={(e) =>
+                            setForm({ ...form, email: e.target.value })
+                          }
+                          className={fieldClass}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label htmlFor="contact-message" className="label block">
+                        {t.contact.formMessage}
+                      </label>
+                      <textarea
+                        id="contact-message"
+                        name="message"
+                        required
+                        rows={4}
+                        maxLength={4000}
+                        value={form.message}
+                        onChange={(e) =>
+                          setForm({ ...form, message: e.target.value })
+                        }
+                        className={`${fieldClass} resize-none`}
+                      />
+                    </div>
+
+                    {/* Honeypot. Off screen rather than display:none, and hidden
+                        from the accessibility tree, so only a bot reaches it. */}
+                    <div
+                      aria-hidden="true"
+                      className="absolute left-[-9999px] top-auto h-px w-px overflow-hidden"
+                    >
+                      <label htmlFor="contact-website">{t.contact.honeypot}</label>
+                      <input
+                        id="contact-website"
+                        name="website"
+                        type="text"
+                        tabIndex={-1}
+                        autoComplete="off"
+                        value={website}
+                        onChange={(e) => setWebsite(e.target.value)}
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={status === "loading"}
+                      className="btn-primary disabled:opacity-50"
+                    >
+                      {status === "loading"
+                        ? t.contact.formSubmitting
+                        : t.contact.formSubmit}
+                    </button>
+
+                    {status === "error" && (
+                      <p
+                        role="alert"
+                        className="flex items-center gap-2 text-sm text-honey-600"
+                      >
+                        <svg
+                          viewBox="0 0 12 12"
+                          width="12"
+                          height="12"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.4"
+                          strokeLinecap="round"
+                          aria-hidden="true"
+                          focusable="false"
+                          className="shrink-0"
+                        >
+                          <path d="M2.2 2.4 L9.8 9.6" />
+                          <path d="M9.7 2.3 L2.3 9.7" />
+                        </svg>
+                        {error}
+                      </p>
+                    )}
+                  </form>
+                )}
+              </ScrollReveal>
+            </div>
 
             {/* -- where, and how ---------------------------------------- */}
-            <ScrollReveal delay={0.08} className="md:col-span-4 lg:col-span-3">
+            <ScrollReveal delay={0.08} className="md:col-span-6">
               <h2 className="section-bar">{t.contact.detailsHeading}</h2>
               <address className="mt-4 space-y-4 text-sm not-italic leading-relaxed text-hive-500">
                 <p>
@@ -210,195 +336,74 @@ export function ContactClient({ locale, settings: s }: Props) {
                 </p>
               </address>
 
-              {links.length > 0 && (
-                <div className="mt-6">
+              {/* The map sits with the address it belongs to. */}
+              {s.googleMapsEmbedUrl && (
+                <figure className="mt-6">
+                  <Sheet tone="deep" edge="soft">
+                    <div className="p-2.5 md:p-3">
+                      <iframe
+                        src={s.googleMapsEmbedUrl}
+                        width="100%"
+                        height="240"
+                        // Sepia pulls the map into the pigment range of the page.
+                        style={{
+                          border: 0,
+                          filter: "sepia(0.22) saturate(0.85) contrast(0.96)",
+                        }}
+                        allowFullScreen
+                        loading="lazy"
+                        referrerPolicy="no-referrer-when-downgrade"
+                        title={t.contact.mapTitle}
+                        className="block w-full"
+                      />
+                    </div>
+                  </Sheet>
+                </figure>
+              )}
+
+              {/* Marks, not a list of handles: one row that reads as one
+                  thing, and the same marks the footer prints. */}
+              {follow.length > 0 && (
+                <div className="mt-8">
                   <h3 className="label">{t.contact.follow}</h3>
-                  {/* Marks, not a list of handles: one row that reads as one
-                      thing, and the same marks the footer prints. */}
                   <SocialRow
-                    links={links}
+                    links={follow}
                     size={19}
                     gap="gap-4"
-                    className="block text-hive-400 transition-colors duration-500 ease-settle hover:text-honey-600"
+                    className="mt-3 block text-hive-400 transition-colors duration-500 ease-settle hover:text-honey-600"
                   />
                 </div>
               )}
-            </ScrollReveal>
 
-            {/* -- and a word, if you want one --------------------------- */}
-            <ScrollReveal delay={0.14} className="md:col-span-12 lg:col-span-5">
-              <h2 className="section-bar">{t.contact.messageHeading}</h2>
-
-              {status === "sent" ? (
-                <div role="status" className="pt-6">
-                  <CraftIcon
-                    name="bee"
-                    size={40}
-                    weight={1}
-                    className="text-honey-600"
-                  />
-                  <p className="mt-5 font-display text-xl text-hive-700">
-                    {t.contact.sentTitle}
-                  </p>
-                  <p className="mt-2 text-sm text-hive-400">
-                    {t.contact.sentText}
-                  </p>
-                </div>
-              ) : (
-                <form onSubmit={handleSubmit} className="relative mt-5 space-y-6">
-                  <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-1">
-                    <div>
-                      <label htmlFor="contact-name" className="label block">
-                        {t.contact.formName}
-                      </label>
-                      <input
-                        id="contact-name"
-                        name="name"
-                        type="text"
-                        required
-                        maxLength={120}
-                        autoComplete="name"
-                        value={form.name}
-                        onChange={(e) =>
-                          setForm({ ...form, name: e.target.value })
-                        }
-                        className={fieldClass}
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="contact-email" className="label block">
-                        {t.contact.formEmail}
-                      </label>
-                      <input
-                        id="contact-email"
-                        name="email"
-                        type="email"
-                        required
-                        maxLength={200}
-                        autoComplete="email"
-                        value={form.email}
-                        onChange={(e) =>
-                          setForm({ ...form, email: e.target.value })
-                        }
-                        className={fieldClass}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label htmlFor="contact-message" className="label block">
-                      {t.contact.formMessage}
-                    </label>
-                    <textarea
-                      id="contact-message"
-                      name="message"
-                      required
-                      rows={4}
-                      maxLength={4000}
-                      value={form.message}
-                      onChange={(e) =>
-                        setForm({ ...form, message: e.target.value })
-                      }
-                      className={`${fieldClass} resize-none`}
-                    />
-                  </div>
-
-                  {/* Honeypot. Off screen rather than display:none, and hidden
-                      from the accessibility tree, so only a bot reaches it. */}
-                  <div
-                    aria-hidden="true"
-                    className="absolute left-[-9999px] top-auto h-px w-px overflow-hidden"
+              {/* Google is a place you read reviews, not one you follow. */}
+              {review && (
+                <div className="mt-7">
+                  <h3 className="label">{t.contact.reviewsHeading}</h3>
+                  <a
+                    href={review.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ink-link mt-3 inline-flex items-center gap-2.5 text-sm"
                   >
-                    <label htmlFor="contact-website">{t.contact.honeypot}</label>
-                    <input
-                      id="contact-website"
-                      name="website"
-                      type="text"
-                      tabIndex={-1}
-                      autoComplete="off"
-                      value={website}
-                      onChange={(e) => setWebsite(e.target.value)}
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={status === "loading"}
-                    className="btn-primary disabled:opacity-50"
-                  >
-                    {status === "loading"
-                      ? t.contact.formSubmitting
-                      : t.contact.formSubmit}
-                  </button>
-
-                  {status === "error" && (
-                    <p
-                      role="alert"
-                      className="flex items-center gap-2 text-sm text-honey-600"
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      aria-hidden="true"
+                      focusable="false"
+                      className="shrink-0"
                     >
-                      <svg
-                        viewBox="0 0 12 12"
-                        width="12"
-                        height="12"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.4"
-                        strokeLinecap="round"
-                        aria-hidden="true"
-                        focusable="false"
-                        className="shrink-0"
-                      >
-                        <path d="M2.2 2.4 L9.8 9.6" />
-                        <path d="M9.7 2.3 L2.3 9.7" />
-                      </svg>
-                      {error}
-                    </p>
-                  )}
-                </form>
+                      <path d={review.path} />
+                    </svg>
+                    {t.contact.reviewsLink}
+                  </a>
+                </div>
               )}
             </ScrollReveal>
           </div>
         </div>
-
-        {s.googleMapsEmbedUrl && (
-          <TornEdge
-            color={SAND}
-            lip={LIP_LIGHT}
-            variant={1}
-            className="absolute inset-x-0 bottom-0 z-20"
-          />
-        )}
       </section>
-
-      {/* ===== THE MAP, MOUNTED ON A CUT SHEET ===== */}
-      {s.googleMapsEmbedUrl && (
-        <section className="relative overflow-hidden bg-paper-shade px-6 py-14 md:px-12 md:py-16 lg:px-20">
-          <div className="mx-auto max-w-6xl">
-            <ScrollReveal>
-              <figure>
-                <Sheet tone="deep" edge="soft">
-                  <div className="p-3 md:p-4">
-                    <iframe
-                      src={s.googleMapsEmbedUrl}
-                      width="100%"
-                      height="320"
-                      // Sepia pulls the map into the pigment range of the page.
-                      style={{
-                        border: 0,
-                        filter: "sepia(0.22) saturate(0.85) contrast(0.96)",
-                      }}
-                      allowFullScreen
-                      loading="lazy"
-                      referrerPolicy="no-referrer-when-downgrade"
-                      title={t.contact.mapTitle}
-                      className="block w-full"
-                    />
-                  </div>
-                </Sheet>
-              </figure>
-            </ScrollReveal>
-          </div>
-        </section>
-      )}
     </>
   );
 }

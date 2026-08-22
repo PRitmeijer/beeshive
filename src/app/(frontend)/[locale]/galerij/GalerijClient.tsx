@@ -9,10 +9,20 @@ import { TornEdge } from "@/components/TornEdge";
 import { getDict } from "@/i18n/dictionaries";
 import type { Locale } from "@/i18n/config";
 
+/**
+ * The category the CMS relates an image to. Read at depth 1, so it arrives as
+ * the document; an id on its own means the relation is broken and the image is
+ * simply filed under nothing.
+ */
+interface GalleryCategory {
+  id: string | number;
+  name?: string;
+}
+
 interface GalleryImage {
   id: string;
   title: string;
-  category: string;
+  category?: GalleryCategory | string | number | null;
   description?: string;
   image?: {
     url?: string;
@@ -27,13 +37,21 @@ interface GalleryImage {
 const EASE: [number, number, number, number] = [0.16, 0.84, 0.28, 1];
 
 /**
- * The CMS stores the category as a slug, so the printed label is looked up per
- * language. An unknown slug falls back to the slug itself rather than blanking
- * the button.
+ * Categories are their own collection now, so the owners can add one without a
+ * deploy. What the page needs from an image is a stable key to group by and a
+ * name to print; both come off the related document, which Payload has already
+ * resolved into the reader's language.
  */
-function categoryLabel(locale: Locale, category: string): string {
-  const labels: Record<string, string> = getDict(locale).gallery.categories;
-  return labels[category] || category;
+function categoryKey(image: GalleryImage): string | null {
+  const c = image.category;
+  if (!c) return null;
+  if (typeof c === "object") return String(c.id);
+  return String(c);
+}
+
+function categoryName(image: GalleryImage): string {
+  const c = image.category;
+  return c && typeof c === "object" && c.name ? c.name : "";
 }
 
 // Shown until the CMS has images of its own.
@@ -42,7 +60,11 @@ function buildPlaceholders(locale: Locale): GalleryImage[] {
   return Array.from({ length: 8 }, (_, i) => ({
     id: String(i),
     title: t.gallery.placeholderTitle(i + 1),
-    category: ["restaurant", "food", "ambiance", "art"][i % 4],
+    category: (() => {
+      const names = t.gallery.placeholderCategories;
+      const n = names[i % names.length];
+      return { id: n, name: n };
+    })(),
     description: t.gallery.placeholderDescription,
   }));
 }
@@ -97,8 +119,17 @@ export function GalerijClient({
   const [selected, setSelected] = useState<GalleryImage | null>(null);
   const reduce = useReducedMotion();
 
-  const cats = [...new Set(images.map((i) => i.category))];
-  const filtered = filter ? images.filter((i) => i.category === filter) : images;
+  // One entry per category actually in use, in the order the images arrive —
+  // which is the CMS's own `order`, so the filter bar follows it.
+  const cats: { key: string; name: string }[] = [];
+  for (const image of images) {
+    const key = categoryKey(image);
+    if (!key || cats.some((c) => c.key === key)) continue;
+    cats.push({ key, name: categoryName(image) || key });
+  }
+  const filtered = filter
+    ? images.filter((i) => categoryKey(i) === filter)
+    : images;
 
   // The lightbox had no keyboard dismissal at all.
   useEffect(() => {
@@ -158,25 +189,25 @@ export function GalerijClient({
 
               {cats.map((c) => (
                 <button
-                  key={c}
+                  key={c.key}
                   type="button"
-                  onClick={() => setFilter(c)}
-                  aria-pressed={filter === c}
+                  onClick={() => setFilter(c.key)}
+                  aria-pressed={filter === c.key}
                   className="group text-left"
                 >
                   <span
                     className={`label block transition-colors duration-500 ease-settle ${
-                      filter === c
+                      filter === c.key
                         ? "text-honey-600"
                         : "text-hive-400 group-hover:text-honey-600"
                     }`}
                   >
-                    {categoryLabel(locale, c)}
+                    {c.name}
                   </span>
                   <span
                     aria-hidden="true"
                     className={`rule-ink mt-2 block w-full transition-opacity duration-500 ease-settle ${
-                      filter === c ? "opacity-100" : "opacity-0"
+                      filter === c.key ? "opacity-100" : "opacity-0"
                     }`}
                   />
                 </button>
@@ -256,7 +287,7 @@ export function GalerijClient({
                           {img.title}
                         </span>
                         <span className="label hidden shrink-0 md:inline">
-                          {categoryLabel(locale, img.category)}
+                          {categoryName(img)}
                         </span>
                       </figcaption>
                     </figure>

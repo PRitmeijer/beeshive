@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { CraftIcon } from "@/components/CraftIcon";
 import { getDict } from "@/i18n/dictionaries";
@@ -95,6 +95,15 @@ export function NotificationBanner({
     setDismissed((prev) => new Set(prev).add(id));
   }, []);
 
+  /**
+   * The banner sits above a header that is `fixed` at the top of every page,
+   * so left in the normal flow it is painted over and never seen — which is
+   * what "the notifications do not work" turned out to mean. It is fixed too
+   * now, and publishes its height as --notice-h so the header can start below
+   * it and the page can be padded by the same amount. Dismissing it puts the
+   * variable back to zero and everything closes up.
+   */
+  const barRef = useRef<HTMLDivElement>(null);
   const active = notifications.filter((n) => !dismissed.has(n.id));
   const banners = active.filter((n) => (n.displayMode || "banner") === "banner");
   const popups = active.filter((n) => (n.displayMode || "banner") === "popup");
@@ -112,6 +121,26 @@ export function NotificationBanner({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [currentPopup, dismiss]);
 
+  useEffect(() => {
+    const root = document.documentElement;
+    const bar = barRef.current;
+    if (!bar) {
+      root.style.setProperty("--notice-h", "0px");
+      return;
+    }
+    const measure = () =>
+      root.style.setProperty("--notice-h", `${bar.offsetHeight}px`);
+    measure();
+    // The message wraps to a second line on a narrow screen, and the header
+    // has to follow it down.
+    const observer = new ResizeObserver(measure);
+    observer.observe(bar);
+    return () => {
+      observer.disconnect();
+      root.style.setProperty("--notice-h", "0px");
+    };
+  }, [currentBanner]);
+
   if (!loaded) return null;
 
   const bannerStyle = currentBanner ? typeStyles[currentBanner.type] : null;
@@ -120,7 +149,7 @@ export function NotificationBanner({
   return (
     <>
       {/* ===== BANNER MODE ===== */}
-      <div className="relative z-50">
+      <div className="fixed inset-x-0 top-0 z-[60]">
         <AnimatePresence mode="wait">
           {currentBanner && bannerStyle && (
             <motion.div
@@ -136,7 +165,10 @@ export function NotificationBanner({
                 color: bannerStyle.ink,
               }}
             >
-              <div className="px-6 md:px-12 py-2.5 pr-12 max-w-7xl mx-auto flex flex-wrap items-center gap-x-3 gap-y-1">
+              <div
+                ref={barRef}
+                className="px-6 md:px-12 py-2.5 pr-12 max-w-7xl mx-auto flex flex-wrap items-center gap-x-3 gap-y-1"
+              >
                 <CraftIcon
                   name={bannerStyle.icon}
                   size={17}

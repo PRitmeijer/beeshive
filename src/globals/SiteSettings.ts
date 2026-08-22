@@ -19,13 +19,6 @@ export const SiteSettings: GlobalConfig = {
               required: true,
             },
             {
-              name: "tagline",
-              label: "Slogan",
-              type: "text",
-              localized: true,
-              defaultValue: "Waar eten en creativiteit samenkomen",
-            },
-            {
               name: "description",
               label: "Beschrijving (SEO)",
               type: "textarea",
@@ -57,18 +50,6 @@ export const SiteSettings: GlobalConfig = {
                 description:
                   "Link naar reserveringssysteem (bijv. formitable, couverts). Laat leeg om knop te verbergen.",
               },
-            },
-            {
-              name: "heroImage",
-              label: "Hero Afbeelding",
-              type: "upload",
-              relationTo: "media",
-            },
-            {
-              name: "logo",
-              label: "Logo",
-              type: "upload",
-              relationTo: "media",
             },
           ],
         },
@@ -250,81 +231,6 @@ export const SiteSettings: GlobalConfig = {
                 "Waar eten en creativiteit samenkomen. Een warm eetcafé in het hart van Zuilen.",
             },
             {
-              name: "introTitle",
-              label: "Introductie Titel",
-              type: "text",
-              localized: true,
-              defaultValue: "De kunst van het leven",
-            },
-            {
-              name: "introText",
-              label: "Introductie Tekst",
-              type: "textarea",
-              localized: true,
-              defaultValue:
-                "De Bee's Hive ontstond uit een liefde voor alle vormen van kunst en creativiteit in het dagelijks leven. Begonnen in Zuid-Afrika, keerden wij terug naar onze Nederlandse roots om een plek te creëren waar het 'kunst van het leven' kan floreren.",
-            },
-            {
-              name: "features",
-              label: "Kenmerken",
-              type: "array",
-              maxRows: 6,
-              defaultValue: [
-                {
-                  icon: "🍳",
-                  title: "Creatieve Keuken",
-                  text: "Gerechten bereid met passie, lokale ingrediënten en een vleugje creativiteit.",
-                },
-                {
-                  icon: "🎨",
-                  title: "Kunst & Cultuur",
-                  text: "Een plek waar creativiteit, verbinding en schoonheid in elke hoek zichtbaar is.",
-                },
-                {
-                  icon: "🤝",
-                  title: "Gemeenschap",
-                  text: "Meer dan een restaurant. Een gemeenschap waar iedereen welkom is.",
-                },
-              ],
-              fields: [
-                {
-                  name: "icon",
-                  label: "Emoji/Icoon",
-                  type: "text",
-                  required: true,
-                },
-                {
-                  name: "title",
-                  label: "Titel",
-                  type: "text",
-                  required: true,
-                  localized: true,
-                },
-                {
-                  name: "text",
-                  label: "Tekst",
-                  type: "textarea",
-                  required: true,
-                  localized: true,
-                },
-              ],
-            },
-            {
-              name: "quote",
-              label: "Quote",
-              type: "text",
-              localized: true,
-              defaultValue:
-                "Eten is kunst, en iedereen is welkom om hun creatieve zelf te zijn",
-            },
-            {
-              name: "quoteAttribution",
-              label: "Quote Toeschrijving",
-              type: "text",
-              localized: true,
-              defaultValue: "De Bee's Hive",
-            },
-            {
               name: "newsletterTitle",
               label: "Nieuwsbrief Titel",
               type: "text",
@@ -365,14 +271,6 @@ export const SiteSettings: GlobalConfig = {
               },
             },
             {
-              name: "aboutQuote",
-              label: "Quote",
-              type: "text",
-              localized: true,
-              defaultValue:
-                "Wij zijn een familie met een passie voor eten, kunst en verbinding.",
-            },
-            {
               name: "aboutImage",
               label: "Foto",
               type: "upload",
@@ -405,51 +303,6 @@ export const SiteSettings: GlobalConfig = {
                 description:
                   "Eén korte regel onder de foto of video. Laat leeg voor geen bijschrift.",
               },
-            },
-            {
-              name: "values",
-              label: "Waarden",
-              type: "array",
-              maxRows: 6,
-              defaultValue: [
-                {
-                  icon: "🌍",
-                  title: "Onze Roots",
-                  text: "Van Zuid-Afrika naar Zuilen. Onze culturele reis vormt de basis van alles wat we doen.",
-                },
-                {
-                  icon: "🌿",
-                  title: "Duurzaamheid",
-                  text: "Lokale ingrediënten, seizoensgebonden gerechten en respect voor de natuur.",
-                },
-                {
-                  icon: "💛",
-                  title: "Gemeenschap",
-                  text: "Een warme plek voor iedereen: buren, families, kunstenaars en dromers.",
-                },
-              ],
-              fields: [
-                {
-                  name: "icon",
-                  label: "Emoji/Icoon",
-                  type: "text",
-                  required: true,
-                },
-                {
-                  name: "title",
-                  label: "Titel",
-                  type: "text",
-                  required: true,
-                  localized: true,
-                },
-                {
-                  name: "text",
-                  label: "Tekst",
-                  type: "textarea",
-                  required: true,
-                  localized: true,
-                },
-              ],
             },
           ],
         },

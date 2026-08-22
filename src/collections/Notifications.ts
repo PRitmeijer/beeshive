@@ -108,7 +108,7 @@ export const Notifications: CollectionConfig = {
           type: "date",
           admin: {
             width: "50%",
-            description: "Tot wanneer is de melding zichtbaar?",
+            description: "Tot en met welke dag is de melding zichtbaar? De hele dag telt mee.",
             date: { pickerAppearance: "dayOnly" },
           },
         },

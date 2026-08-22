@@ -75,16 +75,6 @@ const squareClass =
   "ring-1 ring-honey-200/25 transition-colors duration-300 ease-settle " +
   "hover:bg-hive-800 active:translate-y-px md:hidden";
 
-/** Today in the café's own timezone as YYYY-MM-DD. */
-function todayInAmsterdam(): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/Amsterdam",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-}
-
 export function MobileReserveButton({
   locale,
   reservationUrl,
@@ -100,11 +90,6 @@ export function MobileReserveButton({
   const label = t.nav.reserve;
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  // Read once the sheet is up rather than on the server: the pages around this
-  // one are prerendered, and a build-time date would go stale by the next day.
-  // Nothing is rendered from it before the first click, so there is no markup
-  // for it to disagree with.
-  const [minDate, setMinDate] = useState<string | undefined>(undefined);
   const titleId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -115,7 +100,6 @@ export function MobileReserveButton({
   // Escape closes, and the page behind must not scroll while the sheet is up.
   useEffect(() => {
     if (!open) return;
-    setMinDate(todayInAmsterdam());
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") close();
     };
@@ -225,11 +209,10 @@ export function MobileReserveButton({
               </div>
 
               <div className="overflow-y-auto overscroll-contain px-6 pb-10 pt-7">
-                <ReservationForm
-                  locale={locale}
-                  minDate={minDate}
-                  openingHours={openingHours}
-                />
+                {/* No date passed: the form reads the clock itself after
+                    mount. Nothing here is server-rendered, so there is no
+                    markup for it to disagree with. */}
+                <ReservationForm locale={locale} openingHours={openingHours} />
               </div>
             </motion.div>
           </div>

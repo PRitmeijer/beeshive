@@ -32,7 +32,6 @@ export interface MediaRef {
 
 const nlDefaults = {
   siteName: "De Bee's Hive",
-  tagline: "Waar eten en creativiteit samenkomen",
   description:
     "Een warm eetcafé in het hart van Zuilen waar creativiteit, verbinding en lekker eten samenkomen.",
   cuisines: "Dutch, International, South African",
@@ -68,56 +67,15 @@ const nlDefaults = {
   heroTitle: "De Bee's Hive",
   heroSubtitle:
     "Waar eten en creativiteit samenkomen. Een warm eetcafé in het hart van Zuilen.",
-  introTitle: "De kunst van het leven",
-  introText:
-    "De Bee's Hive ontstond uit een liefde voor alle vormen van kunst en creativiteit in het dagelijks leven. Begonnen in Zuid-Afrika, keerden wij terug naar onze Nederlandse roots om een plek te creëren waar het 'kunst van het leven' kan floreren.",
-  features: [
-    {
-      icon: "🍳",
-      title: "Creatieve Keuken",
-      text: "Gerechten bereid met passie, lokale ingrediënten en een vleugje creativiteit.",
-    },
-    {
-      icon: "🎨",
-      title: "Kunst & Cultuur",
-      text: "Een plek waar creativiteit, verbinding en schoonheid in elke hoek zichtbaar is.",
-    },
-    {
-      icon: "🤝",
-      title: "Gemeenschap",
-      text: "Meer dan een restaurant. Een gemeenschap waar iedereen welkom is.",
-    },
-  ],
-  quote: "Eten is kunst, en iedereen is welkom om hun creatieve zelf te zijn",
-  quoteAttribution: "De Bee's Hive",
   newsletterTitle: "Schrijf je in",
   newsletterText:
     "Ontvang als eerste nieuws over speciale evenementen, nieuwe gerechten en aanbiedingen.",
   aboutIntro:
     "De Bee's Hive is meer dan een restaurant. Het is een plek waar kunst, creativiteit en lekker eten samenkomen in het hart van Zuilen, Utrecht.",
   aboutStory: null as string | null,
-  aboutQuote:
-    "Wij zijn een familie met een passie voor eten, kunst en verbinding.",
   aboutImage: null as MediaRef | null,
   aboutVideoUrl: "",
   aboutMediaCaption: "",
-  values: [
-    {
-      icon: "🌍",
-      title: "Onze Roots",
-      text: "Van Zuid-Afrika naar Zuilen. Onze culturele reis vormt de basis van alles wat we doen.",
-    },
-    {
-      icon: "🌿",
-      title: "Duurzaamheid",
-      text: "Lokale ingrediënten, seizoensgebonden gerechten en respect voor de natuur.",
-    },
-    {
-      icon: "💛",
-      title: "Gemeenschap",
-      text: "Een warme plek voor iedereen: buren, families, kunstenaars en dromers.",
-    },
-  ],
   footerTagline: "Gemaakt met liefde in Zuilen",
   // Taken from their own previous site. The listing behind it is what carries
   // the reviews, so the same URL serves the review block on /contact.
@@ -131,7 +89,6 @@ export type SiteSettingsData = typeof nlDefaults;
 
 const enDefaults: SiteSettingsData = {
   siteName: "De Bee's Hive",
-  tagline: "Where food and creativity meet",
   description:
     "A warm eetcafé in the heart of Zuilen where creativity, connection and good food come together.",
   cuisines: "Dutch, International, South African",
@@ -164,55 +121,15 @@ const enDefaults: SiteSettingsData = {
   heroTitle: "De Bee's Hive",
   heroSubtitle:
     "Where food and creativity meet. A warm eetcafé in the heart of Zuilen.",
-  introTitle: "The art of living",
-  introText:
-    "De Bee's Hive grew out of a love for every form of art and creativity in daily life. It started in South Africa, and we returned to our Dutch roots to make a place where the 'art of living' can flourish.",
-  features: [
-    {
-      icon: "🍳",
-      title: "A creative kitchen",
-      text: "Dishes made with passion, local ingredients and a touch of invention.",
-    },
-    {
-      icon: "🎨",
-      title: "Art & culture",
-      text: "A place where creativity, connection and beauty show in every corner.",
-    },
-    {
-      icon: "🤝",
-      title: "Community",
-      text: "More than a restaurant. A community where everyone is welcome.",
-    },
-  ],
-  quote: "Food is art, and everyone is welcome to be their creative self",
-  quoteAttribution: "De Bee's Hive",
   newsletterTitle: "Sign up",
   newsletterText:
     "Be the first to hear about special events, new dishes and offers.",
   aboutIntro:
     "De Bee's Hive is more than a restaurant. It is a place where art, creativity and good food come together in the heart of Zuilen, Utrecht.",
   aboutStory: null as string | null,
-  aboutQuote: "We are a family with a passion for food, art and connection.",
   aboutImage: null as MediaRef | null,
   aboutVideoUrl: "",
   aboutMediaCaption: "",
-  values: [
-    {
-      icon: "🌍",
-      title: "Our roots",
-      text: "From South Africa to Zuilen. Our cultural journey underpins everything we do.",
-    },
-    {
-      icon: "🌿",
-      title: "Sustainability",
-      text: "Local ingredients, seasonal dishes and respect for the land.",
-    },
-    {
-      icon: "💛",
-      title: "Community",
-      text: "A warm place for everyone: neighbours, families, artists and dreamers.",
-    },
-  ],
   footerTagline: "Made with love in Zuilen",
   // Taken from their own previous site. The listing behind it is what carries
   // the reviews, so the same URL serves the review block on /contact.

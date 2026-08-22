@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getSiteSettings } from "@/lib/payload";
+import { nowMinutesInAmsterdam, todayInAmsterdam } from "@/lib/openingHours";
 import { getDict } from "@/i18n/dictionaries";
 import { alternatesFor, parseLocale } from "@/i18n/config";
 import { ReserverenClient } from "./ReserverenClient";
@@ -27,17 +28,6 @@ export async function generateMetadata({
   };
 }
 
-/** Today in Amsterdam as YYYY-MM-DD, decided on the server so the date field
- *  cannot disagree with itself between the rendered HTML and the browser. */
-function todayInAmsterdam(): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/Amsterdam",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-}
-
 export default async function ReserverenPage({ params }: PageProps) {
   const locale = parseLocale((await params).locale);
   if (!locale) notFound();
@@ -48,6 +38,7 @@ export default async function ReserverenPage({ params }: PageProps) {
       locale={locale}
       settings={s}
       today={todayInAmsterdam()}
+      nowMinutes={nowMinutesInAmsterdam()}
     />
   );
 }

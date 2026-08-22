@@ -51,7 +51,10 @@ export default async function FrontendLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-screen flex flex-col antialiased">
+      <body
+        className="min-h-screen flex flex-col antialiased"
+        style={{ paddingTop: "var(--notice-h, 0px)" }}
+      >
         <PaperDefs />
         <NotificationBanner locale={locale} />
         <Navigation

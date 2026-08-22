@@ -37,19 +37,13 @@ export const GalleryImages: CollectionConfig = {
         {
           name: "category",
           label: "Categorie",
-          type: "select",
-          options: [
-            { label: "🏠 Restaurant", value: "restaurant" },
-            { label: "🍽️ Eten & Drinken", value: "food" },
-            { label: "🎉 Evenementen", value: "events" },
-            { label: "✨ Sfeer", value: "ambiance" },
-            { label: "🎨 Kunst", value: "art" },
-            { label: "👥 Team", value: "team" },
-          ],
+          type: "relationship",
+          relationTo: "gallery-categories",
           required: true,
           admin: {
             width: "50%",
-            description: "Bezoekers kunnen filteren op categorie",
+            description:
+              "Bezoekers filteren hierop. Staat de categorie er nog niet bij, maak hem dan aan onder Galerij Categorieën.",
           },
         },
         {

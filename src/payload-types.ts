@@ -15,14 +15,12 @@ export interface Config {
     media: Media;
     'blog-posts': BlogPost;
     'gallery-images': GalleryImage;
+    'gallery-categories': GalleryCategory;
     'menu-items': MenuItem;
     'menu-categories': MenuCategory;
     notifications: Notification;
     'mailing-list': MailingList;
     reservations: Reservation;
-    testimonials: Testimonial;
-    events: Event;
-    'team-members': TeamMember;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -33,14 +31,12 @@ export interface Config {
     media: MediaSelect<false> | MediaSelect<true>;
     'blog-posts': BlogPostsSelect<false> | BlogPostsSelect<true>;
     'gallery-images': GalleryImagesSelect<false> | GalleryImagesSelect<true>;
+    'gallery-categories': GalleryCategoriesSelect<false> | GalleryCategoriesSelect<true>;
     'menu-items': MenuItemsSelect<false> | MenuItemsSelect<true>;
     'menu-categories': MenuCategoriesSelect<false> | MenuCategoriesSelect<true>;
     notifications: NotificationsSelect<false> | NotificationsSelect<true>;
     'mailing-list': MailingListSelect<false> | MailingListSelect<true>;
     reservations: ReservationsSelect<false> | ReservationsSelect<true>;
-    testimonials: TestimonialsSelect<false> | TestimonialsSelect<true>;
-    events: EventsSelect<false> | EventsSelect<true>;
-    'team-members': TeamMembersSelect<false> | TeamMembersSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -227,9 +223,9 @@ export interface GalleryImage {
   title: string;
   image: number | Media;
   /**
-   * Bezoekers kunnen filteren op categorie
+   * Bezoekers filteren hierop. Staat de categorie er nog niet bij, maak hem dan aan onder Galerij Categorieën.
    */
-  category: 'restaurant' | 'food' | 'events' | 'ambiance' | 'art' | 'team';
+  category: number | GalleryCategory;
   /**
    * Uitgelichte foto's verschijnen als eerste
    */
@@ -240,6 +236,25 @@ export interface GalleryImage {
   description?: string | null;
   /**
    * Lagere nummers verschijnen eerst
+   */
+  order?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Maak zelf categorieën aan om de galerij mee te filteren, bijv. Restaurant, Eten & Drinken, Sfeer, Kunst.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "gallery-categories".
+ */
+export interface GalleryCategory {
+  id: number;
+  /**
+   * De knop waarop bezoekers filteren, bijv. 'Eten & Drinken'. Vertaal hem op het Engelse tabblad; blijft die leeg, dan wordt de Nederlandse naam getoond.
+   */
+  name: string;
+  /**
+   * Lagere nummers staan vooraan in de filterbalk
    */
   order?: number | null;
   updatedAt: string;
@@ -363,7 +378,7 @@ export interface Notification {
    */
   startDate?: string | null;
   /**
-   * Tot wanneer is de melding zichtbaar?
+   * Tot en met welke dag is de melding zichtbaar? De hele dag telt mee.
    */
   endDate?: string | null;
   /**
@@ -404,11 +419,14 @@ export interface MailingList {
 export interface Reservation {
   id: number;
   name: string;
-  email: string;
   /**
-   * Handig om even terug te bellen
+   * Optioneel; we bellen liever even
    */
-  phone?: string | null;
+  email?: string | null;
+  /**
+   * Hierop bevestigen we de tafel
+   */
+  phone: string;
   guests: number;
   date: string;
   time: string;
@@ -428,80 +446,6 @@ export interface Reservation {
    * Wordt automatisch ingevuld
    */
   source?: string | null;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * Beheer klantbeoordelingen en reviews die op de website worden getoond.
- *
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "testimonials".
- */
-export interface Testimonial {
-  id: number;
-  author: string;
-  rating: '5' | '4' | '3' | '2' | '1';
-  text: string;
-  /**
-   * Waar komt deze review vandaan?
-   */
-  source?: ('google' | 'tripadvisor' | 'instagram' | 'verbal' | 'other') | null;
-  /**
-   * Toon deze review op de homepage
-   */
-  featured?: boolean | null;
-  avatar?: (number | null) | Media;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * Beheer evenementen, specials en activiteiten. Deze worden op de homepage en evenementenpagina getoond.
- *
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "events".
- */
-export interface Event {
-  id: number;
-  title: string;
-  type: 'event' | 'special' | 'music' | 'workshop' | 'holiday';
-  /**
-   * Laat leeg voor doorlopende specials
-   */
-  date?: string | null;
-  description: string;
-  image?: (number | null) | Media;
-  active?: boolean | null;
-  homepage?: boolean | null;
-  /**
-   * Bijv. '€15 p.p.' of 'Gratis'. Laat leeg als niet van toepassing.
-   */
-  price?: string | null;
-  /**
-   * Optionele link voor aanmelding of meer info
-   */
-  link?: string | null;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * Beheer teamleden die op de Over Ons pagina worden getoond.
- *
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "team-members".
- */
-export interface TeamMember {
-  id: number;
-  name: string;
-  /**
-   * Bijv. 'Chef-kok', 'Eigenaar', 'Barista'
-   */
-  role: string;
-  bio?: string | null;
-  photo?: (number | null) | Media;
-  /**
-   * Lagere nummers verschijnen eerst
-   */
-  order?: number | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -529,6 +473,10 @@ export interface PayloadLockedDocument {
         value: number | GalleryImage;
       } | null)
     | ({
+        relationTo: 'gallery-categories';
+        value: number | GalleryCategory;
+      } | null)
+    | ({
         relationTo: 'menu-items';
         value: number | MenuItem;
       } | null)
@@ -547,18 +495,6 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'reservations';
         value: number | Reservation;
-      } | null)
-    | ({
-        relationTo: 'testimonials';
-        value: number | Testimonial;
-      } | null)
-    | ({
-        relationTo: 'events';
-        value: number | Event;
-      } | null)
-    | ({
-        relationTo: 'team-members';
-        value: number | TeamMember;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -707,6 +643,16 @@ export interface GalleryImagesSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "gallery-categories_select".
+ */
+export interface GalleryCategoriesSelect<T extends boolean = true> {
+  name?: T;
+  order?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "menu-items_select".
  */
 export interface MenuItemsSelect<T extends boolean = true> {
@@ -788,50 +734,6 @@ export interface ReservationsSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "testimonials_select".
- */
-export interface TestimonialsSelect<T extends boolean = true> {
-  author?: T;
-  rating?: T;
-  text?: T;
-  source?: T;
-  featured?: T;
-  avatar?: T;
-  updatedAt?: T;
-  createdAt?: T;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "events_select".
- */
-export interface EventsSelect<T extends boolean = true> {
-  title?: T;
-  type?: T;
-  date?: T;
-  description?: T;
-  image?: T;
-  active?: T;
-  homepage?: T;
-  price?: T;
-  link?: T;
-  updatedAt?: T;
-  createdAt?: T;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "team-members_select".
- */
-export interface TeamMembersSelect<T extends boolean = true> {
-  name?: T;
-  role?: T;
-  bio?: T;
-  photo?: T;
-  order?: T;
-  updatedAt?: T;
-  createdAt?: T;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents_select".
  */
 export interface PayloadLockedDocumentsSelect<T extends boolean = true> {
@@ -869,7 +771,6 @@ export interface PayloadMigrationsSelect<T extends boolean = true> {
 export interface SiteSetting {
   id: number;
   siteName: string;
-  tagline?: string | null;
   description?: string | null;
   /**
    * Komma-gescheiden lijst van keukens voor zoekmachines
@@ -880,8 +781,6 @@ export interface SiteSetting {
    * Link naar reserveringssysteem (bijv. formitable, couverts). Laat leeg om knop te verbergen.
    */
   reservationUrl?: string | null;
-  heroImage?: (number | null) | Media;
-  logo?: (number | null) | Media;
   contactEmail?: string | null;
   phone?: string | null;
   address?: {
@@ -924,18 +823,6 @@ export interface SiteSetting {
    */
   heroTitle?: string | null;
   heroSubtitle?: string | null;
-  introTitle?: string | null;
-  introText?: string | null;
-  features?:
-    | {
-        icon: string;
-        title: string;
-        text: string;
-        id?: string | null;
-      }[]
-    | null;
-  quote?: string | null;
-  quoteAttribution?: string | null;
   newsletterTitle?: string | null;
   newsletterText?: string | null;
   aboutIntro?: string | null;
@@ -957,7 +844,6 @@ export interface SiteSetting {
     };
     [k: string]: unknown;
   } | null;
-  aboutQuote?: string | null;
   /**
    * Eén foto op de Over Ons pagina, onder de quote. Bijvoorbeeld de familie, de keuken of de zaak. Laat leeg als je hier niets wilt tonen. Staat er ook een video-URL ingevuld, dan wint de video.
    */
@@ -970,14 +856,6 @@ export interface SiteSetting {
    * Eén korte regel onder de foto of video. Laat leeg voor geen bijschrift.
    */
   aboutMediaCaption?: string | null;
-  values?:
-    | {
-        icon: string;
-        title: string;
-        text: string;
-        id?: string | null;
-      }[]
-    | null;
   footerTagline?: string | null;
   updatedAt?: string | null;
   createdAt?: string | null;
@@ -988,13 +866,10 @@ export interface SiteSetting {
  */
 export interface SiteSettingsSelect<T extends boolean = true> {
   siteName?: T;
-  tagline?: T;
   description?: T;
   cuisines?: T;
   priceRange?: T;
   reservationUrl?: T;
-  heroImage?: T;
-  logo?: T;
   contactEmail?: T;
   phone?: T;
   address?:
@@ -1026,34 +901,13 @@ export interface SiteSettingsSelect<T extends boolean = true> {
       };
   heroTitle?: T;
   heroSubtitle?: T;
-  introTitle?: T;
-  introText?: T;
-  features?:
-    | T
-    | {
-        icon?: T;
-        title?: T;
-        text?: T;
-        id?: T;
-      };
-  quote?: T;
-  quoteAttribution?: T;
   newsletterTitle?: T;
   newsletterText?: T;
   aboutIntro?: T;
   aboutStory?: T;
-  aboutQuote?: T;
   aboutImage?: T;
   aboutVideoUrl?: T;
   aboutMediaCaption?: T;
-  values?:
-    | T
-    | {
-        icon?: T;
-        title?: T;
-        text?: T;
-        id?: T;
-      };
   footerTagline?: T;
   updatedAt?: T;
   createdAt?: T;

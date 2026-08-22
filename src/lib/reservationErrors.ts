@@ -15,7 +15,7 @@ export const RESERVATION_ERRORS = [
   "tooLarge",
   "nameRequired",
   "nameTooLong",
-  "emailRequired",
+  "phoneRequired",
   "emailInvalid",
   "phoneTooLong",
   "occasionTooLong",
@@ -28,6 +28,7 @@ export const RESERVATION_ERRORS = [
   "timeInvalid",
   "dayClosed",
   "timeOutsideHours",
+  "timePassed",
   "server",
 ] as const;
 

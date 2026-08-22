@@ -25,10 +25,17 @@ export async function GET(request: NextRequest) {
       limit: 5,
     });
 
-    // Filter out expired notifications
-    const active = res.docs.filter((n: any) => {
+    // Drop the ones that have run out. The end date is picked as a day, not a
+    // moment, so it is stored at midnight — comparing it directly would retire
+    // a notification at the *start* of the day the owners chose, giving them a
+    // banner that is never seen on its final day. Run it to the end of that
+    // day instead, which is what "tot en met" means to the person typing it.
+    const active = res.docs.filter((n: { endDate?: string | null }) => {
       if (!n.endDate) return true;
-      return new Date(n.endDate) >= new Date();
+      const end = new Date(n.endDate);
+      if (Number.isNaN(end.getTime())) return true;
+      end.setUTCHours(23, 59, 59, 999);
+      return end >= new Date();
     });
 
     return NextResponse.json({ docs: active });

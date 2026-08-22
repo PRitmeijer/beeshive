@@ -10,14 +10,12 @@ import { Users } from "./collections/Users";
 import { Media } from "./collections/Media";
 import { BlogPosts } from "./collections/BlogPosts";
 import { GalleryImages } from "./collections/GalleryImages";
+import { GalleryCategories } from "./collections/GalleryCategories";
 import { MenuItems } from "./collections/MenuItems";
 import { MenuCategories } from "./collections/MenuCategories";
 import { Notifications } from "./collections/Notifications";
 import { MailingList } from "./collections/MailingList";
 import { Reservations } from "./collections/Reservations";
-import { Testimonials } from "./collections/Testimonials";
-import { Events } from "./collections/Events";
-import { TeamMembers } from "./collections/TeamMembers";
 import { SiteSettings } from "./globals/SiteSettings";
 import { migrations } from "./migrations";
 
@@ -96,14 +94,12 @@ export default buildConfig({
     Media,
     BlogPosts,
     GalleryImages,
+    GalleryCategories,
     MenuItems,
     MenuCategories,
     Notifications,
     MailingList,
     Reservations,
-    Testimonials,
-    Events,
-    TeamMembers,
   ],
   globals: [SiteSettings],
   // Dutch is the source language and the fallback: an English field left empty

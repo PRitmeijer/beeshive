@@ -51,8 +51,10 @@ export const Reservations: CollectionConfig = {
           name: "email",
           label: "E-mailadres",
           type: "email",
-          required: true,
-          admin: { width: "50%" },
+          admin: {
+            width: "50%",
+            description: "Optioneel; we bellen liever even",
+          },
         },
       ],
     },
@@ -63,10 +65,11 @@ export const Reservations: CollectionConfig = {
           name: "phone",
           label: "Telefoonnummer",
           type: "text",
+          required: true,
           maxLength: 40,
           admin: {
             width: "50%",
-            description: "Handig om even terug te bellen",
+            description: "Hierop bevestigen we de tafel",
           },
         },
         {

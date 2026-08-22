@@ -13,6 +13,8 @@ interface Props {
   locale: Locale;
   settings: SiteSettingsData;
   today: string;
+  /** Minutes past midnight in Amsterdam at render time. */
+  nowMinutes: number;
 }
 
 // Must stay in step with `bg-paper-deep` in tailwind.config.ts, since a torn
@@ -43,7 +45,12 @@ function localiseHours(hours: string, locale: Locale): string {
   return CLOSED.test(hours) ? getDict(locale).hours.closed : hours;
 }
 
-export function ReserverenClient({ locale, settings: s, today }: Props) {
+export function ReserverenClient({
+  locale,
+  settings: s,
+  today,
+  nowMinutes,
+}: Props) {
   const t = getDict(locale);
   const openingHours = (s.openingHours || []) as {
     day: string;
@@ -76,6 +83,7 @@ export function ReserverenClient({ locale, settings: s, today }: Props) {
             <ReservationForm
               locale={locale}
               minDate={today}
+              nowMinutes={nowMinutes}
               openingHours={openingHours}
             />
           </ScrollReveal>
