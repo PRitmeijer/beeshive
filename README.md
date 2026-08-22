@@ -176,24 +176,30 @@ database, such as a new Docker volume, simply runs it.
 docker compose up -d --build
 ```
 
-The container publishes **no host port**. It joins an existing external network
-called `reverse-proxy` — created and owned by the proxy stack, not by this one —
-and Nginx Proxy Manager reaches it container-to-container. In NPM, point the
+The container listens on 3000 and is published on host port **3100** (3000 was
+already taken); set `HOST_PORT` to move it. In Nginx Proxy Manager, point the
 Proxy Host at:
 
 | | |
 |---|---|
-| Forward hostname | `beeshive` |
-| Forward port | `3000` |
+| Forward hostname | the host's LAN IP, e.g. `192.168.1.10` |
+| Forward port | `3100` |
 | Scheme | `http` |
+| Websockets Support | on |
 
-The service is named `beeshive` rather than the usual `web` on purpose: on a
-shared proxy network the service name is the container's DNS name, and two
-stacks both answering to `web` is a coin toss over which one the proxy reaches.
+Not `127.0.0.1` or `localhost`: NPM runs in a container of its own, where those
+mean NPM. The container name only works as a hostname if NPM shares a Docker
+network with this stack, which it does not here.
+
+Then on the SSL tab request a Let's Encrypt certificate and turn on Force SSL —
+`NEXT_PUBLIC_SITE_URL` is baked in as `https://…`, so the canonical URLs,
+hreflang tags and sitemap all assume the site answers on HTTPS.
+
+If uploading photographs in the admin returns **413**, put
+`client_max_body_size 100M;` in the Proxy Host's Advanced tab.
 
 `docker compose down` is safe; **`down -v` deletes the database and the
-uploads**, which live in the `db-data` and `media-uploads` volumes. The external
-network survives either way.
+uploads**, which live in the `db-data` and `media-uploads` volumes.
 
 `.dockerignore` keeps the local `.next`, `node_modules`, `.env` and
 `database.db` out of the build context. Leaving `.next` in it is not a tidiness

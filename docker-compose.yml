@@ -1,8 +1,8 @@
 services:
-  # Named for what it is rather than the generic "web": this container sits on
-  # a reverse-proxy network shared with other stacks, and the service name
-  # becomes its DNS name there. Two stacks both calling themselves "web" on one
-  # network is a coin toss over which one the proxy reaches.
+  # Named for what it is rather than the generic "web": on a host running
+  # several stacks the container name is what you type into `docker logs` and
+  # what a future shared proxy network would resolve, and two stacks both
+  # answering to "web" is a coin toss over which one you get.
   beeshive:
     container_name: beeshive
     build:
@@ -10,15 +10,18 @@ services:
       args:
         # Baked into the client bundle; see the Dockerfile for why.
         NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://debeeshive.nl}
-    # No ports published. Nginx Proxy Manager reaches the container over the
-    # shared network, so nothing needs to be open on the host — which is also
-    # why the host's port 3000 being taken does not matter.
+    # Published on the host because Nginx Proxy Manager runs outside this
+    # stack's network and cannot resolve the container by name. 3100 rather
+    # than 3000 because 3000 is already spoken for on the host; change
+    # HOST_PORT if 3100 is too.
     #
     # In Nginx Proxy Manager, the Proxy Host forwards to:
-    #     hostname  beeshive
-    #     port      3000
-    networks:
-      - reverse-proxy
+    #     hostname  <the host's LAN IP, e.g. 192.168.1.10>
+    #     port      3100
+    #
+    # Not 127.0.0.1: NPM is itself in a container, where that is NPM.
+    ports:
+      - "${HOST_PORT:-3100}:3000"
     environment:
       # Pinned to the mounted volume, not something to override per host.
       - DATABASE_URI=file:/app/data/database.db
@@ -41,11 +44,6 @@ services:
       - db-data:/app/data
       - media-uploads:/app/media
     restart: unless-stopped
-
-networks:
-  # Created and owned by the proxy stack, not by this one.
-  reverse-proxy:
-    external: true
 
 volumes:
   db-data:
