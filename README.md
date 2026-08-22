@@ -176,24 +176,30 @@ database, such as a new Docker volume, simply runs it.
 docker compose up -d --build
 ```
 
-The container publishes **host port 3000**. Nginx Proxy Manager lives outside
-this stack and reaches the site by the host's own name, so that port has to be
-open on the host: an unpublished container is unreachable from NPM however the
-Proxy Host is written. The Proxy Host is:
+The container listens on 3000 and is published on the host at `HOST_PORT`,
+which **must equal the Forward Port of the Nginx Proxy Manager Proxy Host**.
+Port 3000 is already taken on the production host, so `HOST_PORT` is set in
+that host's `.env`; the default here suits a clean machine only.
 
 | | |
 |---|---|
 | Forward hostname | `beeshive` — the **host machine**, not the container |
-| Forward port | `3000` |
+| Forward port | whatever `HOST_PORT` is on that host |
 | Scheme | `http` |
 | Websockets Support | on |
 
-`HOST_PORT` moves the published port, but the Proxy Host has to move with it.
-Once, this stack dropped the published port in favour of reaching the container
-by name over a shared `reverse-proxy` network. That needs NPM to be *on* that
-network, which it is not, and the failure is silent and total: the Proxy Host
-still looks right, and the site is simply gone. If you go back to that, connect
-NPM to the network first and change the Proxy Host to the container name.
+NPM lives outside this stack and reaches the site by the host's name over the
+network, so the port must be published: an unpublished container is unreachable
+from NPM however the Proxy Host is written. Two ways that has already broken:
+
+- the published port was dropped in favour of reaching the container by name on
+  a shared `reverse-proxy` network — which needs NPM to be joined to that
+  network, and it is not;
+- the working port lived in an uncommitted edit to `docker-compose.yml` on the
+  server, which a `git pull` reverted.
+
+Both fail the same way: the Proxy Host still reads correctly and the site is
+simply gone. Keep the number in `.env`, which survives a pull.
 
 Then on the SSL tab request a Let's Encrypt certificate and turn on Force SSL —
 `NEXT_PUBLIC_SITE_URL` is baked in as `https://…`, so the canonical URLs,

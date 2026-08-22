@@ -17,13 +17,19 @@ services:
     #
     # In Nginx Proxy Manager, the Proxy Host forwards to:
     #     hostname  beeshive     <- the host machine, not the container
-    #     port      3000
+    #     port      3100
     #
-    # Keep this on 3000 unless you also edit that Proxy Host: moving it is
-    # silent, and looks from the outside exactly like the site being down.
+    # 3000 is taken on this host. The same number on both sides of the colon,
+    # from one variable, so the published port and the port the app is actually
+    # listening on cannot drift apart — the app's own PORT is set from it too,
+    # below. Change HOST_PORT and the Proxy Host's Forward Port together.
     ports:
-      - "${HOST_PORT:-3000}:3000"
+      - "${HOST_PORT:-3100}:${HOST_PORT:-3100}"
     environment:
+      # What the Next server binds to inside the container. Kept equal to the
+      # published port above; the Dockerfile's 3000 is the standalone default
+      # for a plain `docker run`, and this overrides it.
+      - PORT=${HOST_PORT:-3100}
       # Pinned to the mounted volume, not something to override per host.
       - DATABASE_URI=file:/app/data/database.db
       # No default on purpose. A committed fallback is a signing key anyone
