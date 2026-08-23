@@ -67,8 +67,13 @@ export function Masthead({
         tabIndex={shown && !away ? undefined : -1}
         className="flex items-baseline gap-2.5 text-hive-700 transition-colors duration-500 ease-settle hover:text-honey-600"
       >
-        <BeeGlyph size={26} className="translate-y-[3px]" />
-        <span className="whitespace-nowrap font-display text-xl font-semibold tracking-[-0.03em] md:text-2xl">
+        {/* The width comes from the class rather than the size prop, which is
+            what lets it step at a breakpoint: a CSS width beats the width
+            attribute the component writes, and `h-auto` keeps the drawing in
+            proportion instead of squashing it. It is set nearest the phone,
+            where the bar is otherwise a hamburger and a lot of empty paper. */}
+        <BeeGlyph size={26} className="h-auto w-8 translate-y-[3px] md:w-9" />
+        <span className="whitespace-nowrap font-display text-[1.35rem] font-semibold tracking-[-0.03em] md:text-[1.6rem]">
           {siteName}
         </span>
       </Link>

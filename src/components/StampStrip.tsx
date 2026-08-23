@@ -34,6 +34,50 @@ const SHAPE = {
 
 export type StripOrientation = keyof typeof SHAPE;
 
+/**
+ * How wide a slug wants to be before anything stretches it.
+ *
+ * Estimated from the character count rather than measured, because the strip's
+ * geometry is worked out at module scope so that the server and the browser
+ * emit identical SVG; measuring text needs a laid-out document and would mean
+ * a first paint with the wrong number in it.
+ *
+ * The constants are for Jost 600 in caps: a little under two thirds of the font
+ * size per character, plus the tracking a printed slug wants anyway. Being a
+ * few points out does not matter, because the only thing this feeds is a
+ * ceiling.
+ */
+const CAP_ADVANCE = 0.62;
+const CAP_TRACKING = 1.2;
+
+/**
+ * How far past its natural width a caption may be stretched to fill the plate.
+ *
+ * Sideways, the slug used to be set to the plate's width exactly. That reads
+ * beautifully when every caption is about the same length and falls apart the
+ * moment one is short: "DE BEE'S" spread across the same run as
+ * "VAN HET SEIZOEN" came out as D E   B E E ' S, which is a different thing
+ * from letter-fitting.
+ *
+ * The number is not a guess at what looks acceptable on its own; it is what
+ * the neighbouring slugs end up at. "UIT DE KEUKEN" opens to about 1.26 times
+ * its natural width to reach the plate and "VAN HET SEIZOEN" to about 1.09, so
+ * a short caption allowed the same treatment sits in the same setting as the
+ * two beside it rather than announcing that it is shorter. Three slugs in a
+ * row want to look like one piece of printing.
+ *
+ * A caption longer than the plate is still squeezed down to fit, which is what
+ * the exact-width rule was for in the first place: three cells across a phone
+ * leave about a hundred points each, and the longest of these would otherwise
+ * run off the end and be cut clean off by the scalloped mask.
+ */
+const MAX_STRETCH = 1.3;
+
+function naturalSlugWidth(slug: string, size: number): number {
+  if (slug.length === 0) return 0;
+  return slug.length * size * CAP_ADVANCE + (slug.length - 1) * CAP_TRACKING;
+}
+
 /** Evenly spaced hole centres along an edge of the given length. */
 function centres(length: number, target = 19) {
   const n = Math.max(3, Math.round(length / target));
@@ -261,22 +305,36 @@ export function StampStrip({
                   strokeWidth="1"
                 />
 
-                {/* One line, ranged left under the plate, like a printed slug.
-                    Sideways there is no room for an index numeral beside it,
-                    so the slug takes the width on its own — and is set to that
-                    width exactly, letter-spaced to fit. Three cells across a
-                    phone leave about a hundred pixels each, and the longest of
-                    these captions would otherwise run off the end of the sheet
-                    and be cut clean off by the scalloped mask. */}
+                {/* One line under the plate, like a printed slug. Sideways
+                    there is no room for an index numeral beside it, so the
+                    slug has the width to itself and is opened up towards it,
+                    up to MAX_STRETCH and no further, then centred on the run
+                    it did not fill. A long caption is still squeezed down to
+                    the plate's width, which is the case this rule was written
+                    for. */}
                 <text
-                  x={left + margin + 2}
+                  x={
+                    across
+                      ? left + margin + 2 + (photoW - 4) / 2
+                      : left + margin + 2
+                  }
                   y={top + margin + photoH + (across ? 40 : 36)}
                   fill="#422810"
                   fontSize={caption}
                   fontFamily="Jost, system-ui, sans-serif"
                   fontWeight="600"
                   {...(across
-                    ? { textLength: photoW - 4, lengthAdjust: "spacing" as const }
+                    ? {
+                        textAnchor: "middle" as const,
+                        textLength: Math.min(
+                          photoW - 4,
+                          naturalSlugWidth(
+                            panel.caption.toUpperCase(),
+                            caption,
+                          ) * MAX_STRETCH,
+                        ),
+                        lengthAdjust: "spacing" as const,
+                      }
                     : { letterSpacing: 2.6 })}
                 >
                   {panel.caption.toUpperCase()}
