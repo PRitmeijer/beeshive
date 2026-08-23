@@ -16,6 +16,9 @@ repeated here:
 - `docs/rate-limiting.md` — which endpoints are throttled, and the one
   environment variable (`TRUSTED_PROXY_HOPS`) that has to match the number of
   proxies in front of the container for the throttle to mean anything.
+- `docs/media-hosting.md` — the three addresses the photographs can be served
+  from, which one needs the domain's DNS at Cloudflare, and why the choice does
+  not affect search.
 
 Read the two paragraphs under **Before you touch anything** now rather than
 later. The rest can be followed in order.

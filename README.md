@@ -303,6 +303,12 @@ public route is ever renamed, that map is the place to change.
 
 ## Media on Cloudflare R2
 
+Where visitors actually load the photographs from is a separate decision from
+where they are stored, and it depends on whether the domain's DNS is at
+Cloudflare. `docs/media-hosting.md` sets out the three options, what each costs,
+and why none of them affects search.
+
+
 With `R2_BUCKET`, `R2_ENDPOINT`, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`
 set, uploads go to the bucket and the container stores nothing itself. With any
 of them missing, uploads are written to `MEDIA_DIR` exactly as before — so a
@@ -339,6 +345,44 @@ after it.
 ```bash
 docker compose up -d --build
 ```
+
+### Running the whole stack on a laptop
+
+To look at the real thing rather than `npm run dev`, name the local override as
+well:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+```
+
+It changes exactly two things, and it cannot be picked up by accident on the
+server because it has to be named on the command line. It publishes PostgreSQL
+on `127.0.0.1:5433`, which is what lets `npm run db:import`, `npm run db:verify`
+and `npm run dev` on the host talk to the same database the container is using;
+and it keeps the backup scheduler out of `up`, because that container refuses to
+start without all five Cloudflare R2 variables and otherwise restart-loops
+through the logs you are trying to read.
+
+The first start comes up empty. Migrations are applied automatically the moment
+Payload connects, so the schema is there, but there is no content and no login:
+
+```bash
+npm run db:import -- ./content-export.json   # a dump from `npm run db:export`
+```
+
+Then open `http://localhost:3100`, and `http://localhost:3100/admin` to create
+the first account. Imported accounts arrive with a random password (the hashes
+cannot be carried across; the import prints whose), so the first login is either
+a fresh account or a password reset.
+
+Content imported after the container started is not visible until the pages
+regenerate. Give it a nudge rather than waiting out the revalidate window:
+
+```bash
+docker compose exec beeshive /app/ops/warm-up.sh
+```
+
+`docker compose down` leaves the data; `down -v` removes it.
 
 Everything runs on **3100** — inside the container, on the host, and in Nginx
 Proxy Manager — from the single `HOST_PORT` in `.env`, so the two sides cannot

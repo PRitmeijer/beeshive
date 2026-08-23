@@ -1,0 +1,38 @@
+# Running the whole stack on a laptop, to look at it.
+#
+#     docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+#
+# Two differences from the production stack, and nothing else. This file is
+# never used on the server: it has to be named on the command line, so an
+# ordinary `docker compose up -d` on the host cannot pick it up by accident.
+# (Calling it docker-compose.override.yml would have been shorter and would
+# have applied itself everywhere, which is exactly the mistake.)
+services:
+  # The database, reachable from the host.
+  #
+  # In production it is deliberately unpublished — the app talks to it over the
+  # stack's internal network and nothing else needs to. Locally you do need it:
+  # `npm run db:import`, `npm run db:verify` and `npm run dev` all run on the
+  # host and cannot see an internal network. Bound to 127.0.0.1 rather than
+  # 0.0.0.0 so it is your machine's database and not the coffee shop's.
+  #
+  # 5433 rather than 5432 to stay out of the way of a PostgreSQL installed
+  # natively, and because that is the port .env already names.
+  postgres:
+    ports:
+      - "127.0.0.1:5433:5432"
+
+  # No backups locally.
+  #
+  # The scheduler refuses to start without all five Cloudflare R2 variables,
+  # which is right on a server and only noise on a laptop: without them the
+  # container restart-loops, printing the same refusal every second or two,
+  # through the logs you are actually trying to read. A profile nothing
+  # activates keeps it out of `up` entirely rather than starting it to fail.
+  #
+  # To exercise the backup stack locally anyway, fill the PGBACKREST_* block in
+  # .env and start it by name: `docker compose up -d pgbackrest`. Naming a
+  # service starts it whatever profile it carries.
+  pgbackrest:
+    profiles:
+      - backups-need-a-bucket

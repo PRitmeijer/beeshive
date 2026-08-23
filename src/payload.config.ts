@@ -8,6 +8,7 @@ import { lexicalEditor } from "@payloadcms/richtext-lexical";
 import sharp from "sharp";
 import path from "path";
 import { fileURLToPath } from "url";
+import { connect } from "node:net";
 
 import { Users } from "./collections/Users";
 import { Media } from "./collections/Media";
@@ -229,10 +230,21 @@ function dutchify(field: Field): Field {
   return field;
 }
 
-/** The one place the connection string is decided, so both guards below agree. */
-const databaseURI =
-  process.env.DATABASE_URI ||
-  "postgresql://beeshive:beeshive@localhost:5433/beeshive";
+/**
+ * The one place the connection string is decided, so both guards below agree.
+ *
+ * The fallback is a convenience for `npm run dev` on a laptop, where the
+ * compose file publishes Postgres on 5433 and nobody should need a .env to get
+ * going. It is deliberately NOT applied during `next build`: inside the Docker
+ * builder there is no database on localhost, and reaching for one there costs a
+ * minute of connection attempts before the build dies naming a port the
+ * operator never configured. A build with no DATABASE_URI is a build that was
+ * meant to run without a database, and it says so below rather than guessing.
+ */
+const databaseURI = isBuild
+  ? process.env.DATABASE_URI || ""
+  : process.env.DATABASE_URI ||
+    "postgresql://beeshive:beeshive@localhost:5433/beeshive";
 
 /**
  * Whether that URI names a database on this machine.
@@ -335,6 +347,136 @@ function devPushAllowed(): boolean {
  * Payload asks its question as it always has and you answer it; run anything
  * without a TTY and this refuses first, loudly, in one line.
  */
+/**
+ * Let `next build` finish when there is no database to prerender against.
+ *
+ * The adapter's own `connect` ends its failure path with `process.exit(1)`
+ * (node_modules/@payloadcms/db-postgres/dist/connect.js). That is right for a
+ * server — a site that cannot reach its database should not pretend to be up —
+ * but during a build it kills the static worker outright, and it does so before
+ * any page code runs. Every frontend page wraps its CMS read in a try/catch so
+ * that an unreachable CMS costs placeholder copy rather than a failed build;
+ * none of that can help, because the process is gone before the catch exists.
+ *
+ * Which made `docker compose build` fail on a clean machine, since the builder
+ * is not on the network the `postgres` service lives on and there is nothing on
+ * localhost either.
+ *
+ * So during the build phase only, the connection is probed first, and if
+ * nothing answers the adapter is stood up without one: schema assembled, pool
+ * constructed but never dialled, drizzle bound to it, initialisation resolved.
+ * Queries then fail one by one where the pages already expect them to, and the
+ * build produces the fallback content it was always designed to fall back to.
+ *
+ * The cost is stated out loud in the warning, because it is real and somebody
+ * will otherwise wonder why the site went live advertising the wrong opening
+ * hours: the HTML in the image is built from src/lib/payload.ts's defaults, and
+ * stays that way until ops/warm-up.sh walks the URLs after start. Point
+ * BUILD_DATABASE_URI at a reachable database and none of this happens.
+ *
+ * Runtime is untouched. `isBuild` is false there, this wrapper returns the
+ * adapter unchanged, and a dead database is as loud as it ever was.
+ */
+function surviveABuildWithoutADatabase(
+  adapterObj: ReturnType<typeof postgresAdapter>,
+): ReturnType<typeof postgresAdapter> {
+  if (!isBuild) return adapterObj;
+
+  return {
+    ...adapterObj,
+    init: (args) => {
+      const adapter = adapterObj.init(args);
+      const connect = adapter.connect?.bind(adapter);
+
+      adapter.connect = async (options) => {
+        if (databaseURI && (await databaseAnswers(databaseURI))) {
+          return connect?.(options);
+        }
+
+        console.warn(
+          `\n  payload: building without a database.\n\n` +
+            `  ${
+              databaseURI
+                ? `Nothing answered at ${safeHost(databaseURI)}.`
+                : "No DATABASE_URI was given to the build."
+            }\n` +
+            `  The pages that read the CMS will be prerendered from the fallback\n` +
+            `  copy in src/lib/payload.ts, so the image ships stock opening hours\n` +
+            `  and stock menu text until something asks for those URLs again.\n` +
+            `  ops/warm-up.sh does that on start; see DEPLOY.md.\n\n` +
+            `  To prerender the real thing instead, build with BUILD_DATABASE_URI\n` +
+            `  pointing at a database this builder can reach.\n`,
+        );
+
+        // Assemble the one field the adapter builds for itself in connect, and
+        // release whatever is waiting on initialisation. No pool and no drizzle
+        // client: there is nothing to point them at, and leaving them unset is
+        // what makes the first query throw somewhere a page can catch it rather
+        // than hang. Extensions, push and migrations are all skipped simply by
+        // never calling the real connect.
+        const self = adapter as unknown as Record<string, unknown>;
+        self.schema = {
+          pgSchema: self.pgSchema,
+          ...(self.tables as object),
+          ...(self.relations as object),
+          ...(self.enums as object),
+        };
+        (self.resolveInitializing as (() => void) | undefined)?.();
+      };
+
+      return adapter;
+    },
+  };
+}
+
+/** The host in a connection string, or the string itself if it will not parse. */
+function safeHost(uri: string): string {
+  try {
+    const { hostname, port } = new URL(uri);
+    return port ? `${hostname}:${port}` : hostname;
+  } catch {
+    return uri;
+  }
+}
+
+/**
+ * Whether anything is listening on the other end, answered quickly.
+ *
+ * A bare TCP connect rather than a Postgres handshake, because the only
+ * question being asked is "is there a server here at all" and this runs on the
+ * build's critical path. Two seconds: a real database accepts a socket in
+ * milliseconds, and one that is not there costs the full timeout exactly once.
+ *
+ * A server that accepts the socket and then refuses to authenticate is treated
+ * as present, and the real connect is called, and it fails the way it always
+ * did. That is deliberate: bad credentials are a mistake worth stopping for,
+ * while no database at all is the case this whole wrapper exists to survive.
+ */
+function databaseAnswers(uri: string): Promise<boolean> {
+  let host: string;
+  let port: number;
+  try {
+    const parsed = new URL(uri);
+    host = parsed.hostname;
+    port = Number(parsed.port || 5432);
+  } catch {
+    return Promise.resolve(false);
+  }
+  if (!host) return Promise.resolve(false);
+
+  return new Promise((resolve) => {
+    const socket = connect({ host, port });
+    const settle = (answer: boolean) => {
+      socket.destroy();
+      resolve(answer);
+    };
+    socket.setTimeout(2000);
+    socket.once("connect", () => settle(true));
+    socket.once("timeout", () => settle(false));
+    socket.once("error", () => settle(false));
+  });
+}
+
 function refuseToPromptWithoutATerminal(
   adapterObj: ReturnType<typeof postgresAdapter>,
 ): ReturnType<typeof postgresAdapter> {
@@ -596,8 +738,9 @@ export default buildConfig({
   typescript: {
     outputFile: path.resolve(dirname, "payload-types.ts"),
   },
-  db: refuseToPromptWithoutATerminal(
-    postgresAdapter({
+  db: surviveABuildWithoutADatabase(
+    refuseToPromptWithoutATerminal(
+      postgresAdapter({
       pool: {
         connectionString: databaseURI,
       },
@@ -626,8 +769,9 @@ export default buildConfig({
       // stdin whether to migrate anyway. Nothing can answer, the worker sits at
       // "Collecting page data" until the 60 second export timeout fires three
       // times, and the build dies without ever naming the prompt as the cause.
-      ...(isBuild ? {} : { prodMigrations: migrations }),
-    }),
+        ...(isBuild ? {} : { prodMigrations: migrations }),
+      }),
+    ),
   ),
   sharp,
   upload: {
