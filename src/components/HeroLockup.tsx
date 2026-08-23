@@ -46,7 +46,7 @@ export function HeroLockup({ siteName }: { siteName: string }) {
       >
         <LogoSvg
           fill="#422810"
-          className="h-auto w-[10rem] sm:w-[12rem] md:w-[14rem] lg:w-[18rem]"
+          className="h-auto w-[11rem] sm:w-[13rem] md:w-[15.5rem] lg:w-[20rem]"
         />
       </div>
 

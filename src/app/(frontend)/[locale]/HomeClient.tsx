@@ -232,7 +232,14 @@ export function HomeClient({ locale, settings: s, today }: Props) {
            the hero is the first impression and it does not share the frame.
            `svh` rather than `vh` because iOS measures `vh` against the tallest
            the viewport ever gets and then collapses its URL bar into the
-           difference, which is how a hero ends up cropped on a phone. */}
+           difference, which is how a hero ends up cropped on a phone.
+
+           The phone's top padding is off the spacing scale on purpose: it is
+           `pt-24` less five points, set by eye against the real thing. There
+           was a band of sheet between the hamburger and the crest that was
+           doing nothing, and on a screen this short every point of it is a
+           point of the photographs. The other two breakpoints have the room
+           and stay on the scale. */}
       <section
         ref={heroRef}
         className="relative flex min-h-[100svh] items-start overflow-hidden bg-paper"
@@ -244,7 +251,7 @@ export function HomeClient({ locale, settings: s, today }: Props) {
 
         <m.div
           style={{ opacity: heroOpacity, y: heroY }}
-          className="relative z-10 w-full px-6 pb-20 pt-24 md:px-12 md:pb-24 md:pt-28 lg:px-20 lg:pt-32"
+          className="relative z-10 w-full px-6 pb-20 pt-[5.7rem] md:px-12 md:pb-24 md:pt-28 lg:px-20 lg:pt-32"
         >
           {/* A column below xl, so the photographs can be ordered against the
               buttons; the old block layout again from xl up, where the strip
