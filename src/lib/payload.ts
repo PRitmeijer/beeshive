@@ -30,6 +30,39 @@ export interface MediaRef {
   } | null;
 }
 
+/**
+ * The row shapes of the array settings.
+ *
+ * They live here rather than next to the fields that produce them because the
+ * defaults below are what gives `SiteSettingsData` its type, and an empty array
+ * would otherwise widen to `never[]` — after which every page that renders a row
+ * stops type-checking. Naming them also gives the components something to import
+ * instead of re-describing the same row three times.
+ *
+ * Everything but the fields Payload marks required is optional and nullable:
+ * these come out of the CMS, where a freshly added row is a row of nulls until
+ * someone fills it in.
+ */
+export interface HeroImage {
+  image: MediaRef | null;
+  caption?: string | null;
+  zoom?: number | null;
+  focalPoint?: string | null;
+}
+
+export interface RecurringOpening {
+  ordinal: string;
+  weekday: string;
+  closed?: boolean | null;
+  hours?: string | null;
+  note?: string | null;
+}
+
+/** A row that is nothing but one localised label, as used by the guest pass lists. */
+export interface LabelRow {
+  label?: string | null;
+}
+
 const nlDefaults = {
   siteName: "De Bee's Hive",
   description:
@@ -60,6 +93,11 @@ const nlDefaults = {
     { day: "Zaterdag", hours: "11:00 – 21:00" },
     { day: "Zondag", hours: "Gesloten" },
   ],
+  // Empty on purpose: a repeating rule is a claim about when the place is open,
+  // so inventing one here would put a wrong opening time on the site of anyone
+  // who never opened this tab. Nothing configured means nothing overrides the
+  // week schedule above.
+  recurringOpenings: [] as RecurringOpening[],
   socialMedia: {
     instagram: "https://www.instagram.com/debeeshive",
     facebook: "https://www.facebook.com/people/De-Bees-Hive/61573726474222",
@@ -68,9 +106,15 @@ const nlDefaults = {
   heroTitle: "De Bee's Hive",
   heroSubtitle:
     "Waar eten en creativiteit samenkomen. Een warm eetcafé in het hart van Zuilen.",
+  // Empty means "use the pictures that ship with the theme". The homepage knows
+  // its own stock trio; repeating them here would only mean two places to change
+  // when the design does.
+  heroImages: [] as HeroImage[],
   newsletterTitle: "Schrijf je in",
   newsletterText:
     "Ontvang als eerste nieuws over speciale evenementen, nieuwe gerechten en aanbiedingen.",
+  newsletterPrivacyNote:
+    "Hooguit een mail per maand, nooit spam, en uitschrijven kan met een klik.",
   aboutIntro:
     "De Bee's Hive is meer dan een restaurant. Het is een plek waar kunst, creativiteit en lekker eten samenkomen in het hart van Zuilen, Utrecht.",
   aboutStory: null as string | null,
@@ -84,6 +128,32 @@ const nlDefaults = {
     "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2450.3781318959013!2d5.086582076321947!3d52.10924836655966!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x47c66f402cf74da3%3A0xf5db732de51fc331!2sDe%20Bee%27s%20Hive!5e0!3m2!1snl!2snl!4v1756807839954!5m2!1snl!2snl",
   googleReviewUrl: "https://maps.app.goo.gl/6VEMHL3Jq9vgAWnw8",
   openingHoursNote: "Elke laatste zondag van de maand zijn wij extra geopend.",
+  // The booking rules are deliberately generous rather than accurate: these only
+  // apply while the CMS has nothing, and a form that lets a guest ask for a table
+  // is recoverable, while a form that refuses every date looks broken.
+  reservationsEnabled: true,
+  reservationDurationMinutes: 120,
+  reservationCapacity: 40,
+  reservationMaxPartySize: 20,
+  reservationLeadMinutes: 60,
+  reservationHorizonDays: 90,
+  guestPassEnabled: true,
+  // Empty lists mean the guest pass simply does not ask. Better than guessing at
+  // a menu the kitchen never agreed to.
+  guestPassDrinks: [] as LabelRow[],
+  guestPassDietary: [] as LabelRow[],
+  shareImage: null as MediaRef | null,
+  shareTitle: "",
+  shareDescription: "",
+  shareImageAuto: true,
+  // Off until someone fills in a website id: loading a measuring script that
+  // reports to nobody is only a slower page.
+  umamiEnabled: false,
+  umamiScriptUrl: "https://cloud.umami.is/script.js",
+  umamiWebsiteId: "",
+  umamiHostUrl: "",
+  umamiApiKey: "",
+  umamiDoNotTrackAdmin: true,
 };
 
 export type SiteSettingsData = typeof nlDefaults;
@@ -115,6 +185,7 @@ const enDefaults: SiteSettingsData = {
     { day: "Saturday", hours: "11:00 – 21:00" },
     { day: "Sunday", hours: "Closed" },
   ],
+  recurringOpenings: [] as RecurringOpening[],
   socialMedia: {
     instagram: "https://www.instagram.com/debeeshive",
     facebook: "https://www.facebook.com/people/De-Bees-Hive/61573726474222",
@@ -123,9 +194,12 @@ const enDefaults: SiteSettingsData = {
   heroTitle: "De Bee's Hive",
   heroSubtitle:
     "Where food and creativity meet. A warm eetcafé in the heart of Zuilen.",
+  heroImages: [] as HeroImage[],
   newsletterTitle: "Sign up",
   newsletterText:
     "Be the first to hear about special events, new dishes and offers.",
+  newsletterPrivacyNote:
+    "At most one email a month, never spam, and you can unsubscribe in one click.",
   aboutIntro:
     "De Bee's Hive is more than a restaurant. It is a place where art, creativity and good food come together in the heart of Zuilen, Utrecht.",
   aboutStory: null as string | null,
@@ -139,6 +213,29 @@ const enDefaults: SiteSettingsData = {
     "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2450.3781318959013!2d5.086582076321947!3d52.10924836655966!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x47c66f402cf74da3%3A0xf5db732de51fc331!2sDe%20Bee%27s%20Hive!5e0!3m2!1snl!2snl!4v1756807839954!5m2!1snl!2snl",
   googleReviewUrl: "https://maps.app.goo.gl/6VEMHL3Jq9vgAWnw8",
   openingHoursNote: "We are also open on the last Sunday of every month.",
+  // Not localised in the CMS, so these repeat the Dutch numbers exactly. They
+  // still have to be spelled out: `SiteSettingsData` demands every key, and a
+  // silent divergence here would mean the English booking form quietly runs on
+  // different rules than the Dutch one.
+  reservationsEnabled: true,
+  reservationDurationMinutes: 120,
+  reservationCapacity: 40,
+  reservationMaxPartySize: 20,
+  reservationLeadMinutes: 60,
+  reservationHorizonDays: 90,
+  guestPassEnabled: true,
+  guestPassDrinks: [] as LabelRow[],
+  guestPassDietary: [] as LabelRow[],
+  shareImage: null as MediaRef | null,
+  shareTitle: "",
+  shareDescription: "",
+  shareImageAuto: true,
+  umamiEnabled: false,
+  umamiScriptUrl: "https://cloud.umami.is/script.js",
+  umamiWebsiteId: "",
+  umamiHostUrl: "",
+  umamiApiKey: "",
+  umamiDoNotTrackAdmin: true,
 };
 
 const defaultsByLocale: Record<Locale, SiteSettingsData> = {
@@ -197,7 +294,15 @@ export async function getSiteSettings(
       // REST query string spelling of the same thing, and is not in the type.
       ...(locale === defaultLocale ? {} : { fallbackLocale: false as const }),
     });
-    // Merge CMS data over defaults, keeping defaults for any missing fields
+    // Merge CMS data over defaults, keeping defaults for any missing fields.
+    //
+    // The two groups are spread again by hand because a group comes back as one
+    // object: a half-filled `address` would otherwise replace the default
+    // wholesale and take the city and country down with it. Only groups have
+    // that problem. Arrays (openingHours, recurringOpenings, heroImages, the
+    // guest pass lists) are meant to be replaced whole — half a list is a list —
+    // and scalars are what `filled()` already handles. So this stays a list of
+    // two until someone adds a third `type: "group"` field to the global.
     return {
       ...defaults,
       ...filled(data as unknown as Record<string, unknown>),

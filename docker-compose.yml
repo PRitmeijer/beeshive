@@ -28,24 +28,51 @@ services:
     # Also joined to the proxy's own network, so NPM can reach the container by
     # name whether or not it can reach this host's published port. Whichever
     # route NPM uses, the port is 3100 now — beeshive:3100, or <host>:3100.
+    # `internal` is this stack's own network and is where Postgres lives; the
+    # database is deliberately not reachable from the proxy network or the host.
     networks:
       - reverse-proxy
+      - internal
+    # Payload applies outstanding migrations the moment it connects, so an app
+    # that starts before Postgres is accepting connections does not merely
+    # retry — it can fail its first request and serve the defaults from
+    # src/lib/payload.ts while looking perfectly healthy. Wait for the
+    # healthcheck rather than for the container to exist.
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       # What the Next server binds to inside the container. Kept equal to the
       # published port above; the Dockerfile's 3000 is the standalone default
       # for a plain `docker run`, and this overrides it.
       - PORT=${HOST_PORT:-3100}
-      # Both pinned to the mounted volumes, not something to override per
-      # host. MEDIA_DIR must be absolute and must be the volume: Payload
-      # resolves a relative staticDir against the working directory, which
-      # from /app pointed at the image's own root-level /media.
-      - DATABASE_URI=file:/app/data/database.db
+      # The database lives in the `postgres` service on this stack's own
+      # network, so the host name is the service name and the port is the
+      # container's 5432 whatever the host has published.
+      - DATABASE_URI=postgresql://${POSTGRES_USER:-beeshive}:${POSTGRES_PASSWORD:-beeshive}@postgres:5432/${POSTGRES_DB:-beeshive}
+      # Still pinned to the mounted volume, and still absolute: Payload
+      # resolves a relative staticDir against the working directory, which from
+      # /app pointed at the image's own root-level /media. This is only used
+      # when R2 is not configured — with a bucket the container writes no files
+      # at all — but it costs nothing to keep the volume mounted for the day
+      # somebody takes the bucket away again.
       - MEDIA_DIR=/app/media
       # No default on purpose. A committed fallback is a signing key anyone
       # who can read this repository could forge sessions with, so an unset
       # secret has to stop the container rather than quietly weaken it.
       - PAYLOAD_SECRET=${PAYLOAD_SECRET}
       - NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL:-https://debeeshive.nl}
+      # Cloudflare R2. All four have to be set before uploads leave the
+      # container; with any of them missing the site writes to /app/media as it
+      # always did, which is why they are safe to leave blank on a test host.
+      - R2_BUCKET=${R2_BUCKET:-}
+      - R2_ENDPOINT=${R2_ENDPOINT:-}
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID:-}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY:-}
+      - R2_PUBLIC_URL=${R2_PUBLIC_URL:-}
+      # Read-only key for the visitor statistics shown in the admin. Unset
+      # simply means no statistics.
+      - UMAMI_API_KEY=${UMAMI_API_KEY:-}
       # Outgoing mail: reservation requests and contact messages. Leave these
       # blank and Payload writes mail to the container log instead of sending
       # it — the site will take bookings that nobody is told about.
@@ -57,8 +84,108 @@ services:
       - EMAIL_FROM=${EMAIL_FROM:-info@debeeshive.nl}
       - EMAIL_FROM_NAME=${EMAIL_FROM_NAME:-De Bee's Hive}
     volumes:
-      - db-data:/app/data
       - media-uploads:/app/media
+    restart: unless-stopped
+
+  # The database. Built from ops/postgres rather than pulled straight from the
+  # registry for one reason: `archive_command` runs inside *this* container, so
+  # the pgbackrest binary has to be in *this* image. A stock postgres:16-alpine
+  # would log "pgbackrest: not found" once per WAL segment and quietly stop
+  # archiving anything (see ops/postgres/postgresql.conf).
+  postgres:
+    container_name: beeshive-postgres
+    build:
+      context: ./ops/postgres
+    networks:
+      - internal
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-beeshive}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-beeshive}
+      - POSTGRES_DB=${POSTGRES_DB:-beeshive}
+      # Passed through to the pgbackrest that archive_command invokes. The
+      # bucket credentials and the encryption passphrase are environment-only:
+      # ops/pgbackrest/pgbackrest.conf is in the repository and must not carry
+      # them. pgbackrest reads PGBACKREST_<OPTION> for every option it has, and
+      # the environment wins over the file.
+      - PGBACKREST_REPO1_S3_BUCKET=${PGBACKREST_S3_BUCKET:-}
+      - PGBACKREST_REPO1_S3_ENDPOINT=${PGBACKREST_S3_ENDPOINT:-}
+      - PGBACKREST_REPO1_S3_KEY=${PGBACKREST_S3_KEY:-}
+      - PGBACKREST_REPO1_S3_KEY_SECRET=${PGBACKREST_S3_KEY_SECRET:-}
+      - PGBACKREST_REPO1_CIPHER_PASS=${PGBACKREST_CIPHER_PASS:-}
+    # The image's own postgresql.conf is generated by initdb and knows nothing
+    # about WAL archiving, so the server is started against ours instead. The
+    # other three paths have to be named explicitly: naming a config file
+    # outside the data directory makes Postgres forget where the data directory
+    # and the auth files are, and it will not start without being told.
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+      - -c
+      - data_directory=/var/lib/postgresql/data
+      - -c
+      - hba_file=/var/lib/postgresql/data/pg_hba.conf
+      - -c
+      - ident_file=/var/lib/postgresql/data/pg_ident.conf
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      # The Unix socket directory, shared with the backup container so that
+      # pgbackrest can talk to a running server without opening a TCP port or
+      # holding a password. The image's pg_hba trusts local socket connections.
+      - pg-run:/var/run/postgresql
+      - ./ops/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./ops/pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+      - pgbackrest-spool:/var/spool/pgbackrest
+      - pgbackrest-log:/var/log/pgbackrest
+    healthcheck:
+      # `pg_isready` answers as soon as the server accepts connections, which
+      # is what `depends_on: service_healthy` above is waiting for. The first
+      # start also runs initdb, hence the generous start_period.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-beeshive} -d ${POSTGRES_DB:-beeshive}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # Scheduled backups to Cloudflare R2. Shares the data directory and the
+  # socket with the database: pgBackRest reads the files itself and only uses
+  # the connection to start and stop the backup, so this has to sit on the same
+  # host as the cluster it backs up. It runs as the same uid as the server for
+  # the same reason — see ops/pgbackrest/entrypoint.sh.
+  pgbackrest:
+    container_name: beeshive-pgbackrest
+    build:
+      context: ./ops/pgbackrest
+    networks:
+      - internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - PGBACKREST_STANZA=${PGBACKREST_STANZA:-beeshive}
+      # libpq settings for the connection over the shared socket. The user has
+      # to be the one the cluster was initialised with, because that is the
+      # only superuser this database has.
+      - PGHOST=/var/run/postgresql
+      - PGUSER=${POSTGRES_USER:-beeshive}
+      - PGDATABASE=${POSTGRES_DB:-beeshive}
+      - PGBACKREST_REPO1_S3_BUCKET=${PGBACKREST_S3_BUCKET:-}
+      - PGBACKREST_REPO1_S3_ENDPOINT=${PGBACKREST_S3_ENDPOINT:-}
+      - PGBACKREST_REPO1_S3_KEY=${PGBACKREST_S3_KEY:-}
+      - PGBACKREST_REPO1_S3_KEY_SECRET=${PGBACKREST_S3_KEY_SECRET:-}
+      - PGBACKREST_REPO1_CIPHER_PASS=${PGBACKREST_CIPHER_PASS:-}
+      # When to run, in the container's own local time. Full once a week,
+      # differential on the other days.
+      - BACKUP_HOUR=${BACKUP_HOUR:-3}
+      - BACKUP_MINUTE=${BACKUP_MINUTE:-15}
+      - FULL_BACKUP_DOW=${FULL_BACKUP_DOW:-0}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - pg-run:/var/run/postgresql
+      - ./ops/pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+      - pgbackrest-spool:/var/spool/pgbackrest
+      - pgbackrest-log:/var/log/pgbackrest
     restart: unless-stopped
 
 networks:
@@ -66,7 +193,23 @@ networks:
   # on a host, `docker network create reverse-proxy` before the first up.
   reverse-proxy:
     external: true
+  # This stack's own. Postgres is only on here, so nothing outside the stack
+  # can reach it — there is no published port on the database on purpose.
+  internal:
 
 volumes:
-  db-data:
+  # The cluster's data directory. This is the one that used to be the single
+  # SQLite file, and the one `down -v` destroys: everything the CMS holds lives
+  # here now. It is also the reason the backups exist.
+  pg-data:
+  # The Unix socket directory. Nothing durable, but it has to be a volume
+  # rather than a bind mount so the backup container can see the same socket.
+  pg-run:
+  # pgBackRest's asynchronous archive spool and its logs. The spool is a cache
+  # and can be thrown away; losing the logs loses the record of what was backed
+  # up when, which is the first thing you want during a restore.
+  pgbackrest-spool:
+  pgbackrest-log:
+  # Uploaded originals and their generated sizes, for the case where R2 is not
+  # configured. With a bucket set up this volume stays empty.
   media-uploads:

@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getPayloadClient, getSiteSettings } from "@/lib/payload";
 import { rateLimit, readJsonBody } from "@/lib/apiGuard";
 import type { ReservationError } from "@/lib/reservationErrors";
-import { siteUrl } from "@/i18n/config";
 import {
   LEAD_MINUTES,
   isBookable,
@@ -139,7 +138,13 @@ export async function POST(request: Request) {
 
     const payload = await getPayloadClient();
 
-    const created = await payload.create({
+    // The owners are told by the collection's own afterChange hook rather than
+    // from here (see src/lib/outboundEmail.ts). The row is created with
+    // emailStatus "pending", the hook sends the message and writes the outcome
+    // back onto the row, and a failed send is then a retry the owners can do
+    // from the admin. Sending from this route as well would mail every request
+    // twice, which is precisely what moving the send out of it was meant to end.
+    await payload.create({
       collection: "reservations",
       data: {
         name,
@@ -157,45 +162,6 @@ export async function POST(request: Request) {
         source: "website",
       },
     });
-
-    // Tell the owners. Deliberately after the create and inside its own catch:
-    // the request is already safely in the database and visible in the admin,
-    // so a mail server having a bad afternoon must not turn a stored booking
-    // into an error the guest sees and retries.
-    //
-    // The address comes from the CMS (Site Instellingen -> Contact), which
-    // defaults to info@debeeshive.nl, so the owners can redirect it themselves
-    // without a deploy.
-    try {
-      const to = settings.contactEmail || "info@debeeshive.nl";
-
-      const lines = [
-        `Naam:        ${name}`,
-        `E-mail:      ${email}`,
-        `Telefoon:    ${phone || "-"}`,
-        `Datum:       ${date}`,
-        `Tijd:        ${time}`,
-        `Personen:    ${guests}`,
-        `Gelegenheid: ${occasion || "-"}`,
-        "",
-        "Opmerkingen:",
-        notes || "-",
-        "",
-        `Bekijk en bevestig: ${siteUrl}/admin/collections/reservations/${created.id}`,
-        "",
-        "Let op: dit is een aanvraag, nog geen bevestiging. De gast wacht op bericht.",
-      ];
-
-      await payload.sendEmail({
-        to,
-        // Answering goes straight back to the guest.
-        replyTo: `${name} <${email}>`,
-        subject: `Reserveringsaanvraag: ${name}, ${date} om ${time} (${guests}p)`,
-        text: lines.join("\n"),
-      });
-    } catch (error) {
-      console.error("reservation notification mail failed", error);
-    }
 
     return NextResponse.json({ ok: true });
   } catch {

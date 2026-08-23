@@ -14,6 +14,7 @@ export interface Config {
     users: User;
     media: Media;
     'blog-posts': BlogPost;
+    events: Event;
     'gallery-images': GalleryImage;
     'gallery-categories': GalleryCategory;
     'menu-items': MenuItem;
@@ -21,6 +22,8 @@ export interface Config {
     notifications: Notification;
     'mailing-list': MailingList;
     reservations: Reservation;
+    'contact-messages': ContactMessage;
+    'opening-exceptions': OpeningException;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -30,6 +33,7 @@ export interface Config {
     users: UsersSelect<false> | UsersSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
     'blog-posts': BlogPostsSelect<false> | BlogPostsSelect<true>;
+    events: EventsSelect<false> | EventsSelect<true>;
     'gallery-images': GalleryImagesSelect<false> | GalleryImagesSelect<true>;
     'gallery-categories': GalleryCategoriesSelect<false> | GalleryCategoriesSelect<true>;
     'menu-items': MenuItemsSelect<false> | MenuItemsSelect<true>;
@@ -37,6 +41,8 @@ export interface Config {
     notifications: NotificationsSelect<false> | NotificationsSelect<true>;
     'mailing-list': MailingListSelect<false> | MailingListSelect<true>;
     reservations: ReservationsSelect<false> | ReservationsSelect<true>;
+    'contact-messages': ContactMessagesSelect<false> | ContactMessagesSelect<true>;
+    'opening-exceptions': OpeningExceptionsSelect<false> | OpeningExceptionsSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -154,6 +160,14 @@ export interface Media {
       filesize?: number | null;
       filename?: string | null;
     };
+    og?: {
+      url?: string | null;
+      width?: number | null;
+      height?: number | null;
+      mimeType?: string | null;
+      filesize?: number | null;
+      filename?: string | null;
+    };
   };
 }
 /**
@@ -173,6 +187,9 @@ export interface BlogPost {
    * Korte samenvatting die verschijnt op de blogpagina en in zoekmachines (max 300 tekens)
    */
   excerpt: string;
+  /**
+   * Mag leeg blijven. Een blogpost zonder foto kan prima en krijgt vanzelf een getekende plaat, dus wacht niet met publiceren tot er een goede foto is.
+   */
   featuredImage?: (number | null) | Media;
   content: {
     root: {
@@ -206,6 +223,132 @@ export interface BlogPost {
    */
   publishedDate?: string | null;
   author?: (number | null) | User;
+  meta?: {
+    title?: string | null;
+    description?: string | null;
+    /**
+     * Maximum upload file size: 12MB. Recommended file size for images is <500KB.
+     */
+    image?: (number | null) | Media;
+  };
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Alles wat er bij jullie te doen is: eenmalige avonden en terugkerende afspraken. Vul bij een terugkerend evenement één keer de eerste datum in en kies daaronder hoe vaak het terugkomt.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "events".
+ */
+export interface Event {
+  id: number;
+  title: string;
+  /**
+   * Twee of drie zinnen die in de agenda onder de titel komen te staan (max 300 tekens)
+   */
+  excerpt: string;
+  /**
+   * Het hele verhaal, zoals het op de pagina van dit evenement komt te staan
+   */
+  description?: {
+    root: {
+      type: string;
+      children: {
+        type: string;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
+  /**
+   * Mag leeg blijven. Een evenement zonder foto krijgt vanzelf een getekende plaat.
+   */
+  image?: (number | null) | Media;
+  /**
+   * Datum én tijd. Bij een terugkerend evenement is dit de eerste keer, en het tijdstip geldt voor alle volgende keren.
+   */
+  startDate: string;
+  /**
+   * Laat leeg als het einde niet vaststaat.
+   */
+  endDate?: string | null;
+  /**
+   * Vink aan als er geen begintijd te noemen is.
+   */
+  allDay?: boolean | null;
+  /**
+   * Komt dit vaker terug? Vul het hier in, dan verschijnt het vanzelf op alle volgende dagen.
+   */
+  recurrence?: {
+    type?: ('none' | 'weekly' | 'biweekly' | 'monthlyWeekday' | 'monthlyDate') | null;
+    weekday?: ('monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday') | null;
+    /**
+     * Bijvoorbeeld: de laatste zondag van de maand.
+     */
+    ordinal?: ('first' | 'second' | 'third' | 'fourth' | 'last') | null;
+    /**
+     * Tot wanneer dit doorloopt. Laat leeg voor: voorlopig altijd.
+     */
+    until?: string | null;
+    /**
+     * Dagen waarop het een keer NIET doorgaat.
+     */
+    skipDates?:
+      | {
+          date: string;
+          id?: string | null;
+        }[]
+      | null;
+  };
+  /**
+   * Laat leeg voor bij ons in de zaak.
+   */
+  location?: string | null;
+  /**
+   * Bijv. '7,50' of 'Gratis'. Laat leeg als het niet van toepassing is.
+   */
+  price?: string | null;
+  /**
+   * Vink aan als mensen zich vooraf moeten opgeven.
+   */
+  bookingRequired?: boolean | null;
+  /**
+   * Volledige link naar het formulier of de ticketpagina. Laat leeg als mensen gewoon even bellen.
+   */
+  bookingUrl?: string | null;
+  /**
+   * Eén zin, bijvoorbeeld 'Vol is vol' of 'Bel even, dan zetten we je op de lijst'.
+   */
+  bookingNote?: string | null;
+  /**
+   * Categorie helpt bezoekers bij het filteren
+   */
+  category?: ('buurt' | 'muziek' | 'workshop' | 'proeverij' | 'feest' | 'overig') | null;
+  /**
+   * Het deel van de URL na /evenementen/
+   */
+  slug: string;
+  /**
+   * Alleen gepubliceerde evenementen staan op de site.
+   */
+  status: 'draft' | 'published';
+  /**
+   * Zet dit evenement bovenaan de agenda en op de voorpagina.
+   */
+  featured?: boolean | null;
+  meta?: {
+    title?: string | null;
+    description?: string | null;
+    /**
+     * Maximum upload file size: 12MB. Recommended file size for images is <500KB.
+     */
+    image?: (number | null) | Media;
+  };
   updatedAt: string;
   createdAt: string;
 }
@@ -428,21 +571,126 @@ export interface Reservation {
   date: string;
   time: string;
   /**
-   * Bijvoorbeeld verjaardag, zakenlunch of familiediner
+   * Hoe lang deze tafel bezet is. Leeg = de standaard uit Site Instellingen.
+   */
+  duration?: number | null;
+  /**
+   * Allergieën, verjaardag, kinderstoel, een rustige tafel: wat de gast doorgeeft.
+   */
+  notes?: string | null;
+  /**
+   * Het formulier vraagt hier niet meer naar; de gasten vonden het een vreemde vraag. Wat een gast nu doorgeeft staat bij Opmerkingen. Oude aanvragen houden hun antwoord.
    */
   occasion?: string | null;
   /**
-   * Wensen van de gast, allergieën, kinderstoel en dergelijke
+   * Wat het gezelschap zelf heeft doorgegeven via de gedeelde link.
    */
-  notes?: string | null;
+  guestResponses?:
+    | {
+        name?: string | null;
+        addedAt?: string | null;
+        /**
+         * Wat deze persoon niet eet, gescheiden door komma's
+         */
+        dietary?: string | null;
+        drinks?: string | null;
+        id?: string | null;
+      }[]
+    | null;
   /**
    * Nieuw is nog niet bevestigd. Zet op bevestigd zodra de gast bericht heeft.
    */
   status?: ('nieuw' | 'gebeld' | 'bevestigd' | 'geannuleerd') | null;
   /**
+   * Of het bijbehorende mailtje de deur uit is. Een mislukt bericht kan opnieuw verstuurd worden door de status terug op "In de wachtrij" te zetten en op te slaan.
+   */
+  emailStatus?: ('pending' | 'sent' | 'failed' | 'skipped') | null;
+  /**
+   * Wat de mailserver terugmeldde. Handig om door te sturen als het blijft misgaan.
+   */
+  emailError?: string | null;
+  emailSentAt?: string | null;
+  /**
+   * Het geheime deel van de deelbare link naar de gastenpagina. Iedereen met die link kan de reservering zien en aanvullen, dus deel hem alleen met het gezelschap. Wordt er een nieuwe sleutel gemaakt, dan werkt de oude link niet meer.
+   */
+  guestToken?: string | null;
+  /**
    * Wordt automatisch ingevuld
    */
   source?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Berichten die via het contactformulier binnenkomen. Ieder bericht staat hier ook als het mailtje niet is aangekomen, dus dit is de plek om te kijken of iemand nog wacht op antwoord.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "contact-messages".
+ */
+export interface ContactMessage {
+  id: number;
+  name: string;
+  email: string;
+  /**
+   * Wat de bezoeker zelf heeft geschreven
+   */
+  message: string;
+  /**
+   * Voor jullie zelf: wat je hebt afgesproken, of wie het oppakt. De bezoeker ziet dit niet.
+   */
+  notes?: string | null;
+  /**
+   * Zet op beantwoord zodra iemand teruggemaild heeft, en op gearchiveerd als het klaar is.
+   */
+  status?: ('nieuw' | 'beantwoord' | 'gearchiveerd') | null;
+  /**
+   * Of het bijbehorende mailtje de deur uit is. Een mislukt bericht kan opnieuw verstuurd worden door de status terug op "In de wachtrij" te zetten en op te slaan.
+   */
+  emailStatus?: ('pending' | 'sent' | 'failed' | 'skipped') | null;
+  /**
+   * Wat de mailserver terugmeldde. Handig om door te sturen als het blijft misgaan.
+   */
+  emailError?: string | null;
+  emailSentAt?: string | null;
+  /**
+   * Welke taalversie van de site iemand las toen hij het formulier invulde. Handig om te weten in welke taal je antwoordt.
+   */
+  locale?: string | null;
+  /**
+   * Wordt automatisch ingevuld
+   */
+  source?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Hiermee zetten jullie een enkele dag dicht of juist open, los van het normale weekschema. Een terugkerende regel (bijvoorbeeld elke laatste zondag van de maand) staat bij Site Instellingen -> Contact.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "opening-exceptions".
+ */
+export interface OpeningException {
+  id: number;
+  /**
+   * De dag waar het om gaat. Eén rij per dag.
+   */
+  date: string;
+  /**
+   * Vink aan als jullie die dag dicht zijn.
+   */
+  closed?: boolean | null;
+  /**
+   * Bijvoorbeeld '11:00 - 21:00'. Alleen invullen als jullie die dag open zijn, maar op andere tijden dan normaal.
+   */
+  hours?: string | null;
+  /**
+   * Wat er die dag aan de hand is; dit komt op de site te staan, bijvoorbeeld 'Eerste Kerstdag' of 'Besloten feest'.
+   */
+  note?: string | null;
+  /**
+   * Uit zetten als de dag wel meetelt voor reserveringen, maar niet apart genoemd hoeft te worden.
+   */
+  showOnSite?: boolean | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -464,6 +712,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'blog-posts';
         value: number | BlogPost;
+      } | null)
+    | ({
+        relationTo: 'events';
+        value: number | Event;
       } | null)
     | ({
         relationTo: 'gallery-images';
@@ -492,6 +744,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'reservations';
         value: number | Reservation;
+      } | null)
+    | ({
+        relationTo: 'contact-messages';
+        value: number | ContactMessage;
+      } | null)
+    | ({
+        relationTo: 'opening-exceptions';
+        value: number | OpeningException;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -604,6 +864,16 @@ export interface MediaSelect<T extends boolean = true> {
               filesize?: T;
               filename?: T;
             };
+        og?:
+          | T
+          | {
+              url?: T;
+              width?: T;
+              height?: T;
+              mimeType?: T;
+              filesize?: T;
+              filename?: T;
+            };
       };
 }
 /**
@@ -621,6 +891,58 @@ export interface BlogPostsSelect<T extends boolean = true> {
   status?: T;
   publishedDate?: T;
   author?: T;
+  meta?:
+    | T
+    | {
+        title?: T;
+        description?: T;
+        image?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "events_select".
+ */
+export interface EventsSelect<T extends boolean = true> {
+  title?: T;
+  excerpt?: T;
+  description?: T;
+  image?: T;
+  startDate?: T;
+  endDate?: T;
+  allDay?: T;
+  recurrence?:
+    | T
+    | {
+        type?: T;
+        weekday?: T;
+        ordinal?: T;
+        until?: T;
+        skipDates?:
+          | T
+          | {
+              date?: T;
+              id?: T;
+            };
+      };
+  location?: T;
+  price?: T;
+  bookingRequired?: T;
+  bookingUrl?: T;
+  bookingNote?: T;
+  category?: T;
+  slug?: T;
+  status?: T;
+  featured?: T;
+  meta?:
+    | T
+    | {
+        title?: T;
+        description?: T;
+        image?: T;
+      };
   updatedAt?: T;
   createdAt?: T;
 }
@@ -722,10 +1044,55 @@ export interface ReservationsSelect<T extends boolean = true> {
   guests?: T;
   date?: T;
   time?: T;
+  duration?: T;
+  notes?: T;
   occasion?: T;
+  guestResponses?:
+    | T
+    | {
+        name?: T;
+        addedAt?: T;
+        dietary?: T;
+        drinks?: T;
+        id?: T;
+      };
+  status?: T;
+  emailStatus?: T;
+  emailError?: T;
+  emailSentAt?: T;
+  guestToken?: T;
+  source?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "contact-messages_select".
+ */
+export interface ContactMessagesSelect<T extends boolean = true> {
+  name?: T;
+  email?: T;
+  message?: T;
   notes?: T;
   status?: T;
+  emailStatus?: T;
+  emailError?: T;
+  emailSentAt?: T;
+  locale?: T;
   source?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "opening-exceptions_select".
+ */
+export interface OpeningExceptionsSelect<T extends boolean = true> {
+  date?: T;
+  closed?: T;
+  hours?: T;
+  note?: T;
+  showOnSite?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -803,7 +1170,29 @@ export interface SiteSetting {
       }[]
     | null;
   /**
-   * Vrij veld voor alles wat niet in het weekschema past. Bijvoorbeeld: 'Elke laatste zondag van de maand zijn we open' of een aangepaste tijd rond de feestdagen. Laat leeg als er niets bijzonders is: dan toont de site hier ook niets.
+   * Voor een regel die elke maand terugkomt, bijvoorbeeld 'elke laatste zondag van de maand zijn we open'. Vul in de hoeveelste van de maand het is en welke dag, en daarna óf jullie die dag juist gesloten zijn óf van hoe laat tot hoe laat je open bent. Zo'n regel gaat vóór het gewone weekschema hierboven, maar een losse datum onder Afwijkende dagen gaat er weer overheen.
+   */
+  recurringOpenings?:
+    | {
+        ordinal: 'first' | 'second' | 'third' | 'fourth' | 'last';
+        weekday: 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
+        /**
+         * Aanvinken als jullie die dag dicht zijn. De tijden hieronder worden dan niet gebruikt.
+         */
+        closed?: boolean | null;
+        /**
+         * Bijvoorbeeld '11:00 - 21:00'.
+         */
+        hours?: string | null;
+        /**
+         * Korte regel die op de site bij deze dag komt te staan, bijvoorbeeld 'Zondagse brunch'. Laat leeg als het niet nodig is.
+         */
+        note?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * Alleen een vrije regel tekst onder de openingstijden, meer niet: de site rekent er niets mee. Gaat het om een dag waarop jullie echt anders open of dicht zijn, zet die dan onder Afwijkende dagen (voor één datum) of in de terugkerende regels hierboven (voor iets dat elke maand terugkomt). Laat leeg als er niets te melden is: dan toont de site hier ook niets.
    */
   openingHoursNote?: string | null;
   /**
@@ -824,8 +1213,33 @@ export interface SiteSetting {
    */
   heroTitle?: string | null;
   heroSubtitle?: string | null;
+  /**
+   * De drie foto's die naast de titel op de homepage staan. Laat dit helemaal leeg om de standaardfoto's te tonen. Zet je er zelf foto's in, doe er dan het liefst drie, in dezelfde volgorde als je ze op de site wilt zien.
+   */
+  heroImages?:
+    | {
+        image: number | Media;
+        /**
+         * Korte regel bij de foto. Laat leeg voor geen bijschrift.
+         */
+        caption?: string | null;
+        /**
+         * 100 is de foto zoals hij is. Lager zoomt uit, hoger zoomt in.
+         */
+        zoom?: number | null;
+        /**
+         * Welk deel van de foto altijd zichtbaar moet blijven als hij wordt bijgesneden. Staat het onderwerp bijvoorbeeld boven in beeld, kies dan Boven.
+         */
+        focalPoint?: ('center' | 'top' | 'bottom' | 'left' | 'right') | null;
+        id?: string | null;
+      }[]
+    | null;
   newsletterTitle?: string | null;
   newsletterText?: string | null;
+  /**
+   * Het kleine regeltje onder het inschrijfveld. Mensen vullen hun e-mailadres eerder in als hier staat wat je ermee doet.
+   */
+  newsletterPrivacyNote?: string | null;
   aboutIntro?: string | null;
   /**
    * Het volledige verhaal op de Over Ons pagina. Gebruik de editor voor opmaak.
@@ -857,6 +1271,98 @@ export interface SiteSetting {
    * Eén korte regel onder de foto of video. Laat leeg voor geen bijschrift.
    */
   aboutMediaCaption?: string | null;
+  /**
+   * Uitvinken haalt het reserveringsformulier van de site. Gasten zien dan alleen nog het telefoonnummer. Handig bij een verbouwing of vakantie.
+   */
+  reservationsEnabled?: boolean | null;
+  /**
+   * Hoe lang een tafel gemiddeld bezet is.
+   */
+  reservationDurationMinutes?: number | null;
+  /**
+   * Hoeveel gasten er tegelijk aan tafel kunnen. Zit een tijdslot vol, dan is dat tijdstip niet meer te kiezen.
+   */
+  reservationCapacity?: number | null;
+  /**
+   * Boven dit aantal kan een gast niet zelf online boeken, maar vragen we hem contact op te nemen. Grote groepen wil je liever even spreken.
+   */
+  reservationMaxPartySize?: number | null;
+  /**
+   * Hoe kort van tevoren iemand nog online mag boeken.
+   */
+  reservationLeadMinutes?: number | null;
+  /**
+   * Verder dan dit aantal dagen vooruit staat de agenda dicht. Zo krijg je geen reservering binnen voor een datum waarvan je nog niets weet.
+   */
+  reservationHorizonDays?: number | null;
+  /**
+   * Geeft elke reservering een eigen deelbare pagina die de gast naar zijn gezelschap kan sturen.
+   */
+  guestPassEnabled?: boolean | null;
+  /**
+   * Wat het gezelschap alvast kan kiezen. Laat leeg om niets te vragen.
+   */
+  guestPassDrinks?:
+    | {
+        /**
+         * Zoals de gast het te zien krijgt, bijv. 'Wijn' of 'Bier'.
+         */
+        label?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * Wat het gezelschap alvast kan aangeven, bijvoorbeeld 'Vegetarisch' of 'Notenallergie'. Laat leeg om er niet naar te vragen.
+   */
+  guestPassDietary?:
+    | {
+        /**
+         * Zoals de gast het te zien krijgt.
+         */
+        label?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * Verschijnt als iemand een link naar de site deelt. Liefst 1200 bij 630 pixels.
+   */
+  shareImage?: (number | null) | Media;
+  /**
+   * De dikgedrukte regel op het kaartje. Laat leeg om de naam van de zaak en de titel van de pagina te gebruiken.
+   */
+  shareTitle?: string | null;
+  /**
+   * Het zinnetje onder de titel. Houd het kort, want de meeste apps kappen het na een regel of twee af. Laat leeg om de Beschrijving (SEO) onder Algemeen te gebruiken.
+   */
+  shareDescription?: string | null;
+  /**
+   * Geen eigen afbeelding? Dan maken we er zelf een met het logo en de naam.
+   */
+  shareImageAuto?: boolean | null;
+  /**
+   * Zet het meetscript op de site. Staat dit uit, dan wordt er niets gemeten en blijven de grafieken leeg.
+   */
+  umamiEnabled?: boolean | null;
+  /**
+   * Laat dit staan zoals het staat, tenzij jullie Umami op een eigen server draaien. Dan geeft Umami zelf het juiste adres.
+   */
+  umamiScriptUrl?: string | null;
+  /**
+   * Het lange nummer met streepjes dat Umami bij jullie website toont (Settings → Websites). Zonder dit nummer meet Umami niets.
+   */
+  umamiWebsiteId?: string | null;
+  /**
+   * Waar Umami draait, bijvoorbeeld https://cloud.umami.is. Nodig om de cijfers in dit paneel te tonen.
+   */
+  umamiHostUrl?: string | null;
+  /**
+   * Let op: dit is een sleutel, behandel hem als een wachtwoord en deel hem met niemand. Hij kan ook buiten dit scherm om worden ingesteld als de omgevingsvariabele UMAMI_API_KEY; staat die ingevuld, dan wint die en wordt wat hier staat genegeerd.
+   */
+  umamiApiKey?: string | null;
+  /**
+   * Als jullie zelf ingelogd zijn, tellen die bezoeken niet mee. Anders lijkt de site drukker dan hij is.
+   */
+  umamiDoNotTrackAdmin?: boolean | null;
   footerTagline?: string | null;
   updatedAt?: string | null;
   createdAt?: string | null;
@@ -891,6 +1397,16 @@ export interface SiteSettingsSelect<T extends boolean = true> {
         hours?: T;
         id?: T;
       };
+  recurringOpenings?:
+    | T
+    | {
+        ordinal?: T;
+        weekday?: T;
+        closed?: T;
+        hours?: T;
+        note?: T;
+        id?: T;
+      };
   openingHoursNote?: T;
   googleMapsEmbedUrl?: T;
   googleReviewUrl?: T;
@@ -903,13 +1419,52 @@ export interface SiteSettingsSelect<T extends boolean = true> {
       };
   heroTitle?: T;
   heroSubtitle?: T;
+  heroImages?:
+    | T
+    | {
+        image?: T;
+        caption?: T;
+        zoom?: T;
+        focalPoint?: T;
+        id?: T;
+      };
   newsletterTitle?: T;
   newsletterText?: T;
+  newsletterPrivacyNote?: T;
   aboutIntro?: T;
   aboutStory?: T;
   aboutImage?: T;
   aboutVideoUrl?: T;
   aboutMediaCaption?: T;
+  reservationsEnabled?: T;
+  reservationDurationMinutes?: T;
+  reservationCapacity?: T;
+  reservationMaxPartySize?: T;
+  reservationLeadMinutes?: T;
+  reservationHorizonDays?: T;
+  guestPassEnabled?: T;
+  guestPassDrinks?:
+    | T
+    | {
+        label?: T;
+        id?: T;
+      };
+  guestPassDietary?:
+    | T
+    | {
+        label?: T;
+        id?: T;
+      };
+  shareImage?: T;
+  shareTitle?: T;
+  shareDescription?: T;
+  shareImageAuto?: T;
+  umamiEnabled?: T;
+  umamiScriptUrl?: T;
+  umamiWebsiteId?: T;
+  umamiHostUrl?: T;
+  umamiApiKey?: T;
+  umamiDoNotTrackAdmin?: T;
   footerTagline?: T;
   updatedAt?: T;
   createdAt?: T;

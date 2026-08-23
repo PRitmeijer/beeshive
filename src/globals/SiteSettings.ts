@@ -1,338 +1,47 @@
 import type { GlobalConfig } from "payload";
 
+import { generalTab } from "./settings/general";
+import { contactTab } from "./settings/contact";
+import { homepageTab } from "./settings/homepage";
+import { aboutTab } from "./settings/about";
+import { reservationsTab } from "./settings/reservations";
+import { sharingTab } from "./settings/sharing";
+import { analyticsTab } from "./settings/analytics";
+import { footerTab } from "./settings/footer";
+
+/**
+ * Alle instellingen van de site, in tabbladen.
+ *
+ * Dit bestand is met opzet leeg gebleven: elk tabblad woont in zijn eigen
+ * bestand onder src/globals/settings/, en hier worden ze alleen op volgorde
+ * gezet. Eén tabblad groeide anders uit tot honderden regels waarin niemand nog
+ * iets terugvond. Een nieuw tabblad is dus een nieuw bestand daar plus één regel
+ * hieronder — verder niets.
+ *
+ * De volgorde in de lijst is de volgorde waarin de eigenaren de tabbladen zien,
+ * dus die loopt van "gebruik je dagelijks" naar "stel je één keer in".
+ *
+ * Let op bij een nieuw veld: de pagina's lezen deze instellingen via
+ * getSiteSettings() in src/lib/payload.ts, en dat bestand houdt een eigen set
+ * standaardwaarden bij voor het geval het CMS leeg of onbereikbaar is. Elk veld
+ * dat je hier toevoegt heeft daar dus ook een standaard nodig, in zowel de
+ * Nederlandse als de Engelse set, anders valt het veld op de Engelse site weg.
+ */
 export const SiteSettings: GlobalConfig = {
   slug: "site-settings",
   label: "Site Instellingen",
   fields: [
-    // ── General ──
     {
       type: "tabs",
       tabs: [
-        {
-          label: "Algemeen",
-          fields: [
-            {
-              name: "siteName",
-              label: "Naam",
-              type: "text",
-              defaultValue: "De Bee's Hive",
-              required: true,
-            },
-            {
-              name: "description",
-              label: "Beschrijving (SEO)",
-              type: "textarea",
-              localized: true,
-              defaultValue:
-                "Een warm eetcafé in het hart van Zuilen waar creativiteit, verbinding en lekker eten samenkomen.",
-            },
-            {
-              name: "keywords",
-              label: "Zoekwoorden (SEO)",
-              type: "text",
-              localized: true,
-              admin: {
-                description:
-                  "Komma-gescheiden, bijvoorbeeld: eetcafé Utrecht, lunch Zuilen, borrel. " +
-                  "Google negeert deze tag sinds 2009 en gebruikt hem niet voor de " +
-                  "ranking — de Beschrijving hierboven en de tekst op de pagina's " +
-                  "doen dat werk wel.",
-              },
-            },
-            {
-              name: "cuisines",
-              label: "Keukens (voor SEO)",
-              type: "text",
-              defaultValue: "Dutch, International, South African",
-              admin: {
-                description:
-                  "Komma-gescheiden lijst van keukens voor zoekmachines",
-              },
-            },
-            {
-              name: "priceRange",
-              label: "Prijsklasse",
-              type: "text",
-              defaultValue: "€€",
-            },
-            {
-              name: "reservationUrl",
-              label: "Reserverings-URL",
-              type: "text",
-              admin: {
-                description:
-                  "Link naar reserveringssysteem (bijv. formitable, couverts). Laat leeg om knop te verbergen.",
-              },
-            },
-          ],
-        },
-
-        // ── Contact ──
-        {
-          label: "Contact",
-          fields: [
-            {
-              name: "contactEmail",
-              label: "E-mailadres",
-              type: "email",
-              defaultValue: "info@debeeshive.nl",
-            },
-            {
-              name: "phone",
-              label: "Telefoonnummer",
-              type: "text",
-              defaultValue: "030 785 2199",
-            },
-            {
-              name: "address",
-              label: "Adres",
-              type: "group",
-              fields: [
-                { name: "street", label: "Straat", type: "text" },
-                {
-                  name: "city",
-                  label: "Stad",
-                  type: "text",
-                  defaultValue: "Utrecht",
-                },
-                {
-                  name: "area",
-                  label: "Wijk",
-                  type: "text",
-                  defaultValue: "Zuilen",
-                },
-                {
-                  name: "postalCode",
-                  label: "Postcode",
-                  type: "text",
-                },
-                {
-                  name: "country",
-                  label: "Land",
-                  type: "text",
-                  defaultValue: "Nederland",
-                },
-                {
-                  name: "countryCode",
-                  label: "Landcode (ISO)",
-                  type: "text",
-                  defaultValue: "NL",
-                },
-              ],
-            },
-            {
-              name: "openingHours",
-              label: "Openingstijden",
-              type: "array",
-              fields: [
-                {
-                  name: "day",
-                  label: "Dag",
-                  type: "text",
-                  required: true,
-                  localized: true,
-                },
-                {
-                  name: "hours",
-                  label: "Tijden",
-                  type: "text",
-                  required: true,
-                  localized: true,
-                  admin: {
-                    description: "Bijv. '11:00 – 21:00' of 'Gesloten'",
-                  },
-                },
-              ],
-              // Monday first. The pages match a row by its position here, not
-              // by the day's name, so this order is load-bearing.
-              defaultValue: [
-                { day: "Maandag", hours: "11:00 – 21:00" },
-                { day: "Dinsdag", hours: "Gesloten" },
-                { day: "Woensdag", hours: "Gesloten" },
-                { day: "Donderdag", hours: "11:00 – 21:00" },
-                { day: "Vrijdag", hours: "11:00 – 21:00" },
-                { day: "Zaterdag", hours: "11:00 – 21:00" },
-                { day: "Zondag", hours: "Gesloten" },
-              ],
-            },
-            {
-              name: "openingHoursNote",
-              label: "Afwijkende openingstijden",
-              type: "textarea",
-              localized: true,
-              admin: {
-                description:
-                  "Vrij veld voor alles wat niet in het weekschema past. Bijvoorbeeld: "
-                  + "'Elke laatste zondag van de maand zijn we open' of een aangepaste "
-                  + "tijd rond de feestdagen. Laat leeg als er niets bijzonders is: dan "
-                  + "toont de site hier ook niets.",
-              },
-            },
-            {
-              name: "googleMapsEmbedUrl",
-              label: "Google Maps Embed URL",
-              type: "text",
-              defaultValue:
-                "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2450.3781318959013!2d5.086582076321947!3d52.10924836655966!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x47c66f402cf74da3%3A0xf5db732de51fc331!2sDe%20Bee%27s%20Hive!5e0!3m2!1snl!2snl!4v1756807839954!5m2!1snl!2snl",
-              admin: {
-                description:
-                  "Plak hier de Google Maps embed URL. Ga naar Google Maps → Delen → Insluiten → kopieer de src URL uit de iframe code (begint met https://www.google.com/maps/embed). "
-                  + "Let op: kopieer alleen de URL zelf, niet de hele iframe-code, en zorg dat er geen &#39; of &amp; in staat.",
-              },
-            },
-            {
-              name: "googleReviewUrl",
-              label: "Google Reviews URL",
-              type: "text",
-              defaultValue: "https://maps.app.goo.gl/6VEMHL3Jq9vgAWnw8",
-              admin: {
-                description:
-                  "Link naar jullie Google-vermelding, waar gasten de beoordelingen lezen "
-                  + "en er zelf een achterlaten. Ga naar Google Maps → jullie zaak → Delen "
-                  + "→ Link kopiëren. Laat leeg als je dit blok niet op de contactpagina wilt.",
-              },
-            },
-            {
-              name: "socialMedia",
-              label: "Social Media",
-              type: "group",
-              fields: [
-                {
-                  name: "instagram",
-                  label: "Instagram URL",
-                  type: "text",
-                  defaultValue: "https://www.instagram.com/debeeshive",
-                },
-                {
-                  name: "facebook",
-                  label: "Facebook URL",
-                  type: "text",
-                  defaultValue:
-                    "https://www.facebook.com/people/De-Bees-Hive/61573726474222",
-                },
-                {
-                  name: "tripadvisor",
-                  label: "TripAdvisor URL",
-                  type: "text",
-                },
-              ],
-            },
-          ],
-        },
-
-        // ── Homepage ──
-        {
-          label: "Homepage",
-          fields: [
-            {
-              name: "heroTitle",
-              label: "Hero Titel",
-              type: "text",
-              localized: true,
-              defaultValue: "De Bee's Hive",
-              admin: {
-                description:
-                  "De grote titel op de homepage. Gebruik | om het accent-woord te scheiden, bijv. 'De Bee's|Hive'",
-              },
-            },
-            {
-              name: "heroSubtitle",
-              label: "Hero Ondertitel",
-              type: "text",
-              localized: true,
-              defaultValue:
-                "Waar eten en creativiteit samenkomen. Een warm eetcafé in het hart van Zuilen.",
-            },
-            {
-              name: "newsletterTitle",
-              label: "Nieuwsbrief Titel",
-              type: "text",
-              localized: true,
-              defaultValue: "Schrijf je in",
-            },
-            {
-              name: "newsletterText",
-              label: "Nieuwsbrief Tekst",
-              type: "text",
-              localized: true,
-              defaultValue:
-                "Ontvang als eerste nieuws over speciale evenementen, nieuwe gerechten en aanbiedingen.",
-            },
-          ],
-        },
-
-        // ── Over Ons ──
-        {
-          label: "Over Ons",
-          fields: [
-            {
-              name: "aboutIntro",
-              label: "Intro Tekst",
-              type: "textarea",
-              localized: true,
-              defaultValue:
-                "De Bee's Hive is meer dan een restaurant. Het is een plek waar kunst, creativiteit en lekker eten samenkomen in het hart van Zuilen, Utrecht.",
-            },
-            {
-              name: "aboutStory",
-              label: "Ons Verhaal",
-              type: "richText",
-              localized: true,
-              admin: {
-                description:
-                  "Het volledige verhaal op de Over Ons pagina. Gebruik de editor voor opmaak.",
-              },
-            },
-            {
-              name: "aboutImage",
-              label: "Foto",
-              type: "upload",
-              relationTo: "media",
-              admin: {
-                description:
-                  "Eén foto op de Over Ons pagina, onder de quote. Bijvoorbeeld de familie, "
-                  + "de keuken of de zaak. Laat leeg als je hier niets wilt tonen. "
-                  + "Staat er ook een video-URL ingevuld, dan wint de video.",
-              },
-            },
-            {
-              name: "aboutVideoUrl",
-              label: "Video (YouTube of Vimeo)",
-              type: "text",
-              admin: {
-                description:
-                  "Plak de embed-URL van de video, bijv. https://www.youtube.com/embed/XXXXXXXXXXX "
-                  + "of https://player.vimeo.com/video/123456789. Op YouTube: Delen → Insluiten → "
-                  + "kopieer de src uit de iframe-code. Een gewone youtube.com/watch?v=... link "
-                  + "werkt niet. Video's zelf uploaden kan hier niet, die worden te groot.",
-              },
-            },
-            {
-              name: "aboutMediaCaption",
-              label: "Bijschrift bij foto of video",
-              type: "text",
-              localized: true,
-              admin: {
-                description:
-                  "Eén korte regel onder de foto of video. Laat leeg voor geen bijschrift.",
-              },
-            },
-          ],
-        },
-
-        // ── Footer ──
-        {
-          label: "Footer",
-          fields: [
-            {
-              name: "footerTagline",
-              label: "Footer Slogan",
-              type: "text",
-              localized: true,
-              defaultValue: "Gemaakt met liefde in Zuilen",
-            },
-          ],
-        },
+        generalTab,
+        contactTab,
+        homepageTab,
+        aboutTab,
+        reservationsTab,
+        sharingTab,
+        analyticsTab,
+        footerTab,
       ],
     },
   ],

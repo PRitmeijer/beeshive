@@ -38,8 +38,13 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# Create directory for SQLite database and media uploads
-RUN mkdir -p /app/data /app/media && chown -R nextjs:nodejs /app/data /app/media
+# Uploads for the case where Cloudflare R2 is not configured: with a bucket
+# set up nothing is written here, but Payload still resolves MEDIA_DIR at
+# startup and the compose file mounts a volume over it either way. The
+# directory has to exist and be owned by the user the server runs as, or the
+# first upload fails with nothing more useful than "There was a problem while
+# uploading the file."
+RUN mkdir -p /app/media && chown -R nextjs:nodejs /app/media
 
 USER nextjs
 
@@ -47,6 +52,9 @@ EXPOSE 3000
 
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
-ENV DATABASE_URI=file:/app/data/database.db
+# No DATABASE_URI default. It used to point at a SQLite file inside the image,
+# which was harmless because the file was the database; a wrong PostgreSQL URL
+# baked into the image is not — it would send a container whose environment is
+# incomplete at some other cluster instead of failing. docker-compose sets it.
 
 CMD ["node", "server.js"]

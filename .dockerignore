@@ -17,9 +17,16 @@ build
 .env
 .env.*
 !.env.example
+media
+# Left over from the SQLite era. Still listed because a developer who has been
+# on this repository since then still has these files locally, and a stale
+# database.db in the context would be copied into the image and quietly
+# ignored — a 40MB layer nobody can explain.
 database.db
 database.db-*
-media
+# A content dump is somebody's export of the whole CMS, reservations and
+# subscriber addresses included. It has no business in an image.
+content-export.json
 
 # Housekeeping
 .git
@@ -34,3 +41,6 @@ yarn-error.log*
 Dockerfile
 docker-compose.yml
 README.md
+# The database and backup images are built from their own contexts
+# (ops/postgres, ops/pgbackrest); none of it belongs in the application image.
+ops

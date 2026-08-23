@@ -52,6 +52,10 @@ export const BlogPosts: CollectionConfig = {
       // Optional on purpose: the listing and the article both render a
       // drawn placeholder when there is no photograph yet.
       required: false,
+      admin: {
+        description:
+          "Mag leeg blijven. Een blogpost zonder foto kan prima en krijgt vanzelf een getekende plaat, dus wacht niet met publiceren tot er een goede foto is.",
+      },
     },
     {
       name: "content",

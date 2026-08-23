@@ -1,4 +1,7 @@
-import type { CollectionConfig } from "payload";
+import type { CollectionConfig, Payload } from "payload";
+import { siteUrl } from "@/i18n/config";
+import { outboundEmailFields, sendOnChange } from "@/lib/outboundEmail";
+import { newGuestToken } from "@/lib/guestToken";
 
 /**
  * Reservation requests coming in from the public form.
@@ -10,6 +13,40 @@ import type { CollectionConfig } from "payload";
  * unauthenticated), but reading, editing and deleting is staff only, since a
  * row holds a name, an e-mail address and a phone number.
  */
+
+interface Reservation {
+  id: number | string;
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  date?: string | null;
+  time?: string | null;
+  guests?: number | null;
+  notes?: string | null;
+  occasion?: string | null;
+}
+
+/**
+ * Where the notification goes. Read out of the CMS every time rather than
+ * baked in, so the owners can redirect it themselves (Site Instellingen ->
+ * Contact) without a deploy.
+ */
+async function ownersAddress(payload: Payload): Promise<string> {
+  try {
+    const settings = await payload.findGlobal({
+      slug: "site-settings",
+      overrideAccess: true,
+    });
+    const email = (settings as { contactEmail?: string | null })?.contactEmail;
+    return email || "info@debeeshive.nl";
+  } catch {
+    return "info@debeeshive.nl";
+  }
+}
+
+/** The stored date is midday UTC; the owners only ever want the day itself. */
+const dayOf = (value?: string | null) => (value ? String(value).slice(0, 10) : "-");
+
 export const Reservations: CollectionConfig = {
   slug: "reservations",
   labels: {
@@ -34,6 +71,51 @@ export const Reservations: CollectionConfig = {
     description:
       "Aanvragen die via het reserveringsformulier binnenkomen. Een aanvraag is nog geen bevestiging: bel of mail de gast en zet daarna de status.",
     group: "Gasten",
+  },
+  hooks: {
+    beforeChange: [
+      ({ data, operation }) => {
+        // Minted once, at the very beginning, because the token is what the
+        // guest link is made of: handing out a new one silently would break a
+        // link that is already in somebody's WhatsApp.
+        if (operation === "create" && !data.guestToken) {
+          data.guestToken = newGuestToken();
+        }
+        return data;
+      },
+    ],
+    afterChange: [
+      // The mail the owners get used to be sent inline from /api/reserve. It
+      // lives here now so that the request being stored and the request being
+      // announced are two separate, visible steps: the route only has to say
+      // emailStatus "pending", and a failed send leaves a row the owners can
+      // retry from the admin instead of a booking nobody heard about.
+      sendOnChange<Reservation>({
+        to: (_doc, payload) => ownersAddress(payload),
+        // Answering goes straight back to the guest.
+        replyTo: (doc) =>
+          doc.email ? `${doc.name ?? doc.email} <${doc.email}>` : undefined,
+        subject: (doc) =>
+          `Reserveringsaanvraag: ${doc.name ?? "onbekend"}, ${dayOf(doc.date)} om ${doc.time ?? "-"} (${doc.guests ?? "?"}p)`,
+        body: (doc) =>
+          [
+            `Naam:        ${doc.name || "-"}`,
+            `E-mail:      ${doc.email || "-"}`,
+            `Telefoon:    ${doc.phone || "-"}`,
+            `Datum:       ${dayOf(doc.date)}`,
+            `Tijd:        ${doc.time || "-"}`,
+            `Personen:    ${doc.guests ?? "-"}`,
+            `Gelegenheid: ${doc.occasion || "-"}`,
+            "",
+            "Opmerkingen:",
+            doc.notes || "-",
+            "",
+            `Bekijk en bevestig: ${siteUrl}/admin/collections/reservations/${doc.id}`,
+            "",
+            "Let op: dit is een aanvraag, nog geen bevestiging. De gast wacht op bericht.",
+          ].join("\n"),
+      }),
+    ],
   },
   fields: [
     {
@@ -105,12 +187,16 @@ export const Reservations: CollectionConfig = {
       ],
     },
     {
-      name: "occasion",
-      label: "Gelegenheid",
-      type: "text",
-      maxLength: 120,
+      name: "duration",
+      label: "Duur (minuten)",
+      type: "number",
+      min: 15,
+      max: 480,
+      // No default: an empty field is the signal to fall back to the standard
+      // sitting time, and Payload has no way to express "explicitly nothing".
       admin: {
-        description: "Bijvoorbeeld verjaardag, zakenlunch of familiediner",
+        description:
+          "Hoe lang deze tafel bezet is. Leeg = de standaard uit Site Instellingen.",
       },
     },
     {
@@ -119,8 +205,73 @@ export const Reservations: CollectionConfig = {
       type: "textarea",
       maxLength: 2000,
       admin: {
-        description: "Wensen van de gast, allergieën, kinderstoel en dergelijke",
+        description:
+          "Allergieën, verjaardag, kinderstoel, een rustige tafel: wat de gast doorgeeft.",
       },
+    },
+    {
+      name: "occasion",
+      label: "Gelegenheid (oud veld)",
+      type: "text",
+      maxLength: 120,
+      admin: {
+        // Not `hidden`: that would take the field out of the admin altogether,
+        // and with it the answers the guests who did fill it in already gave.
+        // Read-only and down here instead, out of the way but still readable.
+        readOnly: true,
+        description:
+          "Het formulier vraagt hier niet meer naar; de gasten vonden het een vreemde vraag. Wat een gast nu doorgeeft staat bij Opmerkingen. Oude aanvragen houden hun antwoord.",
+      },
+    },
+    {
+      name: "guestResponses",
+      label: "Reacties van het gezelschap",
+      type: "array",
+      labels: { singular: "Reactie", plural: "Reacties" },
+      admin: {
+        description:
+          "Wat het gezelschap zelf heeft doorgegeven via de gedeelde link.",
+        // Written by the guest page through the local API, never typed here.
+        // Left editable so the owners can correct a typo or delete a prank
+        // entry, which is the only thing they will ever want to do with it.
+        initCollapsed: true,
+      },
+      fields: [
+        {
+          type: "row",
+          fields: [
+            {
+              name: "name",
+              label: "Naam",
+              type: "text",
+              admin: { width: "50%" },
+            },
+            {
+              name: "addedAt",
+              label: "Doorgegeven op",
+              type: "date",
+              admin: {
+                width: "50%",
+                readOnly: true,
+                date: { pickerAppearance: "dayAndTime" },
+              },
+            },
+          ],
+        },
+        {
+          name: "dietary",
+          label: "Dieetwensen",
+          type: "text",
+          admin: {
+            description: "Wat deze persoon niet eet, gescheiden door komma's",
+          },
+        },
+        {
+          name: "drinks",
+          label: "Drinken",
+          type: "text",
+        },
+      ],
     },
     {
       name: "status",
@@ -150,6 +301,20 @@ export const Reservations: CollectionConfig = {
         position: "sidebar",
         description:
           "Nieuw is nog niet bevestigd. Zet op bevestigd zodra de gast bericht heeft.",
+      },
+    },
+    ...outboundEmailFields(),
+    {
+      name: "guestToken",
+      label: "Sleutel gastenpagina",
+      type: "text",
+      unique: true,
+      index: true,
+      admin: {
+        position: "sidebar",
+        readOnly: true,
+        description:
+          "Het geheime deel van de deelbare link naar de gastenpagina. Iedereen met die link kan de reservering zien en aanvullen, dus deel hem alleen met het gezelschap. Wordt er een nieuwe sleutel gemaakt, dan werkt de oude link niet meer.",
       },
     },
     {

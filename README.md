@@ -1,6 +1,6 @@
 # De Bee's Hive: Website
 
-Eetcafé website built with **Next.js 15** and **Payload CMS 3** (self-hosted, SQLite).
+Eetcafé website built with **Next.js 15** and **Payload CMS 3** (self-hosted, PostgreSQL, media on Cloudflare R2).
 
 ## Features
 
@@ -18,12 +18,18 @@ Eetcafé website built with **Next.js 15** and **Payload CMS 3** (self-hosted, S
 ```bash
 cp .env.example .env
 npm install
+docker compose up -d postgres     # or any PostgreSQL you like
 npm run dev
 ```
 
 Visit `http://localhost:3000` for the site, `http://localhost:3000/admin` for the CMS.
 
 On first visit to `/admin`, you'll create your admin account.
+
+The one thing that is no longer optional is a database: Payload talks to
+PostgreSQL now, and `DATABASE_URI` has to point at one. Nothing else does —
+without SMTP credentials mail goes to the console, and without the R2 variables
+uploads go to `./media`, both of which are the right behaviour on a laptop.
 
 ## Mail
 
@@ -126,11 +132,12 @@ The schema lives in `src/migrations/`, generated from the collections and the
 
 Development still pushes the schema straight from the collection definitions,
 which is what keeps local iteration quick. Production does not: `push` is off
-whenever `NODE_ENV=production`. A push on SQLite rewrites tables in place, and
-for a field that has just been marked `localized: true` that means dropping the
-column before its values have moved into the `_locales` side table — which is
-exactly the change this project made when it went bilingual, and exactly the
-data it would have cost.
+whenever `NODE_ENV=production`. PostgreSQL is less brutal about a push than
+SQLite was — it alters a table rather than rebuilding it — but the dangerous
+case is unchanged: drizzle compares the collections to the live tables and
+drops a column it can no longer account for, which is exactly what a field
+newly marked `localized: true` looks like before its values have moved into the
+`_locales` side table.
 
 In production the adapter is given `prodMigrations`, so Payload applies anything
 outstanding itself when it connects. Nothing has to be run by hand on deploy,
@@ -154,21 +161,86 @@ npm run migrate:status   # what has and has not been applied
 npm run migrate          # apply outstanding migrations by hand
 ```
 
-Two caveats. `migrate:create` generates the SQL with drizzle-kit, and its
-SQLite table-rebuild strategy emits an `INSERT ... SELECT` naming columns that
-the *old* table does not have yet, so an incremental migration on this adapter
-can be born broken. Always run a new migration against an empty database before
-trusting it:
+Always run a new migration against an empty database before trusting it. It is
+one command and it has caught every broken migration this project has produced:
 
 ```bash
-DATABASE_URI=file:/tmp/probe.db PAYLOAD_SECRET=x npm run migrate
+createdb beeshive_probe
+DATABASE_URI=postgresql://beeshive:beeshive@localhost:5433/beeshive_probe \
+  PAYLOAD_SECRET=x npm run migrate
 ```
 
-And for a database that already exists and was built by dev push: it
-already has these tables, so the first migration would fail on `CREATE TABLE`.
-Mark it as applied rather than running it — insert a row into
-`payload_migrations` with the migration's `name` and `batch` 1. A fresh
-database, such as a new Docker volume, simply runs it.
+For a database that already exists and was built by dev push: it already has
+these tables, so the first migration would fail on `CREATE TABLE`. Mark it as
+applied rather than running it — insert a row into `payload_migrations` with
+the migration's `name` and `batch` 1. A fresh database, such as a new Docker
+volume, simply runs it.
+
+## Moving from SQLite
+
+The site was on SQLite until this release. The move is two commands, both of
+which go through the Local API and therefore care about the collections rather
+than about the tables:
+
+```bash
+npm run db:export -- content-export.json   # against the old database
+npm run db:import -- content-export.json   # against the new one
+```
+
+`scripts/README.md` has the details, including what happens to ids (they are
+remapped), to files (re-uploaded from `./media`) and to passwords (they cannot
+be imported; every account is listed at the end and has to be reset once).
+
+One leftover: `next.config.mjs` still carries an `outputFileTracingIncludes`
+entry for libsql, which was there so the SQLite driver's native binary reached
+the standalone build. Nothing loads it any more and it can be deleted once the
+`@payloadcms/db-sqlite` dependency goes with it.
+
+## Search-engine metadata
+
+`@payloadcms/plugin-seo` adds an **SEO** tab to blog posts and events with a
+title, description, share image and keywords, per language. Each field has a
+*generate* button that suggests a value from the document — the title trimmed
+to fit Google's cut-off with `| De Bee's Hive` still attached, the summary
+trimmed to about 160 characters, the featured image, and the canonical URL for
+the language being edited. All of them are suggestions; whatever the owners
+type wins.
+
+The generated URL is built from a small map in `src/payload.config.ts`. If a
+public route is ever renamed, that map is the place to change.
+
+## Media on Cloudflare R2
+
+With `R2_BUCKET`, `R2_ENDPOINT`, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`
+set, uploads go to the bucket and the container stores nothing itself. With any
+of them missing, uploads are written to `MEDIA_DIR` exactly as before — so a
+laptop, or a test host without a bucket, needs no configuration at all.
+
+Every generated size (`thumbnail`, `card`, `hero` and the 1200x630 `og` used
+for share cards) is re-encoded as WebP at quality 78; the original the owners
+uploaded is kept untouched.
+
+`ops/README.md` covers creating the bucket and the API token.
+
+## Backups
+
+The database is backed up to a second R2 bucket by pgBackRest, running as its
+own container: a full copy every Sunday night, a differential every other
+night, and every write-ahead-log segment in between, encrypted before it leaves
+the machine. That last part is what allows a restore to land on any moment
+rather than only on a backup.
+
+```bash
+ops/backup.sh full                              # take one now
+docker compose exec pgbackrest pgbackrest --stanza=beeshive info
+ops/restore.sh                                  # prints the plan, changes nothing
+ops/restore.sh --time "2026-08-01 12:00:00" --yes-really
+```
+
+Two things to know before you need them, both spelled out in `ops/README.md`:
+`PGBACKREST_CIPHER_PASS` is not recoverable and a lost passphrase makes every
+backup unreadable, and a restore to a point in time discards everything written
+after it.
 
 ## Docker
 
@@ -209,8 +281,15 @@ entirely, so a 200 here means the fault is in NPM and not in the app:
 curl -I http://localhost:3100
 ```
 
+The stack is three containers now: `beeshive`, `postgres` and `pgbackrest`. The
+app waits for the database's healthcheck before it starts, because Payload
+applies migrations the moment it connects and a container that starts first
+fails its first request while looking perfectly healthy.
+
 `docker compose down` is safe; **`down -v` deletes the database and the
-uploads**, which live in the `db-data` and `media-uploads` volumes.
+uploads**, which live in the `pg-data` and `media-uploads` volumes. That is
+survivable now — the backups in R2 are exactly for this — but only if the
+restore in `ops/README.md` is something you have actually done once.
 
 `.dockerignore` keeps the local `.next`, `node_modules`, `.env` and
 `database.db` out of the build context. Leaving `.next` in it is not a tidiness
@@ -221,14 +300,20 @@ the same reason.
 
 ## Deploy to Vercel
 
+Possible, and not how this site runs. Vercel gives the app no disk and no
+database, so it needs a PostgreSQL somewhere reachable and R2 configured for
+the uploads — the local-disk fallback cannot work there.
+
 1. Push to GitHub
 2. Import to Vercel
-3. Set environment variables: `DATABASE_URI`, `PAYLOAD_SECRET`, `NEXT_PUBLIC_SITE_URL`
+3. Set environment variables: `DATABASE_URI`, `PAYLOAD_SECRET`,
+   `NEXT_PUBLIC_SITE_URL`, and the four `R2_*`
 
 ## Tech Stack
 
 - Next.js 15 (App Router)
-- Payload CMS 3 (embedded, SQLite)
+- Payload CMS 3 (embedded, PostgreSQL 16)
+- Cloudflare R2 for uploads, pgBackRest for database backups
 - Tailwind CSS
 - Framer Motion
 - TypeScript
