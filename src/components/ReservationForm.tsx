@@ -8,10 +8,11 @@ import {
   useState,
   type FormEvent,
 } from "react";
+import Link from "next/link";
 import { CraftIcon } from "@/components/CraftIcon";
 import { ShareActions } from "@/components/ShareActions";
 import { getDict } from "@/i18n/dictionaries";
-import { defaultLocale, type Locale } from "@/i18n/config";
+import { defaultLocale, localeHref, type Locale } from "@/i18n/config";
 import { isReservationError } from "@/lib/reservationErrors";
 import { forget, readRemembered, remember } from "@/lib/rememberMe";
 import { EVENTS, track } from "@/lib/umami";
@@ -634,8 +635,22 @@ export function ReservationForm({
             aria-describedby="reserve-guests-hint"
             className={`${fieldClass} figures-old`}
           />
+          {/* The way out for a party too big for the form. On the phone sheet
+              this is the only one there is: the sheet has no other link in it,
+              so somebody with twenty-two people could previously do nothing
+              but close it. Following it navigates, which closes the sheet, and
+              that is the intended end of the journey rather than a side
+              effect. */}
           <p id="reserve-guests-hint" className="mt-2 text-sm text-hive-400">
-            {t.guestsHint}
+            {t.guestsHint}{" "}
+            {t.guestsMoreBefore}
+            <Link
+              href={localeHref(locale, "/contact")}
+              className="ink-link !text-current"
+            >
+              {t.guestsMoreLink}
+            </Link>
+            {t.guestsMoreAfter}
           </p>
         </div>
       </div>

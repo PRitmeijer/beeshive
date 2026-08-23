@@ -23,7 +23,7 @@ export const homeNl = {
   stamps: {
     kitchenCaption: "Uit de keuken",
     kitchenAlt: "Carpaccio met rucola, cashewnoten en Parmezaanse kaas",
-    familyCaption: "De Bee's Hive",
+    familyCaption: "De Bee's",
     familyAlt: "De familie achter De Bee's Hive voor het eetcafé in Zuilen",
     seasonCaption: "Van het seizoen",
     seasonAlt: "Hoofdgerecht met aardappels, seizoensgroenten en rode kool",
@@ -61,7 +61,7 @@ export const homeEn: HomeDict = {
   stamps: {
     kitchenCaption: "From the kitchen",
     kitchenAlt: "Carpaccio with rocket, cashew nuts and Parmesan",
-    familyCaption: "De Bee's Hive",
+    familyCaption: "De Bee's",
     familyAlt: "The family behind De Bee's Hive outside the eetcafé in Zuilen",
     seasonCaption: "In season",
     seasonAlt: "Main course with potatoes, seasonal vegetables and red cabbage",

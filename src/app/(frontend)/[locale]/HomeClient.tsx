@@ -299,10 +299,15 @@ export function HomeClient({ locale, settings: s, today }: Props) {
                 Below that there is no margin to hang in, so it is torn off
                 sideways instead and runs across the measure: three panels
                 shoulder to shoulder, rather than a thin tower of three with a
-                page-height gutter of nothing beside it. It hangs from above
-                the text's own top margin, because the masthead is standing in
-                the space over the column and the strip has a full 535 points
-                to fall through before the sheet is torn off at the bottom.
+                page-height gutter of nothing beside it.
+
+                It starts at the top of the column and not above it. It used to
+                be pulled up by the height of the bar, from when the masthead
+                was a transformed element in the header and there was empty
+                sheet over the column to hang into. There is not any more: the
+                bar is opaque chrome with the reserve button in its right-hand
+                corner, which is exactly where the strip's first panel is, and
+                the two were overlapping.
 
                 On a phone it sits under the buttons, which is what `order-last`
                 is doing: the two calls to action are the point of the page and
@@ -318,7 +323,7 @@ export function HomeClient({ locale, settings: s, today }: Props) {
                 server's HTML rather than held at opacity 0 until an animation
                 library has downloaded and hydrated. */}
             <div
-              className="hero-rise order-last mt-9 [--rise-delay:0.5s] [--rise-duration:1.1s] [--rise-travel:16px] xl:absolute xl:-top-20 xl:right-2 xl:mt-0"
+              className="hero-rise order-last mt-9 [--rise-delay:0.5s] [--rise-duration:1.1s] [--rise-travel:16px] xl:absolute xl:right-2 xl:top-0 xl:mt-0"
             >
               <StampStrip
                 panels={panels}

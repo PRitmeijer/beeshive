@@ -16,6 +16,18 @@ export const reservationFormNl = {
   phoneHint: "Alleen voor het geval we je iets moeten vragen.",
   guests: "Aantal personen",
   guestsHint: "Maximaal 20 personen.",
+  /**
+   * A party of twenty-two is not a refusal, it is a phone call, and the form
+   * used to leave them at a dead end: a number the field would not accept and
+   * nothing to do about it but close the page. The three parts are the shape
+   * this file already uses wherever a sentence has a link in the middle of it
+   * (see `reserve.elseBefore` and the blog's CMS notice), because splicing an
+   * anchor into a translated string is how word order gets decided by the JSX
+   * instead of by the language.
+   */
+  guestsMoreBefore: "Met meer? ",
+  guestsMoreLink: "Neem contact op",
+  guestsMoreAfter: " en we kijken samen wat er kan.",
   date: "Datum",
   datePlaceholder: "Kies een dag",
   dateHint: "Alleen de dagen waarop we open zijn staan in de lijst.",
@@ -166,6 +178,9 @@ export const reservationFormEn: ReservationFormDict = {
   phoneHint: "Only in case we need to ask you something.",
   guests: "Number of guests",
   guestsHint: "Up to 20 guests.",
+  guestsMoreBefore: "More than that? ",
+  guestsMoreLink: "Get in touch",
+  guestsMoreAfter: " and we will work it out together.",
   date: "Date",
   datePlaceholder: "Choose a day",
   dateHint: "Only the days we are open are listed.",

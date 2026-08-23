@@ -165,12 +165,17 @@ export function KaartClient({
   return (
     <>
       {/* ===== HERO ===== */}
-      <section className="relative flex min-h-[38vh] items-end overflow-hidden bg-paper">
-        <div className="relative z-10 mx-auto w-full max-w-6xl px-6 pb-12 pt-32 md:px-12 md:pb-16 lg:px-20">
+      {/* No minimum height and the padding pulled in on both sides. This is a
+          title over a menu, not a hero, and every point of air above it is a
+          point somebody has to scroll past before they see a single dish.
+          People arrive at this page hungry and impulsive; the card should be
+          most of the way up the screen when it loads. */}
+      <section className="relative flex items-end overflow-hidden bg-paper">
+        <div className="relative z-10 mx-auto w-full max-w-6xl px-6 pb-8 pt-24 md:px-12 md:pb-10 md:pt-28 lg:px-20">
           <p className="label">{t.menuPage.eyebrow}</p>
-          <div className="rule-ink my-5 w-14" aria-hidden="true" />
+          <div className="rule-ink my-4 w-14" aria-hidden="true" />
           <h1 className="heading-xl text-hive-800">{t.menuPage.title}</h1>
-          <p className="mt-6 max-w-xl text-lg text-hive-400">
+          <p className="mt-5 max-w-xl text-lg text-hive-400">
             {t.menuPage.subtitle}
           </p>
         </div>
@@ -184,7 +189,7 @@ export function KaartClient({
       </section>
 
       {/* ===== THE CARD ===== */}
-      <section className="section-padding relative overflow-hidden bg-paper-deep">
+      <section className="relative overflow-hidden bg-paper-deep px-6 pb-16 pt-10 md:px-12 md:pb-24 md:pt-14 lg:px-20">
         <div className="relative mx-auto max-w-6xl">
           {/* Category rank: letterpressed, ranged left, with the rule hanging
               out on its own in the right margin. */}
@@ -257,7 +262,10 @@ export function KaartClient({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={reduce ? { duration: 0 } : { duration: 0.7, ease: EASE }}
-              className="mt-16 md:mt-24"
+              // Was mt-16/mt-24. The filters and the card are one thing, and
+              // ninety-six points of nothing between them read as the end of
+              // the page rather than as a pause.
+              className="mt-8 md:mt-12"
             >
               <div className="grid md:grid-cols-12 md:gap-x-10">
                 {/* The marginal bee, as it is drawn in the gutter of the card. */}
@@ -274,7 +282,7 @@ export function KaartClient({
                 {/* The card itself: a cut sheet laid on the heavier stock. */}
                 <div className="md:col-span-10 md:col-start-3">
                   <Sheet tone="paper" edge="soft">
-                    <div className="px-6 py-12 md:px-12 md:py-16">
+                    <div className="px-6 pb-12 pt-8 md:px-12 md:pb-16 md:pt-10">
                       <div className="space-y-14 md:space-y-20">
                         {groups.map(({ cat, lines }) => (
                           <section key={cat.id} aria-labelledby={`categorie-${cat.id}`}>

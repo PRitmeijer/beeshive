@@ -18,6 +18,14 @@ import { LogoSvg } from "@/components/LogoSvg";
  * SETTLE_AT in Navigation.tsx). Nothing is transformed, nothing is measured,
  * nothing has to agree with anything else about where it is.
  *
+ * IT IS NOT THE LOUDEST THING ON THE PAGE, deliberately. The name was set
+ * heavier and a size larger to begin with and it took the eye and would not
+ * give it back: the navigation, the two buttons and the opening hours all
+ * stopped registering, because nothing else on a cream sheet can compete with
+ * eighty-eight points of semibold ink. It is the crest that identifies the
+ * place; the name only has to be legible next to it, and a reader who cannot
+ * find the menu link is not helped by being told where they are twice.
+ *
  * THE CREST, not the bare bee. `logo.svg` is the finished mark: the bee, the
  * chef's hat, the two laurel branches. It carries no wordmark of its own,
  * which is what makes it safe to set the name in type underneath rather than
@@ -42,7 +50,7 @@ export function HeroLockup({ siteName }: { siteName: string }) {
         />
       </div>
 
-      <h1 className="hero-rise mt-5 font-display text-[2.75rem] font-semibold leading-[0.95] tracking-[-0.035em] text-hive-800 [--rise-delay:0.1s] sm:text-6xl md:text-7xl lg:text-[5.5rem]">
+      <h1 className="hero-rise mt-5 font-display text-[2.1rem] font-medium leading-[1] tracking-[-0.03em] text-hive-800 [--rise-delay:0.1s] sm:text-5xl md:text-6xl lg:text-[4.25rem]">
         {siteName}
       </h1>
     </div>
