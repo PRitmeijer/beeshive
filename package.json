@@ -18,10 +18,13 @@
         "import:subscribers": "cross-env PAYLOAD_CONFIG_PATH=src/payload.config.ts tsx scripts/import-subscribers.ts"
     },
     "dependencies": {
+        "@payloadcms/db-postgres": "^3.10.0",
         "@payloadcms/db-sqlite": "3.10.0",
         "@payloadcms/email-nodemailer": "3.10.0",
         "@payloadcms/next": "3.10.0",
+        "@payloadcms/plugin-seo": "^3.10.0",
         "@payloadcms/richtext-lexical": "3.10.0",
+        "@payloadcms/storage-s3": "^3.10.0",
         "@payloadcms/translations": "3.10.0",
         "@payloadcms/ui": "3.10.0",
         "cross-env": "7.0.3",

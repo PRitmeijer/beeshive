@@ -40,3 +40,6 @@ next-env.d.ts
 
 # Uploaded media (dev). Production keeps these in a Docker volume.
 media/
+
+# CMS content dumps (contain guest data)
+/content-export*.json
