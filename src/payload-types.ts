@@ -224,10 +224,16 @@ export interface BlogPost {
   publishedDate?: string | null;
   author?: (number | null) | User;
   meta?: {
+    /**
+     * De blauwe regel in de zoekresultaten. Rond de 60 tekens; langer wordt afgekapt. Laat leeg om de titel van de pagina zelf te gebruiken.
+     */
     title?: string | null;
+    /**
+     * De twee regels onder de titel, in Google en in een gedeelde link. Rond de 160 tekens.
+     */
     description?: string | null;
     /**
-     * Maximum upload file size: 12MB. Recommended file size for images is <500KB.
+     * De foto die verschijnt als iemand deze pagina deelt op WhatsApp, Facebook of LinkedIn. Eén foto voor beide talen — je hoeft hem niet apart in het Engels te kiezen. Liefst liggend; hij wordt automatisch bijgesneden naar 1200 bij 630 pixels.
      */
     image?: (number | null) | Media;
   };
@@ -342,10 +348,16 @@ export interface Event {
    */
   featured?: boolean | null;
   meta?: {
+    /**
+     * De blauwe regel in de zoekresultaten. Rond de 60 tekens; langer wordt afgekapt. Laat leeg om de titel van de pagina zelf te gebruiken.
+     */
     title?: string | null;
+    /**
+     * De twee regels onder de titel, in Google en in een gedeelde link. Rond de 160 tekens.
+     */
     description?: string | null;
     /**
-     * Maximum upload file size: 12MB. Recommended file size for images is <500KB.
+     * De foto die verschijnt als iemand deze pagina deelt op WhatsApp, Facebook of LinkedIn. Eén foto voor beide talen — je hoeft hem niet apart in het Engels te kiezen. Liefst liggend; hij wordt automatisch bijgesneden naar 1200 bij 630 pixels.
      */
     image?: (number | null) | Media;
   };
