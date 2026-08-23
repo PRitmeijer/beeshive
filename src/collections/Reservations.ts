@@ -194,6 +194,25 @@ export const Reservations: CollectionConfig = {
           type: "text",
           required: true,
           maxLength: 10,
+          /**
+           * The seat counting in src/lib/capacity.ts lays every booking out on
+           * a half-hour grid, and a booking that starts at 19:07 used to occupy
+           * a column nothing else ever read: it consumed no capacity and saw
+           * none. The arithmetic there now floors an odd time onto the grid, so
+           * this is no longer load-bearing — but a table is still either at
+           * seven or at half past, and letting the field say otherwise only
+           * invites the question of what "19:07" was supposed to mean.
+           *
+           * /api/reserve never produces one of these; a row typed in by hand in
+           * the admin is the only way in, which is why the message is written
+           * for the owners rather than for a developer.
+           */
+          validate: (value: string | null | undefined) => {
+            if (!value) return "Vul een tijd in, bijvoorbeeld 19:00.";
+            return /^([01]\d|2[0-3]):(00|30)$/.test(value.trim())
+              ? true
+              : "Gebruik hele of halve uren in 24-uursnotatie, bijvoorbeeld 19:00 of 19:30.";
+          },
           admin: { width: "50%" },
         },
       ],

@@ -20,9 +20,27 @@ export const OpeningExceptions: CollectionConfig = {
     plural: "Afwijkende dagen",
   },
   access: {
-    // Public: the opening hours block, the contact page and the reservation
-    // form all need this while rendering, and none of them has a user.
-    read: () => true,
+    /**
+     * Public, but only the rows that were meant to be public.
+     *
+     * The opening hours block, the contact page and the reservation form all
+     * read this while rendering and none of them has a user, so it cannot be
+     * staff-only. `read: () => true` was too generous, though: it is Payload's
+     * own REST endpoint as well as ours, and an anonymous
+     * `GET /api/opening-exceptions` handed back every row — including the ones
+     * the owners had deliberately unticked, with the Dutch note still on them.
+     * "Besloten feest, 14 december" is not a secret exactly, but it is nobody
+     * else's business either.
+     *
+     * A query constraint rather than a yes/no, so a logged-in editor keeps
+     * seeing everything and a stranger sees only what is on the site. This does
+     * NOT change what the site itself resolves: `loadSchedule` in
+     * src/lib/schedule.ts goes through the Local API, which bypasses access by
+     * design, so a day that is closed but not announced still closes the
+     * bookings — which is exactly what `showOnSite` is for.
+     */
+    read: ({ req: { user } }) =>
+      user ? true : { showOnSite: { equals: true } },
     create: ({ req: { user } }) => Boolean(user),
     update: ({ req: { user } }) => Boolean(user),
     delete: ({ req: { user } }) => Boolean(user),
