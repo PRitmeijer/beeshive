@@ -12,16 +12,73 @@ protected, how to tell whether it is working, and what to type when it is not.
 
 | | Where it lives | How it survives the server dying |
 |---|---|---|
-| The database — menu, blog, events, reservations, contact messages, users, settings | PostgreSQL 16 in the `pg-data` volume | pgBackRest, encrypted, to a private Cloudflare R2 bucket |
-| Uploaded photographs | Cloudflare R2 (`R2_BUCKET`) | R2's own durability; nothing else copies them |
+| The database (menu, blog, events, reservations, contact messages, users, settings) | PostgreSQL 16 in the `pg-data` volume | pgBackRest, encrypted, to a private Cloudflare R2 bucket |
+| Uploaded photographs, **with R2 configured** | Cloudflare R2 (`R2_BUCKET`) | R2's own durability. Nothing on this server holds them, so nothing on this server can lose them |
+| Uploaded photographs, **without R2** | the `media-uploads` Docker volume | **nothing.** See below |
 | The CMS schema | `src/migrations/` | git |
-| Everything else — code, config | git | git |
+| Everything else (code, config) | git | git |
 
-The photographs are deliberately *not* in the database backup. They are already
-in object storage that is not on this server, and copying them nightly into a
-second bucket would double the bill to protect against a failure mode
-Cloudflare does not really have. If that is not good enough, turn on object
-versioning on the media bucket; do not try to make pgBackRest carry them.
+The photographs are deliberately *not* in the database backup. With a bucket
+configured they are already in object storage that is not on this server, and
+copying them nightly into a second bucket would double the bill to protect
+against a failure Cloudflare does not really have.
+
+**Without a bucket, the photographs are not backed up at all.** pgBackRest backs
+up the PostgreSQL data directory and nothing else; the `media-uploads` volume is
+not in its scope and never will be. That is the state the site ships in, because
+R2 is optional, and it is the single strongest argument for turning R2 on: not
+speed, which turned out to be marginal (see `docs/media-hosting.md`), but the
+fact that a volume nobody copies is a volume that eventually gets wiped.
+
+## If the media volume is wiped
+
+This is the question worth thinking through before it happens, because the
+answer is completely different in the two configurations.
+
+**With R2 configured, there is nothing to restore.** `disableLocalStorage` is
+switched on the moment all four R2 variables are present
+(`src/collections/Media.ts`), which means Payload writes no files to the
+container at all. The `media-uploads` volume is vestigial. Delete it, rebuild
+the container, restore the database from pgBackRest, and the site is whole: the
+database rows carry the filenames and the alt text, the objects are still in the
+bucket, and the two find each other again with no step in between. That is the
+recovery path, and it is why the two halves are stored apart rather than
+together.
+
+**Without R2, a wiped volume is unrecoverable.** The database restore brings
+back every media row, so the admin looks correct and the pages reference every
+photograph by name, and every one of them is a 404. There is no copy anywhere.
+Re-uploading by hand is the only way back, and the alt text and the captions
+survive while the pictures do not, which is a peculiarly annoying place to be.
+
+### The one gap R2 does not close
+
+A photograph deleted through the admin is deleted from the bucket too, and
+**R2 has no object versioning**: Cloudflare's documentation is explicit that
+deleting objects "is irreversible" and that removed objects "cannot be
+recovered". So restoring the database to yesterday brings the row back and not
+the file.
+
+The tool for that is a **bucket lock**, which R2 does have: "Bucket locks
+prevent the deletion and overwriting of objects in an R2 bucket for a specified
+period, or indefinitely." A retention rule of thirty or ninety days on the media
+bucket means an accidental delete in the admin cannot actually remove the
+object, and the row can be restored onto a file that is still there.
+
+The reason this works as a safety net rather than as a formality is the token.
+The website's R2 credentials are scoped to Object Read and Write on that bucket
+alone, so the application can neither remove the lock rule nor shorten it. Only
+somebody logged into the Cloudflare dashboard can, deliberately.
+
+### Restoring the database to an earlier point, with a live bucket
+
+Worth knowing, because the two halves have different clocks. pgBackRest can put
+the database back to any moment; the bucket is always now. Restore the database
+to last Tuesday and the bucket will hold objects uploaded since, which no row
+references any more. Those are orphans, they cost a few cents, and nothing goes
+wrong. The reverse is the one to watch: a photograph uploaded *and* deleted
+since last Tuesday is gone from the bucket, while the restored row expects it.
+A retention rule covers that too.
 
 **The encryption passphrase (`PGBACKREST_CIPHER_PASS`) is not recoverable.**
 Lose it and every backup in the bucket is noise. Keep a copy somewhere that is
