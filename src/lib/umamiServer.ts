@@ -20,16 +20,23 @@ import { getSiteSettings } from "@/lib/payload";
  * graph", never as a stack trace and never as a red box. `configured: false`
  * plus a reason is the whole error protocol.
  *
- * On authentication: Umami Cloud wants an `x-umami-api-key` header, while a
- * self-hosted instance has no API keys at all and instead expects a bearer
- * token obtained from `POST {host}/api/auth/login` with the admin username and
- * password. We are not going to put a login on this path — storing the owners'
- * Umami password so a server can re-authenticate itself is a worse trade than
- * the API key already is — so a self-hosted setup works by fetching that token
- * once, by hand, and pasting it in as the key. Both shapes are supported by
- * looking at the value: a JWT (three dot-separated segments) is sent as a
- * bearer token, anything else as a cloud API key. docs/analytics.md walks a
- * developer through it.
+ * On authentication, and it differs by flavour. Umami Cloud issues API keys
+ * (Settings, then API keys, then Create key) and wants them as
+ * `Authorization: Bearer`. A self-hosted instance has no API keys at all: it
+ * expects a token from `POST {host}/api/auth/login` with the admin username
+ * and password, sent the same way.
+ *
+ * We do not log in from here. Storing the owners' Umami password so a server
+ * can re-authenticate itself is a worse trade than the key already is. So a
+ * self-hosted setup works by fetching that token once, by hand, and pasting it
+ * in as the key, with one honest caveat: a login token expires, so when the
+ * panel starts saying the figures are unavailable on a self-hosted instance,
+ * a stale token is the first thing to check.
+ *
+ * None of this is needed to COUNT visitors, which is the part that matters.
+ * Counting is the script in the page and the website id, and neither is a
+ * secret. The key exists only so the numbers can also be read back inside this
+ * admin. docs/analytics.md walks a developer through it.
  */
 
 const TIMEOUT_MS = 8_000;
@@ -214,15 +221,21 @@ function apiBase(host: string): string {
 }
 
 /**
- * A JWT has three base64url segments separated by dots and nothing else. That
- * is a good enough tell to route a self-hosted login token to the Authorization
- * header and a cloud key to Umami's own header, without asking the owners to
- * answer a question they would have to look up.
+ * Both headers, every time, because the answer has moved.
+ *
+ * This used to guess: a JWT (three base64url segments) went to `Authorization`
+ * as a self-hosted login token, and anything else to `x-umami-api-key` as a
+ * cloud key. The first half is still right. The second is not: Umami Cloud now
+ * documents its own API keys as `Authorization: Bearer <api-key>` too, so the
+ * guess sent a valid key in a header nothing reads and the panel reported that
+ * the figures were unavailable, which is the least helpful way to be wrong.
+ *
+ * Sending both costs one header and removes the guess. An API that does not
+ * recognise `x-umami-api-key` ignores it; older cloud instances that want it
+ * get it. Nothing here has to know which flavour it is talking to.
  */
 function authHeaders(key: string): Record<string, string> {
-  return /^[\w-]+\.[\w-]+\.[\w-]+$/.test(key)
-    ? { Authorization: `Bearer ${key}` }
-    : { "x-umami-api-key": key };
+  return { Authorization: `Bearer ${key}`, "x-umami-api-key": key };
 }
 
 async function getJson(url: string, key: string): Promise<unknown> {
