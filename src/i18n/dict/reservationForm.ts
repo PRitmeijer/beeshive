@@ -2,6 +2,12 @@
  * Every label, hint and refusal in the reservation form. It is the longest
  * namespace on the site because a booking can fail in a great many ways and
  * each one deserves a sentence a guest can act on.
+ *
+ * The last few keys are not about failing at all. Once a request is stored,
+ * /api/reserve hands back the link to that table's own guest pass, and the
+ * success screen offers it to the one person who can pass it on. Those lines
+ * are the closest thing the site has to the café leaning over and saying "here,
+ * send this to the others" — so they are short, and they ask for nothing.
  */
 export const reservationFormNl = {
   name: "Naam",
@@ -101,6 +107,25 @@ export const reservationFormNl = {
   successTitle: "Bedankt, we hebben het ontvangen",
   successText:
     "Je aanvraag staat genoteerd; een bevestiging is het nog niet. Je hoort van ons of de tafel vrij is.",
+  /**
+   * The one line about the link, on the screen the guest is looking at the
+   * second they have booked. It is the only way the address reaches them: the
+   * owners get it in their notification mail, and there is no mail to the guest
+   * yet at all.
+   *
+   * Deliberately not the wording from src/i18n/dict/guestPass.ts, which says
+   * much the same thing on the pass itself. There, the reader has the page open
+   * in front of them and can see what it is; here, nobody has seen it yet, so
+   * this has to say what the link leads to before it asks anyone to send it on.
+   */
+  shareText:
+    "Dit is de pagina van jullie tafel. Stuur hem door naar wie er meekomt \u2014 zij zien wanneer en waar, en kunnen hun wensen alvast doorgeven.",
+  copyLink: "Kopieer de link",
+  copied: "Gekopieerd",
+  shareWhatsApp: "Stuur via WhatsApp",
+  /** What WhatsApp opens with. The guest may rewrite every word of it. */
+  whatsAppMessage: (url: string) =>
+    `Ik heb een tafel geregeld. Hier staan de details, en je kunt doorgeven of je erbij bent: ${url}`,
   successAgain: "Nog een tafel reserveren",
 };
 
@@ -170,5 +195,12 @@ export const reservationFormEn: ReservationFormDict = {
   successTitle: "Thank you, we have got it",
   successText:
     "Your request is noted; it is not a confirmation yet. We will let you know whether the table is free.",
+  shareText:
+    "This is your table's own page. Send it on to whoever is coming \u2014 they will see when and where, and can pass on their wishes in advance.",
+  copyLink: "Copy the link",
+  copied: "Copied",
+  shareWhatsApp: "Send on WhatsApp",
+  whatsAppMessage: (url: string) =>
+    `I have booked us a table. All the details are here, and you can let them know whether you are joining: ${url}`,
   successAgain: "Book another table",
 };

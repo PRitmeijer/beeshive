@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { CraftIcon } from "@/components/CraftIcon";
+import { ShareActions } from "@/components/ShareActions";
 import { getDict } from "@/i18n/dictionaries";
 import { defaultLocale, type Locale } from "@/i18n/config";
 import { isReservationError } from "@/lib/reservationErrors";
@@ -237,6 +238,16 @@ export function ReservationForm({
     "idle" | "loading" | "success" | "error"
   >("idle");
   const [error, setError] = useState(t.error);
+  /**
+   * The link to the table's own page, as /api/reserve hands it back.
+   *
+   * Held in state rather than derived from anything, because it does not exist
+   * until the booking does: the token is minted while the row is written. It
+   * stays null whenever the owners have the guest pass switched off in the CMS,
+   * and the success screen then looks exactly as it did before any of this —
+   * a switch that only half works would be worse than no switch.
+   */
+  const [passUrl, setPassUrl] = useState<string | null>(null);
 
   /**
    * "Somebody began filling this in", once per mounted form. The ref rather
@@ -308,6 +319,9 @@ export function ReservationForm({
           time: form.time,
           guests: Number(form.guests),
           notes: form.notes,
+          // Only so the guest pass link comes back in the language this form
+          // was filled in in. Nothing about the booking itself depends on it.
+          locale,
           website,
         }),
       });
@@ -315,6 +329,15 @@ export function ReservationForm({
         // The refusal code, never the guest: a reason is a fact about us, a
         // name or a party size is a fact about them.
         track(EVENTS.reservationSubmitted);
+        // Read on the success path too, now that there is something in it.
+        // A body that will not parse is not a failed booking — the endpoint
+        // said 200 — so it costs the share block and nothing else.
+        const data = (await res.json().catch(() => null)) as {
+          guestPassUrl?: unknown;
+        } | null;
+        setPassUrl(
+          typeof data?.guestPassUrl === "string" ? data.guestPassUrl : null,
+        );
         setStatus("success");
         setForm(EMPTY);
         return;
@@ -354,9 +377,51 @@ export function ReservationForm({
         <p className="mt-3 max-w-prose leading-relaxed text-hive-500">
           {t.successText}
         </p>
+        {/* The link to the party's own page, and the two ways it travels.
+            This is the whole point of the guest pass reaching anybody: the
+            person reading this screen is the only one who knows who else is
+            coming, and until it was printed here they were the one person
+            never given the address — the owners have it in their notification
+            mail, and there is no mail to the guest at all yet.
+
+            The link opens in its own tab on purpose. Tapping it is how
+            somebody checks what they are about to forward, and this screen is
+            React state on a page that has no route of its own: navigating away
+            from it and pressing back returns an empty form, with the copy
+            button and the address gone with it. */}
+        {passUrl ? (
+          <div className="mt-8">
+            <div className="rule-ink w-10" aria-hidden="true" />
+            <p className="mt-4 max-w-prose leading-relaxed text-hive-500">
+              {t.shareText}
+            </p>
+            <a
+              href={passUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ink-link mt-4 break-all text-sm"
+            >
+              {passUrl}
+            </a>
+            <ShareActions
+              url={passUrl}
+              message={t.whatsAppMessage(passUrl)}
+              copyLabel={t.copyLink}
+              copiedLabel={t.copied}
+              whatsAppLabel={t.shareWhatsApp}
+              className="mt-5"
+            />
+          </div>
+        ) : null}
         <button
           type="button"
-          onClick={() => setStatus("idle")}
+          onClick={() => {
+            // Nothing of the last booking survives into the next one. A link
+            // left in state would be shown again beside a second request that
+            // has not been made yet, pointing at the first party's table.
+            setPassUrl(null);
+            setStatus("idle");
+          }}
           className="ink-link mt-6 text-sm"
         >
           {t.successAgain}

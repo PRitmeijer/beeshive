@@ -3,6 +3,8 @@ import { getPayloadClient, getSiteSettings } from "@/lib/payload";
 import { rateLimit, readJsonBody } from "@/lib/apiGuard";
 import type { ReservationError } from "@/lib/reservationErrors";
 import { canSeat } from "@/lib/capacity";
+import { resolveLocale } from "@/i18n/config";
+import { guestPassUrl } from "@/lib/guestPass";
 import { loadSchedule } from "@/lib/schedule";
 import {
   isBookable,
@@ -32,6 +34,14 @@ import {
  * own afterChange hook takes it from there (see src/lib/outboundEmail.ts), so a
  * mail server having a bad afternoon can no longer fail a booking that is
  * already safely stored.
+ *
+ * And one thing it does that it did not. A request that is stored answers with
+ * the guest pass link beside `ok`, because the person who booked is the only
+ * one who can put that link in front of the party — and until this endpoint
+ * handed it over they were the one person never given it: the owners had it in
+ * their notification mail, and the guest had a thank-you and nothing else.
+ * There is no mail to the guest yet, so the screen they are already looking at
+ * is the only place it can reach them.
  */
 
 const MAX = {
@@ -79,6 +89,16 @@ export async function POST(request: Request) {
   try {
     // Honeypot: a field no human ever sees, let alone fills in. Answer 200 so
     // a bot cannot tell a swallowed submission from a stored one.
+    //
+    // Word for word what it has always been, and deliberately without the guest
+    // pass link the answer below carries. Nothing was written here, so there is
+    // no token to build one from, and minting one anyway would be worse in both
+    // directions: a real link would hand a spam robot a live page belonging to
+    // nobody, and a fabricated one would advertise an address that answers with
+    // "this link no longer works". The link's absence is a difference a patient
+    // bot could measure, but only by sending a booking in earnest first — which
+    // is a booking the owners have to deal with either way, and precisely what
+    // the honeypot was never able to stop.
     if (str(input.website, 200)) {
       return NextResponse.json({ ok: true });
     }
@@ -205,6 +225,12 @@ export async function POST(request: Request) {
       if (!seated.ok) return fail(seated.reason, 409);
     }
 
+    // Which language the form was filled in in, so the link the guest is about
+    // to be handed is the one they can read. Not trusted for anything: a value
+    // that is not one of the two becomes Dutch, where the worst that happens is
+    // a missing /en on a page that would have been offered in Dutch anyway.
+    const locale = resolveLocale(str(input.locale, 8));
+
     const payload = await getPayloadClient();
 
     // The owners are told by the collection's own afterChange hook rather than
@@ -213,7 +239,7 @@ export async function POST(request: Request) {
     // back onto the row, and a failed send is then a retry the owners can do
     // from the admin. Sending from this route as well would mail every request
     // twice, which is precisely what moving the send out of it was meant to end.
-    await payload.create({
+    const created = await payload.create({
       collection: "reservations",
       data: {
         name,
@@ -233,7 +259,31 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json({ ok: true });
+    /**
+     * The guest pass link, back to the browser that made the booking.
+     *
+     * The token was minted by the collection's own beforeChange hook, which is
+     * why the created document is read here rather than a token being invented
+     * in this file: there is one place a token comes from, and it is not this
+     * one. Nothing else about the row is echoed back — the browser being
+     * answered typed the rest of it.
+     *
+     * The switch in Site Instellingen decides whether the link is handed over
+     * at all. With the guest pass off, /api/guest-pass refuses every companion's
+     * answer and the page stops asking for one, so pressing the address on a
+     * guest at the moment they are most likely to forward it would be sending a
+     * whole party to something the owners have quietly withdrawn. The field is
+     * then absent rather than null, and the form reads absent as "say nothing",
+     * which leaves the success screen exactly as it was before any of this.
+     */
+    const token =
+      typeof created.guestToken === "string" ? created.guestToken : "";
+    const pass =
+      settings.guestPassEnabled && token ? guestPassUrl(locale, token) : null;
+
+    return NextResponse.json(
+      pass ? { ok: true, guestPassUrl: pass } : { ok: true },
+    );
   } catch (error) {
     console.error("reservation request failed", error);
     return fail("server", 500);

@@ -1,13 +1,8 @@
 "use client";
 
-import {
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { LogoSvg } from "@/components/LogoSvg";
+import { ShareActions } from "@/components/ShareActions";
 import { Sheet } from "@/components/Sheet";
 import { TornEdge } from "@/components/TornEdge";
 import { getDict } from "@/i18n/dictionaries";
@@ -197,8 +192,6 @@ export function GuestPassClient({
     "idle",
   );
   const [error, setError] = useState(t.error);
-  const [copied, setCopied] = useState(false);
-  const copyTimer = useRef<number | null>(null);
 
   /**
    * Which of these phones has already answered is a fact about the phone, not
@@ -232,13 +225,6 @@ export function GuestPassClient({
     }
   }, [storageKey]);
 
-  useEffect(
-    () => () => {
-      if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
-    },
-    [],
-  );
-
   /**
    * "Zaterdag 12 september 2026", written out of the dictionary rather than
    * through Intl, so the server and the browser produce the same string to the
@@ -260,35 +246,6 @@ export function GuestPassClient({
         ? prev[key].filter((item) => item !== option)
         : [...prev[key], option],
     }));
-
-  /**
-   * navigator.clipboard needs a secure context and a permission the in-app
-   * browsers do not always grant. The old selection trick is deprecated and
-   * still the only thing that works in a WebView that refuses the modern one,
-   * so it stays as the fallback rather than the guest being told "copy failed".
-   */
-  const copyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-    } catch {
-      const field = document.createElement("textarea");
-      field.value = shareUrl;
-      field.setAttribute("readonly", "");
-      field.style.position = "fixed";
-      field.style.opacity = "0";
-      document.body.appendChild(field);
-      field.select();
-      try {
-        document.execCommand("copy");
-      } catch {
-        // Nothing left to try. The link is on screen and selectable.
-      }
-      document.body.removeChild(field);
-    }
-    setCopied(true);
-    if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
-    copyTimer.current = window.setTimeout(() => setCopied(false), 2500);
-  };
 
   /** The endpoint answers with a code, so the wording comes from here. */
   const messageFrom = (data: unknown): string => {
@@ -501,30 +458,14 @@ export function GuestPassClient({
             <h2 className="label">{t.shareHeading}</h2>
             <div className="rule-ink mt-3 w-10" aria-hidden="true" />
             <p className="mt-4 leading-relaxed text-hive-500">{t.shareHint}</p>
-            <div className="mt-5 flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={copyLink}
-                className="btn-secondary"
-                // The change of word is the whole feedback, so it has to be
-                // announced rather than only seen.
-                aria-live="polite"
-              >
-                {copied ? t.copied : t.copyLink}
-              </button>
-              <a
-                // wa.me rather than whatsapp://, because this same link has to
-                // work when the page is opened on a laptop with WhatsApp Web.
-                href={`https://wa.me/?text=${encodeURIComponent(
-                  t.whatsAppMessage(siteName, shareUrl),
-                )}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-secondary"
-              >
-                {t.shareWhatsApp}
-              </a>
-            </div>
+            <ShareActions
+              url={shareUrl}
+              message={t.whatsAppMessage(siteName, shareUrl)}
+              copyLabel={t.copyLink}
+              copiedLabel={t.copied}
+              whatsAppLabel={t.shareWhatsApp}
+              className="mt-5"
+            />
           </div>
 
           {/* ===== Are you coming too? ===== */}
