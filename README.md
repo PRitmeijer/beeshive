@@ -283,10 +283,10 @@ reset once).
 **[`DEPLOY.md`](DEPLOY.md) is the version of this with the order, the
 timings and the traps in it**, and is what to follow when you are actually
 doing it rather than reading about it. In particular, this branch can no longer
-read SQLite at all — `@payloadcms/db-sqlite` has been removed along with the
-eighteen megabytes of libsql it dragged into every image — so the export has to
-be run from the last commit that could. DEPLOY.md says which one and what to
-copy into it.
+read SQLite at all (`@payloadcms/db-sqlite` has been removed, along with the
+eighteen megabytes of libsql it dragged into every image), so the export has to
+be run from a checkout of `c2ece7b`, the one commit that carries both the
+SQLite adapter and the export script.
 
 ## Search-engine metadata
 

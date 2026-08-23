@@ -1,641 +1,389 @@
-# Taking the site from SQLite to the new stack
+# Taking the site from SQLite to PostgreSQL
 
-This is written for one person, on the evening they are actually doing it. It
-assumes you have the repository checked out on the production host, Docker
-running, and half an hour when the restaurant is closed.
+This is not a normal redeploy. Every release before this one was: push, hit
+redeploy, done. This one moves the site off the SQLite file in the `db-data`
+volume and onto PostgreSQL, and nothing in the new stack reads that file. The
+content has to be carried across by hand, in the order below.
 
-Three other documents carry the parts this one leans on, and none of it is
-repeated here:
+Allow an hour, with the restaurant closed. Most of it is the first image build
+and the import.
 
-- `ops/README.md` — the Cloudflare buckets, the API token, the environment,
-  and what each container is for.
-- `docs/backups.md` — what is backed up, how to tell whether it is working,
-  the ways to restore each half, and why the photographs get snapshots rather
-  than point-in-time recovery.
-- `scripts/README.md` — what the export, import and verify scripts do to ids,
-  to files and to passwords, and what they cannot do.
-- `docs/rate-limiting.md` — which endpoints are throttled, and the one
-  environment variable (`TRUSTED_PROXY_HOPS`) that has to match the number of
-  proxies in front of the container for the throttle to mean anything.
-- `docs/media-hosting.md` — the three addresses the photographs can be served
-  from, which one needs the domain's DNS at Cloudflare, and why the choice does
-  not affect search.
-- `docs/portainer.md` — read this one alongside the steps below if the stack is
-  deployed from Portainer rather than from a shell. It covers which of these
-  steps Portainer cannot do, and the one way of adding the stack that works.
+**Two prerequisites.**
 
-Read the two paragraphs under **Before you touch anything** now rather than
-later. The rest can be followed in order.
+1. **SSH to the host, once.** Portainer CE has no volume browser and no file
+   transfer, so nothing in the interface can get the old database out of
+   `db-data` or the export back into PostgreSQL. Portainer does the stack, the
+   shell does the data. After this release, redeploys go back to being
+   redeploys. The host also needs `git`, Node 20 and `npm`.
+2. **The stack must be deployed from the Git repository**, not pasted into
+   Portainer's web editor. The trap at the end says what breaks if it is.
+
+Three reference documents carry detail this one only summarises:
+`ops/README.md` (the containers, the buckets, the environment),
+`scripts/README.md` (what the export, import and verify do to ids, to files and
+to passwords) and `docs/backups.md` (what is backed up, and how to put it back).
 
 ---
 
-## Before you touch anything
-
-**`PGBACKREST_CIPHER_PASS` is the one value in this entire procedure that
-cannot be recreated.** Everything else — the database password, the R2 keys,
-`PAYLOAD_SECRET` — can be reissued by somebody with an account somewhere. The
-cipher passphrase cannot: it is the key the backups are encrypted with before
-they leave the machine, it exists nowhere but in your `.env` and wherever you
-put it, and a backup repository whose passphrase is gone is a bucket of noise
-that you still pay to store. It opens both repositories, the database's and the
-photographs', which is one secret to keep safe rather than two and is the whole
-of the recovery plan on a card. Generate it once, with
-
-```bash
-openssl rand -base64 48
-```
-
-and put a copy somewhere that is neither this server nor this repository — a
-password manager the owners also have access to is the right answer, an email
-to yourself is not. If you are reading this because you are rebuilding a
-server that already had backups, then the passphrase already exists and you
-must use the same one; a new one does not re-encrypt anything, it simply
-stops the old repository from opening.
-
-The other trap is smaller and much more common. Compose interpolates `.env`,
-so **a `$` in any password is read as the start of a variable name and eaten**:
-`abc$def` arrives in the container as `abc`. Double it — `abc$$def` — for
-`POSTGRES_PASSWORD`, `SMTP_PASS`, the R2 keys and the cipher passphrase alike.
-`openssl rand -base64` can produce a `+` or a `/` and never a `$`, so a freshly
-generated passphrase is safe; a password somebody chose by hand is where this
-bites. Check what actually arrived rather than trusting the file:
-
-```bash
-docker compose exec pgbackrest printenv | grep PGBACKREST_
-```
-
-## 1. The write window
-
-The export is a snapshot. Anything written to the old site after you take it —
-a reservation, a contact message, a newsletter signup, an edit in the admin —
-is not in the dump and will not be in the new database.
-
-You have two honest choices and no third one. Either put the old site behind a
-maintenance page for the duration, which is about twenty minutes and is the
-right call if you are doing this at a time when someone might book a table; or
-accept the window, do it late, and know that you are accepting it. What you
-must not do is take the export in the afternoon and cut over at midnight,
-because the several hours in between will look exactly like a working site to
-anyone using it and every one of those bookings will vanish.
-
-If you take the site down, do it at the proxy rather than by stopping the old
-application: a maintenance page answers, and a dead upstream gives a browser a
-502 that some phones cache with more enthusiasm than you would like.
-
-## 2. Export the old database
-
-Here is the wrinkle, and it is worth knowing before you are standing in it:
-**this branch cannot read SQLite any more.** `src/payload.config.ts` names only
-`postgresAdapter`, and `@payloadcms/db-sqlite` has been removed from
-`package.json` — it had been sitting there unused, pulling eighteen megabytes
-of libsql and six platform binaries into every image. So the export cannot be
-run from this checkout.
-
-The last commit that still speaks SQLite is `eb67009`, immediately before
-`c53693f` ("Foundation: PostgreSQL, R2 media, …"). That commit has the SQLite
-adapter and its `node_modules`, and it does *not* have `export-content.ts`,
-which was written afterwards. The two halves have to be put together by hand,
-which is one `cp`:
-
-```bash
-# On the old host, in the old checkout — the one that is actually serving
-# debeeshive.nl right now, with its own node_modules already installed.
-cd /path/to/the/old/checkout
-git rev-parse HEAD            # sanity: this should be eb67009 or an ancestor
-
-cp /path/to/this/checkout/scripts/export-content.ts scripts/
-npx tsx scripts/export-content.ts content-export.json
-```
-
-It prints a line per collection with a document count. Read them. A collection
-you know has content and that reports `0 docs` is the whole reason this step
-prints anything at all.
-
-The file it writes holds reservations, contact messages and newsletter
-addresses. It is guest data. `/content-export*.json` is in `.gitignore` and
-must stay there; move the file the way you would move a database backup, not
-by committing it and not through a chat app.
-
-## 3. Copy the media across
-
-The dump names the uploaded files. It does not contain them.
-
-```bash
-rsync -av /path/to/the/old/checkout/media/ /srv/beeshive-old-media/
-```
-
-Put that copy **somewhere other than the new checkout's `./media`**, and
-remember where — the import wants it as `MEDIA_IMPORT_DIR`. `scripts/README.md`
-explains at length why a directory that is both the source and the destination
-goes wrong in two different ways at once; the short version is that Payload
-writes its own uploads into `./media`, so using it as the source has the import
-reading files it is in the middle of writing.
-
-## 4. Bring up PostgreSQL
-
-On the new host, with `.env` filled in from `ops/README.md`:
-
-```bash
-docker compose build
-docker compose up -d postgres
-docker compose logs -f postgres      # wait for "database system is ready"
-```
-
-The first start runs `initdb`, which is why the healthcheck has a thirty-second
-grace period. You will also see a handful of `archive command failed` lines:
-that is pgBackRest complaining that the stanza does not exist yet, it clears in
-step 9, and it is the reason `init: true` is set on this service — the long
-comment in `docker-compose.yml` explains what happens without it.
-
-**The database has no published port, on purpose.** It is only on the stack's
-`internal` network, so nothing outside the stack can reach it — including the
-migrate and import scripts, which run from the host. For the length of this
-procedure, and only for that, publish it on the loopback address:
-
-```bash
-cat > docker-compose.override.yml <<'YAML'
-# TEMPORARY — for the migration only. Delete this file before you finish.
-services:
-  postgres:
-    ports:
-      - "127.0.0.1:5433:5432"
-YAML
-
-docker compose up -d postgres
-```
-
-Bound to `127.0.0.1` rather than to `0.0.0.0`, so it is reachable from a shell
-on this machine and from nowhere else. Deleting this file again is step 10, and
-it is on the checklist because it is exactly the kind of thing that stays
-behind for a year.
-
-## 5. Create the schema
-
-```bash
-export DATABASE_URI=postgresql://beeshive:<the password>@127.0.0.1:5433/beeshive
-export PAYLOAD_SECRET=<the one from .env>
-
-npm run migrate
-npm run migrate:status
-```
-
-`migrate:status` should show one row, `Ran: Yes`. In normal running nothing has
-to do this by hand — the container carries `prodMigrations` and Payload applies
-anything outstanding the moment it connects — but the import in the next step
-needs the tables to exist first, and doing it explicitly here means you find
-out about a broken migration now rather than from a container that will not
-start.
-
-## 6. Import the content
-
-```bash
-MEDIA_IMPORT_DIR=/srv/beeshive-old-media npm run db:import -- content-export.json
-```
-
-This takes a few minutes, most of it re-uploading photographs. It ends with two
-lists, both of which need reading rather than scrolling past:
-
-- **media that could not be re-uploaded.** A media document whose file was not
-  in `MEDIA_IMPORT_DIR` cannot be created at all, and everything that pointed
-  at it has lost the link. If this list is not empty, the media copy in step 3
-  was incomplete; fix it and start the import again from an empty database
-  rather than patching around it.
-- **every user account, with a new random password.** Keep this. Step 8 is
-  about it.
-
-Do not run the import twice against the same database. Nothing in a dumped
-document identifies it again once the ids have been remapped, so a second run
-gives you two of everything. Start from an empty database instead — drop it and
-go back to step 5.
-
-## 7. Prove it landed
-
-```bash
-npm run db:verify -- content-export.json
-```
-
-It re-exports the database and compares that against the dump, per document,
-per locale, per field, and exits non-zero if anything did not survive. A clean
-run ends with *"Everything in the dump came back out of the database
-unchanged"*.
-
-This step exists because the failure it catches is invisible. The English half
-of every document is written by a second update after the Dutch one, and when
-that goes wrong nothing breaks: the site serves the Dutch text under `/en`
-because Payload's locale fallback is doing its job, the pages render, and the
-first anyone hears of it is an owner editing something months later and seeing
-nothing change. `scripts/README.md` describes the two kinds of output that are
-expected rather than alarming.
-
-One thing follows immediately from having run the import and the verify at all,
-and it has to be done before the container goes into service: both scripts
-leave a marker in `payload_migrations` that stops Payload dead on start-up.
-**Read *When the container comes up healthy and serves nothing new*, below, and
-do what it says, now.** It is one `DELETE` and it takes a second.
-
-Skipping it no longer produces a site that answers every request and serves
-nothing from the CMS — `ops/preflight.mjs` refuses to start the container while
-that marker is there, and prints what to do about it. But it does produce a
-container that will not come up until you have done this, so you may as well do
-it here rather than in the middle of step 12.
-
-## 8. Where the photographs ended up
-
-With the four `R2_*` variables unset, which is the recommended arrangement, the
-import wrote every photograph into the `media-uploads` volume and the site
-serves them from this origin. They are backed up from there every night by the
-same container that backs up the database, so nothing else is needed;
-`docs/media-hosting.md` is the argument for doing it this way and
-`docs/backups.md` is what happens when something goes wrong.
-
-If the four `R2_*` variables were set in `.env` before step 6, the import
-uploaded every photograph straight into the bucket instead and the container is
-holding no files of its own.
-
-Either way, the thing to know is that **the two cannot be swapped afterwards.**
-Turning R2 on later does not move what is already on the volume: Payload writes
-new uploads to the bucket from that moment and goes on expecting the old ones
-from a disk the new configuration no longer believes in, and the result is a
-gallery that half loads. Decide before the import. If you have already imported
-and want to change your mind, the honest fix is to set the variables and run the
-import again from an empty database, with the same `MEDIA_IMPORT_DIR`.
-
-Either way, look at `/galerij` in a browser before you call it done. A missing
-photograph is obvious there and nowhere else.
-
-## 9. Reset the admin passwords
-
-Password hashes cannot cross over — the dump holds hashes and the Local API
-takes plaintext — so every account was created with a random password, and the
-import printed the list.
-
-The kind thing is not to hand those passwords out. Send each of the two owners
-to the login screen and have them use **Wachtwoord vergeten** once, which needs
-SMTP to be working; if it is not, that is a good reason to find out now rather
-than when the first reservation email fails to arrive. If mail is not ready,
-give them the random password from the import log over something that is not
-email and have them change it at the first login.
-
-Once the stack is up in the next step, log in yourself before you tell anyone
-else it is ready, and look at Site Instellingen. If the opening hours are `11:00 – 21:00` on Monday and `Gesloten`
-on Tuesday, look closely: those are also the values in `src/lib/payload.ts`
-that the site falls back to when it cannot read the CMS at all. The two are
-identical today and that is a coincidence, not a check.
-
-## 10. Backups, before you open the doors
-
-Not after. A cutover is the single most likely moment for the database to end
-up in a state somebody wants undone, and until there is one full backup in the
-bucket there is nothing to go back to.
-
-```bash
-docker compose up -d
-docker compose logs pgbackrest
-```
-
-The backup container creates the stanza itself on first start and runs a check,
-and you are looking for these two lines:
-
-```
-pgbackrest-scheduler: creating stanza beeshive
-pgbackrest-scheduler: check passed
-```
-
-By hand, if it did not, or after changing the repository:
-
-```bash
-docker compose exec pgbackrest pgbackrest --stanza=beeshive stanza-create
-docker compose exec pgbackrest pgbackrest --stanza=beeshive check
-```
-
-Then take the first full backup rather than waiting for 03:15:
-
-```bash
-ops/backup.sh full
-docker compose exec pgbackrest pgbackrest --stanza=beeshive info
-```
-
-`info` has to show a `full backup` entry with a recent timestamp, a
-`wal start/stop` range and a non-zero size. An empty list means the backups are
-failing silently, which is the state `docs/backups.md` was written about.
-
-The photographs are the other half, and they have their own repository in the
-same bucket. Take that one now too, rather than waiting for 04:30:
-
-```bash
-ops/backup-media.sh
-```
-
-It prints the snapshot it has just taken and then everything in the repository.
-One snapshot, with the number of files matching what step 7 imported, is what
-you want to see. If the `R2_*` variables are set the volume is empty by design,
-nothing is snapshotted, and the scheduler says so once in
-`docker compose logs pgbackrest`.
-
-While you are here, confirm that WAL archiving has started working now that the
-stanza exists — it fails independently of the backups, and it is the failure
-that ends with a full disk and a database that will not restart:
-
-```bash
-docker compose exec postgres psql -U beeshive -c \
-  "SELECT archived_count, failed_count, last_failed_time FROM pg_stat_archiver;"
-```
-
-`failed_count` will be non-zero from the minutes before the stanza existed.
-What matters is that `archived_count` is now climbing and `last_failed_time` is
-in the past.
-
-## 11. Tidy up, then let people in
-
-```bash
-rm docker-compose.override.yml
-docker compose up -d
-```
-
-The override was the only thing publishing the database port. Removing it and
-bringing the stack up again puts Postgres back where it belongs, on the
-internal network and nowhere else. Check:
-
-```bash
-docker compose ps                    # no 5433 against beeshive-postgres
-curl -I http://localhost:3100        # 200, straight from the container
-```
-
-Then point Nginx Proxy Manager at it, as the README's table describes, and take
-the maintenance page down.
-
-## 12. The warm-up, and which belt is doing the work
-
-Every frontend page carries `export const revalidate`, so `next build`
-prerenders all of them and reads the CMS while it does. Every one of those
-reads is wrapped in a try/catch falling back to the defaults in
-`src/lib/payload.ts`. Together that means **a build with no database in reach
-does not fail — it succeeds and bakes stock content into the image**, and after
-a deploy the first visitor to each URL gets that HTML while Next regenerates
-the page behind them. The second visitor gets the truth. The first one gets a
-restaurant that closes at a time it does not close at.
-
-There are two ways to deal with that and both are in the repository.
-
-**The build argument** (`DATABASE_URI`, in the Dockerfile's builder stage, wired
-to `BUILD_DATABASE_URI` in `docker-compose.yml`) lets the build reach a real
-database and prerender real pages, so the image is correct from its first byte.
-It is safe to point at production: Payload sets `NEXT_PHASE` during
-`next build`, and `src/payload.config.ts` turns both the dev schema push and
-`prodMigrations` off for that phase, so the build only ever reads.
-
-**The warm-up** (`ops/warm-up.sh`, started in the background by the container's
-`CMD`) asks the site for all seventeen public URLs twice, a few seconds apart,
-as soon as it starts listening — so that the stale first request is made by the
-container and not by a customer.
-
-**On this deployment it is the warm-up that is doing the work, and the build
-argument is left empty.** The reason is the one in step 4: the production
-cluster is deliberately not reachable from outside the stack's internal
-network, and a `docker compose build` on this host runs on a different network
-again, so there is no route from the build to the real content that does not
-involve opening the database up. That trade is not worth making for a second of
-first-render latency. The build argument is there for a CI pipeline with a
-database service beside it, or for a build against a restored copy, and if you
-ever set one up, `BUILD_DATABASE_URI` in `.env` is where it goes.
-
-So, after every `docker compose up -d`, read this:
-
-```bash
-docker compose logs beeshive | grep -E 'preflight|warm-up'
-```
-
-A healthy start looks like this — the preflight passes in one line before the
-server starts at all, the first pass finds the pages stale, which is the whole
-point, and the second finds nothing left:
-
-```
-preflight: geen dev-push-markering in payload_migrations. Doorstarten.
-warm-up: server answering after 11s
-warm-up: pass 1 (triggering): 17 requested, 0 did not answer 2xx/3xx, 16 still stale
-warm-up: pass 2 (verifying): 17 requested, 0 did not answer 2xx/3xx, 0 still stale
-warm-up: every page rendered against the live database. Nothing left stale.
-```
-
-Anything else is worth stopping for. Pages still stale after pass two mean the
-regeneration is not completing, and an `ALARM` line means the CMS never
-answered at all — see the next section, which is the fault that produces it.
-A `preflight: STOP` line means the container did not start, and the next
-section is that too.
-
-You can run either script again by hand at any time, and the warm-up is worth
-running after an import or after a large edit in the admin:
-
-```bash
-docker compose exec beeshive node /app/ops/preflight.mjs
-docker compose exec beeshive /app/ops/warm-up.sh
-```
-
-## When the container comes up healthy and serves nothing new
-
-This one has its own heading because for a long time everything about it looked
-fine. It cannot any more — `ops/preflight.mjs` now stops the container instead
-— but the fault is worth understanding, because the preflight's message assumes
-you know what it is talking about.
-
-Payload records a row named `dev` with batch `-1` in `payload_migrations`
-whenever it pushes the schema straight from the collections instead of running
-a migration — which is what it does whenever `NODE_ENV` is not `production`.
-**Every one of the `npm run db:*` scripts does this**, including the import in
-step 6 and the verify in step 7, because none of them sets `NODE_ENV`. So a
-database that has just been through this runbook has that row in it.
-
-What that row does to the production container is unpleasant. Payload sees it
-on connect, decides it is being asked to run migrations over a dev-pushed
-schema, and **stops on an interactive prompt**:
-
-```
-? It looks like you've run Payload in dev mode, meaning you've dynamically
-  pushed changes to your database.
-  If you'd like to run migrations, data loss will occur. Would you like to
-  proceed? › (y/N)
-```
-
-There is no terminal in a container, so nothing ever answers it. Next has
-already started, so the port is open and every prerendered page answers `200`
-from the HTML built into the image, forever. `docker compose ps` says healthy.
-The site looks up. Meanwhile every request that actually needs the CMS —
-`/api/availability`, `/api/reserve`, `/api/active-notifications`, the admin —
-hangs until the client gives up. The site takes no bookings and nothing in the
-log says so.
-
-### What stops it
-
-Three things, and they are worth telling apart.
-
-**`ops/preflight.mjs`, before the server starts.** It is the first thing the
-container's `CMD` runs. It connects to `DATABASE_URI`, looks for a row with
-batch `-1`, and if there is one it prints the explanation below in Dutch and
-exits non-zero — so the shell never reaches `node server.js`, the container
-goes down, and Docker restarts it into the same message. That is the point: a
-container that visibly will not start is a fault somebody fixes in five
-minutes. A container that is up and useless is one that goes unnoticed until an
-owner asks why the phone has stopped ringing.
-
-What you will see in `docker compose logs beeshive`:
-
-```
-preflight: STOP — deze database draagt een dev-push-markering ('dev').
-...
-```
-
-It is the *only* thing about that script allowed to keep the container down.
-A database it cannot reach, a `payload_migrations` table that does not exist
-yet, no `DATABASE_URI`, no `pg` in the image — every one of those prints its
-reason and exits 0. Refusing to start over a check that could not run would
-invent an outage rather than prevent one, and the application has its own
-reconnect loop besides. `PREFLIGHT=off` in `.env` skips it altogether.
-
-**`src/payload.config.ts`, if the preflight was skipped.** The adapter's own
-`migrate` is wrapped there, and refuses the same row with a one-paragraph Dutch
-message *when there is no TTY* — which is exactly the condition that makes the
-prompt fatal. Run `npm run migrate` in a real terminal and Payload asks its
-question as it always has. Run anything without one and this stops it in
-seconds rather than hanging forever. It exists for the run that went around the
-preflight: `PREFLIGHT=off`, a bare `node server.js`, `npm start` on a laptop.
-
-There is no supported flag for any of this, and it is worth writing down that
-we looked. In payload 3.10.0 `migrate` takes `{ migrations }` and nothing else
-(`payload/dist/database/types.d.ts`) and reads no environment variable;
-`forceAcceptWarning` exists but only on `migrateFresh` and `createMigration`,
-neither of which is on the `prodMigrations` path. Wrapping the adapter is what
-there is.
-
-**`ops/warm-up.sh`, after the server starts.** Unchanged, and still worth
-having. Its `ALARM` line is this fault seen from outside, and it is why it asks
-for `/api/active-notifications` before it asks for any page: the pages can all
-answer `200` without the CMS having been reached at all, and that one route
-cannot. It catches a Payload that is stuck for a reason nobody predicted, which
-is the half the preflight cannot cover.
-
-### Getting past it
-
-Delete the row, once, after the import and verify are finished and before you
-open the doors:
-
-```bash
-docker compose exec postgres psql -U beeshive -d beeshive -c \
-  "SELECT id, name, batch FROM payload_migrations ORDER BY id;"
-
-docker compose exec postgres psql -U beeshive -d beeshive -c \
-  "DELETE FROM payload_migrations WHERE batch = -1;"
-
-docker compose up -d beeshive
-```
-
-Keyed on the batch rather than on the name, because that is what Payload keys
-on — `migrationsInDB.find((m) => m.batch === -1)`. The row is called `dev` in
-practice, but a row with that batch under any other name stops the site just as
-dead and a `DELETE` written against the name would leave it sitting there.
-
-`restart: unless-stopped` means Docker is already restarting the container over
-and over while the row is there, backing off a little further each time, so the
-next attempt after the `DELETE` would eventually succeed on its own. `up -d` is
-how you stop waiting for it.
-
-Deleting it is safe in exactly this situation and not in general: it is safe
-here because the schema came from `npm run migrate` in step 5 and the migration
-row is still sitting above it, so the migrations and the tables genuinely do
-agree. If you ever find this row on a database whose schema you cannot account
-for, do not delete it — work out what pushed it first. The other way out is to
-accept the push and run `npm run migrate` by hand, from a checkout with the
-Payload CLI in it, in a terminal that can answer the question.
-
-You can ask the question without deploying anything:
-
-```bash
-docker compose exec beeshive node /app/ops/preflight.mjs
-```
-
-### Not creating it in the first place
-
-`npm run dev` against the production database is how this row gets written, so
-the config refuses that too: the dev schema push is now allowed only when
-`DATABASE_URI` names a database on this machine. Point it anywhere else and the
-push is skipped with a warning saying so. `ALLOW_REMOTE_SCHEMA_PUSH=true` is
-the way through for the developer who genuinely means it.
-
-That does not cover the `npm run db:*` scripts — they connect through Payload
-the same way and still push — which is why the runbook still ends with a
-`DELETE` and why the preflight exists.
-
-## If it goes wrong
-
-Nothing here is one-way until you point the proxy at the new host, so the
-rollback depends on how far you got.
-
-**Before step 11** — the old site is still there and still serving. Stop the
-new stack and think about it in the morning:
-
-```bash
-docker compose down
-```
-
-`down` on its own keeps the volumes. **`down -v` deletes the `pg-data` volume,
-which is the entire database**, and at this point in the procedure that is
-everything you have just imported.
-
-**After step 11, and the new site is wrong** — put the proxy back to the old
-host. That is one field in one Proxy Host, it takes ten seconds, and the old
-SQLite site has been running untouched all along. Anything written to the new
-site in the interval is stranded, which is a real cost and an argument for not
-announcing the cutover the moment it is done.
-
-**After step 11, and the database is wrong** — this is what step 10 was for.
-`docs/backups.md` has the three cases in the order you are likely to meet them;
-the shortest is
-
-```bash
-ops/restore.sh                                  # prints the plan, changes nothing
-ops/restore.sh --time "2026-08-01 12:00:00" --yes-really
-```
-
-**After step 11, and the photographs are wrong.** A separate command, and it
-does not touch the database:
-
-```bash
-ops/restore-media.sh                            # prints the plan, changes nothing
-ops/restore-media.sh --yes-really               # put missing files back
-ops/restore-media.sh --exact --yes-really       # make the volume match the snapshot
-```
-
-If both halves need putting back, restore the database first and then the
-photographs from the first snapshot taken *after* the database's target time.
-The reasoning is at the top of `ops/restore-media.sh` and in `docs/backups.md`,
-and the short version is that a file with no row is invisible while a row with
-no file is a broken image on the gallery.
-
-Run it once without `--yes-really` and read what it prints. That output is the
-entire safety mechanism, and a restore to a point in time discards everything
-written after it — including, on a restaurant's site, somebody's table for
-Saturday.
-
-**Do a dry run of the restore on a spare machine before you need it.** A backup
-that has never been restored is a hypothesis, and this is the paragraph that
-whoever wrote `docs/backups.md` would most like you to have read.
-
-## The list, without the prose
-
-For the second time you do this, or for reading over somebody's shoulder.
+## Before you start
+
+- **Write down the commit currently in production.** Portainer shows it on the
+  stack page under the Git settings. This is the rollback target: ten seconds
+  to record, a bad evening to reconstruct.
+- **Have the environment variables ready**, from the table below. Portainer
+  does not read `.env` from the repository and `.env` is gitignored anyway, so
+  nothing you have locally comes across. They go in the stack's own
+  **Environment variables** panel.
+- **Have the R2 bucket and its API token.** One bucket holds both halves of the
+  backup: pgBackRest under `/beeshive`, the photographs under `/media`.
+- **Have `PGBACKREST_CIPHER_PASS`.** It is the one value here that cannot be
+  reissued. It encrypts both backup repositories before anything leaves the
+  machine, and **losing it makes every backup in the bucket permanently
+  unreadable**. Generate it with `openssl rand -base64 48` and keep a copy
+  somewhere that is neither this server nor this repository. If this server
+  already had backups, use the same passphrase: a new one does not re-encrypt
+  anything, it only stops the old repository opening.
+
+A `$` in any value is eaten by Compose interpolation, so `abc$def` arrives as
+`abc`. Double it: `abc$$def`.
+
+### The variables
+
+Required. The stack does not work without these.
 
 | | |
 |---|---|
-| 1 | `.env` complete — R2 set *before* the import, cipher passphrase stored off this server |
-| 2 | Maintenance page up, or accept the write window |
-| 3 | `npx tsx scripts/export-content.ts content-export.json` on the old checkout |
-| 4 | `rsync` the old `media/` somewhere that is not the new `./media` |
-| 5 | `docker compose up -d postgres`, plus the temporary port override |
-| 6 | `npm run migrate` && `npm run migrate:status` |
-| 7 | `MEDIA_IMPORT_DIR=… npm run db:import -- content-export.json`, keep the password list |
-| 8 | `npm run db:verify -- content-export.json` |
-| 9 | `DELETE FROM payload_migrations WHERE batch = -1` — see the section on it; skipped, the preflight keeps the container down until you do |
-| 10 | `/galerij` in a browser: every photograph loads |
-| 11 | Owners reset their passwords through *Wachtwoord vergeten* |
-| 12 | `docker compose up -d`, stanza created, `ops/backup.sh full`, `info` shows it; `ops/backup-media.sh`, `snapshots` shows it |
-| 13 | `rm docker-compose.override.yml`, `docker compose up -d`, proxy over, page down |
-| 14 | `docker compose logs beeshive \| grep -E 'preflight\|warm-up'` — preflight clean, pass 2 clean, no ALARM |
+| `PAYLOAD_SECRET` | Sessions are signed with it. Use the value production already has, or every logged-in session is invalidated. |
+| `NEXT_PUBLIC_SITE_URL` | `https://debeeshive.nl`. Baked into the build, so changing it later means rebuilding. |
+| `HOST_PORT` | `3100`, and it has to match the Forward Port on the Nginx Proxy Manager entry. |
+| `POSTGRES_PASSWORD` | Set it now. `initdb` uses it on the very first start, and editing this variable afterwards does not change the cluster. |
+| `PGBACKREST_S3_BUCKET`, `PGBACKREST_S3_ENDPOINT`, `PGBACKREST_S3_KEY`, `PGBACKREST_S3_KEY_SECRET`, `PGBACKREST_CIPHER_PASS` | All five, or the backup container refuses to start and says so. A stack that silently takes no backups is worse than one that complains. |
+
+Worth setting: `TRUSTED_PROXY_HOPS=1`, correct behind one Nginx Proxy Manager
+(`docs/rate-limiting.md` says why the number matters); `POSTGRES_USER` and
+`POSTGRES_DB`, both defaulting to `beeshive`; the `SMTP_*` and `EMAIL_FROM`
+values when the credentials arrive.
+
+Leave empty: every `R2_*` variable. Uploads stay on the `media-uploads` volume
+and are snapshotted off it nightly. `docs/media-hosting.md` is why.
+
+Optional, all with sensible defaults: `BACKUP_HOUR`, `BACKUP_MINUTE`,
+`FULL_BACKUP_DOW`, `MEDIA_BACKUP_HOUR`, `MEDIA_BACKUP_MINUTE`, the four
+`MEDIA_KEEP_*` numbers, `PGBACKREST_STANZA`, `UMAMI_API_KEY`, `PREFLIGHT`,
+`WARMUP`, `BUILD_DATABASE_URI`.
+
+---
+
+## The steps
+
+Export before deploy. If the stack goes first, the app comes up against an
+empty PostgreSQL and starts taking bookings into a database with no menu in it,
+while the real data sits in `db-data` where nothing reads it any more.
+
+### 1. Record the rollback target (Portainer)
+
+Write down the commit the stack is deployed from. Confirm under **Networks**
+that `reverse-proxy` exists: it is external to this stack and the deploy fails
+without it.
+
+### 2. Take the site out of service (Nginx Proxy Manager)
+
+Point the `debeeshive.nl` Proxy Host at a maintenance page for the duration.
+Do it at the proxy rather than by stopping the container: a dead upstream gives
+a 502 that some phones cache with more enthusiasm than you would like. Anything
+written to the old site after step 3 is lost.
+
+### 3. Export the content and copy the photographs out (shell)
+
+```bash
+sudo mkdir -p /srv/beeshive-cutover && cd /srv/beeshive-cutover
+mkdir -p old-db old-media
+docker cp beeshive:/app/data/. ./old-db/
+docker cp beeshive:/app/media/. ./old-media/
+
+git clone <the repository url> export-checkout
+cd export-checkout
+git checkout c2ece7b
+npm ci
+
+DATABASE_URI=file:/srv/beeshive-cutover/old-db/database.db \
+  npx tsx scripts/export-content.ts /srv/beeshive-cutover/content-export.json
+```
+
+`c2ece7b` is the only commit carrying both the SQLite adapter and the export
+script, which is why this runs from a checkout of its own. The export prints a
+document count per collection: read them, and stop if something you know has
+content reports `0 docs`.
+
+`content-export.json` holds reservations, contact messages and newsletter
+addresses. Move it the way you would move a database backup.
+
+### 4. Set the environment variables (Portainer)
+
+Fill in the stack's **Environment variables** panel from the table above.
+
+### 5. Deploy the stack from the Git repository (Portainer)
+
+**Stacks -> Add stack -> Repository**, pointed at the repository and the branch,
+compose path `docker-compose.yml`. If the stack already exists, keep its name
+and redeploy it rather than creating a second one: the name is what keeps the
+photographs.
+
+```bash
+docker logs -f beeshive
+```
+
+The first deploy builds three images, and a Next build is the memory-hungriest
+thing that will happen on a small VPS all year, so if it is killed, that is why.
+You want the preflight passing, three migrations applied, and the warm-up
+finishing. The site is serving an empty database at this point, which is why
+the maintenance page is still up.
+
+### 6. Import the content (shell)
+
+The database has no published port on purpose: it is only on the stack's
+internal network, so reach it by its address on that network.
+
+```bash
+cd /srv/beeshive-cutover
+git clone <the repository url> import-checkout
+cd import-checkout
+git checkout <the branch you deployed>
+npm ci
+
+PG_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' beeshive-postgres)
+export DATABASE_URI="postgresql://beeshive:<POSTGRES_PASSWORD>@${PG_IP}:5432/beeshive"
+export PAYLOAD_SECRET=<the same one the stack has>
+
+npm run migrate:status
+```
+
+`migrate:status` must list the three migrations with `Ran: Yes`. That proves
+the address works and the container has already built the schema, and it is
+where a broken migration shows up rather than in the middle of the import.
+
+```bash
+MEDIA_IMPORT_DIR=/srv/beeshive-cutover/old-media \
+  npm run db:import -- /srv/beeshive-cutover/content-export.json
+```
+
+A few minutes, most of it re-uploading photographs. It ends with two lists that
+need reading: **media that could not be re-uploaded** (a non-empty list means
+the copy in step 3 was incomplete, so fix it and import again from an empty
+database) and **every user account with a new random password** (keep it, step
+10 is about it).
+
+Do not run the import twice against the same database. Ids are remapped on the
+way in, so nothing identifies a document again and a second run gives you two
+of everything.
+
+### 7. Verify the import (shell)
+
+```bash
+npm run db:verify -- /srv/beeshive-cutover/content-export.json
+```
+
+It re-exports the database and compares it against the dump per document, per
+locale, per field, and exits non-zero if anything did not survive. A clean run
+ends with *"Everything in the dump came back out of the database unchanged"*.
+This exists because the failure it catches is invisible: a missing English half
+is served as Dutch by Payload's locale fallback, and the first anyone hears of
+it is an owner editing something months later and seeing nothing change.
+
+### 8. Put the photographs into the media volume (shell)
+
+The import ran on the host, so Payload wrote the files into this checkout's own
+`media/` directory rather than into the container's volume.
+
+```bash
+docker cp /srv/beeshive-cutover/import-checkout/media/. beeshive:/app/media/
+```
+
+### 9. Clear the dev-push marker, then restart and warm up (shell)
+
+```bash
+docker exec beeshive-postgres psql -U beeshive -d beeshive -c \
+  "SELECT id, name, batch FROM payload_migrations ORDER BY id;"
+
+docker exec beeshive-postgres psql -U beeshive -d beeshive -c \
+  "DELETE FROM payload_migrations WHERE batch = -1;"
+
+docker restart beeshive
+docker exec beeshive /app/ops/warm-up.sh
+```
+
+A row with batch `-1` stops the container dead, and *When the container comes
+up healthy and serves nothing new*, below, says why and when deleting it is
+safe. The warm-up has to run again whether or not there was a row, because the
+content arrived after the pages were rendered.
+
+### 10. Reset the owners' passwords, and look at the site (browser)
+
+Password hashes cannot cross over, so every account was created with a random
+password and the import printed the list. Do not hand those out: send each
+owner to the login screen and have them use **Wachtwoord vergeten** once, which
+needs SMTP to be working. If mail is not ready, give them the random password
+over something that is not email and have them change it at first login.
+
+Log in yourself first and open `/galerij`. A missing photograph is obvious
+there and nowhere else.
+
+### 11. Take the first backups, before anyone is let in (shell)
+
+Not after. A cutover is the most likely moment for the database to end up in a
+state somebody wants undone, and until there is one full backup in the bucket
+there is nothing to go back to.
+
+```bash
+docker logs beeshive-pgbackrest | grep pgbackrest-scheduler
+
+docker exec beeshive-pgbackrest pgbackrest --stanza=beeshive --type=full backup
+docker exec beeshive-pgbackrest pgbackrest --stanza=beeshive info
+
+docker exec beeshive-pgbackrest restic backup /uploads
+docker exec beeshive-pgbackrest restic snapshots
+```
+
+The scheduler creates the stanza itself on first start. If it did not, or after
+changing the repository:
+
+```bash
+docker exec beeshive-pgbackrest pgbackrest --stanza=beeshive stanza-create
+docker exec beeshive-pgbackrest pgbackrest --stanza=beeshive check
+```
+
+### 12. Let people in (Nginx Proxy Manager)
+
+Put the `debeeshive.nl` Proxy Host back, forwarding to the host on `3100`, and
+take the maintenance page down. Leave `db-data` where it is for a week or two:
+it still holds the SQLite database and it is the only copy of the old site
+there is.
+
+---
+
+## How to tell it worked
+
+- `docker logs beeshive | grep -E 'preflight|warm-up'` ends with
+  `preflight: geen dev-push-markering in payload_migrations. Doorstarten.` and
+  `warm-up: every page rendered against the live database. Nothing left stale.`
+  A page still stale after pass two means the regeneration is not completing;
+  an `ALARM` line means the CMS never answered at all.
+- `docker exec beeshive-pgbackrest pgbackrest --stanza=beeshive info` shows a
+  `full backup` entry with a recent timestamp, a WAL start/stop range and a
+  non-zero size. An empty list means the backups are failing silently.
+- `docker exec beeshive-pgbackrest restic snapshots` lists one snapshot, with a
+  file count matching what step 6 imported.
+- `docker exec beeshive-postgres psql -U beeshive -c "SELECT archived_count, failed_count, last_failed_time FROM pg_stat_archiver;"`
+  shows `archived_count` climbing. `failed_count` is non-zero from the minutes
+  before the stanza existed; what matters is that `last_failed_time` is in the
+  past.
+- `curl -I http://localhost:3100` answers 200 straight from the container.
+- `/galerij` in a browser: every photograph loads. Site Instellingen holds the
+  real opening hours, not the fallbacks in `src/lib/payload.ts`.
+
+## Rollback
+
+Nothing is one-way until step 12. Portainer redeploys whatever the stack's Git
+reference points at, so the rollback is to make that reference point at the
+commit from step 1 again (move the branch, or tag the commit and change the
+reference), then pull and redeploy, and put the Proxy Host back at the same
+time. `db-data` still holds the SQLite database and `media-uploads` is the same
+volume it always was, so the old site comes back as it left.
+
+Do not run `docker compose down -v` and do not delete `pg-data`: that is the
+entire new database. If the site is up and the data is wrong, that is what step
+11 was for, and `docs/backups.md` has the restore in the order you will meet it.
+
+---
+
+## The traps
+
+### When the container comes up healthy and serves nothing new
+
+Payload writes a row named `dev` with batch `-1` into `payload_migrations`
+whenever it pushes the schema straight from the collections instead of running
+a migration, which is what it does whenever `NODE_ENV` is not `production`. The
+`npm run db:*` scripts all qualify. On the next connect Payload sees the row and
+stops on an interactive prompt asking whether to migrate anyway, and nothing in
+a container answers it. Next has already bound the port, so every prerendered
+page goes on answering 200 with the HTML built into the image and `docker ps`
+says healthy, while reservations, the contact form, the notification bar and
+the admin all hang. The site looks up and takes no bookings.
+
+`ops/preflight.mjs` runs before the server and refuses to start it while that
+row is there, so the fault is now a container that visibly will not start.
+Deleting the row is safe when the schema came from the migrations and the
+migration rows are still above it, which is the case in step 9. It is not safe
+on a database whose schema you cannot account for: work out what pushed it
+first. `ops/warm-up.sh` is the second belt, and its `ALARM` line is this fault
+seen from outside.
+
+### A stack pasted into the web editor
+
+The compose file builds two images out of the repository (`./ops/postgres`,
+`./ops/pgbackrest`) and bind-mounts two config files from it
+(`ops/postgres/postgresql.conf`, `ops/pgbackrest/pgbackrest.conf`). A stack
+pasted into Portainer's editor is written to a directory holding the compose
+file and nothing else, so those paths resolve to nothing: the builds fail, or
+Docker creates empty directories where the config files should be and
+PostgreSQL starts without WAL archiving. Deploy from **Repository**.
+
+### `PAYLOAD_SECRET` unset
+
+The container starts, logs `Ready`, and returns 500 for every request, because
+the config throws on first use rather than at boot. It looks like a healthy
+container in front of a broken site.
+
+### The media volume is only reused if the stack name is unchanged
+
+Portainer prefixes volumes with the stack name, so `media-uploads` is really
+`beeshive_media-uploads`. The photographs are in that volume and the new stack
+uses the same name, so they carry across as long as you redeploy the existing
+stack. A new stack with a new name gets new, empty volumes and the site loses
+every uploaded image.
+
+### The export only runs from `c2ece7b`
+
+The branch you are deploying cannot read SQLite: `src/payload.config.ts` names
+only `postgresAdapter` and `@payloadcms/db-sqlite` has been removed from
+`package.json`. `c2ece7b` is the one commit carrying both the SQLite adapter and
+`scripts/export-content.ts`.
+
+### The volume and R2 cannot be swapped afterwards
+
+With the four `R2_*` variables unset, which is what this deployment does, the
+import wrote every photograph to the `media-uploads` volume. Setting them later
+does not move what is already there, and the result is a gallery that half
+loads. `docs/media-hosting.md` has the argument and the fix.
+
+---
+
+## The longer reasoning
+
+None of this changes what you type, which is why it is down here.
+
+**Why the warm-up exists.** Every frontend page carries
+`export const revalidate`, so `next build` prerenders all of them and reads the
+CMS while it does, and every one of those reads falls back to the defaults in
+`src/lib/payload.ts`. A build with no database in reach therefore does not fail:
+it succeeds and bakes stock content into the image, and the first visitor to
+each URL after a deploy gets that HTML while Next regenerates the page behind
+them. `ops/warm-up.sh` makes the container be that first visitor, asking for all
+seventeen public URLs twice. The alternative belt is `BUILD_DATABASE_URI`, which
+lets the build prerender the real thing; it is empty here because the production
+cluster is deliberately unreachable from the build network, and opening it up is
+not worth a second of first-render latency. README.md has the fuller version.
+
+**Why step 6 uses a container address.** The database is only on the stack's
+`internal` network. A side effect worth knowing: because that address is not
+local, `src/payload.config.ts` refuses the dev schema push and prints a warning
+saying so. The warning is expected, and it is why step 9 usually finds no marker
+to delete.
+
+**Why one passphrase and not two.** Both repositories, the database's and the
+photographs', are encrypted with `PGBACKREST_CIPHER_PASS`. Two passphrases means
+the one nobody wrote down is the one you need at two in the morning.
+
+**Do a dry run of the restore on a spare machine before you need it.** A backup
+that has never been restored is a hypothesis. `docs/backups.md` is the document
+that would most like you to have read this sentence.

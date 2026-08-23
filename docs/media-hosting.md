@@ -177,8 +177,9 @@ One trap in step 2, and it is the reason to decide before there are hundreds of
 photographs rather than after: **turning R2 on does not move the files that are
 already on the volume.** Payload writes new uploads to the bucket from that
 moment and goes on expecting the old ones somewhere it no longer looks, and the
-result is a gallery that half loads. `DEPLOY.md` has the fix, which is an import
-from an empty database with the bucket configured first.
+result is a gallery that half loads. The only clean fix is to set the four
+variables first and run the content import again from an empty database, so
+that every upload goes to the bucket on the way in.
 
 ## Where each value comes from
 
