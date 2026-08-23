@@ -244,9 +244,9 @@ export function HomeClient({ locale, settings: s, today }: Props) {
 
         <m.div
           style={{ opacity: heroOpacity, y: heroY }}
-          className="relative z-10 w-full px-6 pb-20 pt-28 md:px-12 md:pb-24 md:pt-32 lg:px-20 lg:pt-36"
+          className="relative z-10 w-full px-6 pb-20 pt-24 md:px-12 md:pb-24 md:pt-28 lg:px-20 lg:pt-32"
         >
-          {/* A column below xl so the photographs can be dealt in above the
+          {/* A column below xl, so the photographs can be ordered against the
               buttons; the old block layout again from xl up, where the strip
               leaves the flow for the right margin and the order stops
               mattering. */}
@@ -304,22 +304,21 @@ export function HomeClient({ locale, settings: s, today }: Props) {
                 the space over the column and the strip has a full 535 points
                 to fall through before the sheet is torn off at the bottom.
 
-                On a phone it now comes before the buttons rather than after
-                them. It used to be the last thing on a very tall hero, which
-                meant the one part of this page that shows what the place
-                actually looks like was two screens down. With the name lifted
-                into the header there is room for it to land inside the first
-                screen, which is where it earns its keep.
+                On a phone it sits under the buttons, which is what `order-last`
+                is doing: the two calls to action are the point of the page and
+                the photographs are the argument for them, so the argument
+                comes second. It spent a while above them and it read as a
+                gallery with some links underneath. At xl the parent is a block
+                again and `order` is inert, so the strip goes back to hanging
+                in the right margin and nothing here applies.
 
-                Landing inside the first screen also makes it the largest
-                thing there, so it is what Chrome now times the page by, and
-                .hero-rise rather than framer-motion for the same reason the
-                subtitle is: the same 16 points of travel, the same settle,
-                the same half second behind it, but painted straight out of
-                the server's HTML rather than held at opacity 0 until an
-                animation library has downloaded and hydrated. */}
+                .hero-rise rather than framer-motion, for the same reason the
+                subtitle is: the same 16 points of travel, the same settle, the
+                same half second behind it, but painted straight out of the
+                server's HTML rather than held at opacity 0 until an animation
+                library has downloaded and hydrated. */}
             <div
-              className="hero-rise mt-9 [--rise-delay:0.5s] [--rise-duration:1.1s] [--rise-travel:16px] xl:absolute xl:-top-20 xl:right-2 xl:mt-0"
+              className="hero-rise order-last mt-9 [--rise-delay:0.5s] [--rise-duration:1.1s] [--rise-travel:16px] xl:absolute xl:-top-20 xl:right-2 xl:mt-0"
             >
               <StampStrip
                 panels={panels}

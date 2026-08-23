@@ -26,7 +26,7 @@ import { LogoSvg } from "@/components/LogoSvg";
  */
 export function HeroLockup({ siteName }: { siteName: string }) {
   return (
-    <div className="mb-9 flex flex-col items-start">
+    <div className="mb-8 flex flex-col items-start md:mb-9">
       {/* The crest arrives first and the name a beat later, which is the order
           you would draw them in. Both are CSS keyframes rather than an
           animation library: this is a fade and a small lift on first paint,
@@ -38,7 +38,7 @@ export function HeroLockup({ siteName }: { siteName: string }) {
       >
         <LogoSvg
           fill="#422810"
-          className="h-auto w-[7.5rem] sm:w-[9rem] md:w-[11rem] lg:w-[13rem]"
+          className="h-auto w-[10rem] sm:w-[12rem] md:w-[14rem] lg:w-[18rem]"
         />
       </div>
 

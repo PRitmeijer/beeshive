@@ -207,7 +207,15 @@ export function Navigation({
         />
 
         {/* Desktop Nav */}
-        <ul className="hidden md:flex items-center gap-8">
+        {/* The bar switches to the hamburger below xl, not below md.
+            Seven links, a language switch and a filled button do not fit a
+            tablet: at 768 the row overflowed its own container and the last
+            items ran under the reserve button, and Evenementen is the one that
+            broke it. Measured at the label's own size, 11px uppercase with
+            0.22em tracking, the row wants about 1,070 points before padding,
+            which no breakpoint under xl has to give. `gap-6` up to 2xl buys
+            the last of the headroom at exactly 1280. */}
+        <ul className="hidden xl:flex items-center gap-6 2xl:gap-8">
           {navLinks.map((link) => {
             const active = isActive(link.href);
             return (
@@ -263,7 +271,7 @@ export function Navigation({
         {/* Mobile Toggle */}
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="md:hidden relative z-50 w-10 h-10 flex flex-col items-center justify-center gap-1.5"
+          className="xl:hidden relative z-50 w-10 h-10 flex flex-col items-center justify-center gap-1.5"
           aria-label={t.nav.menuToggle}
           aria-expanded={isOpen}
         >
@@ -296,7 +304,7 @@ export function Navigation({
               animate={{ opacity: 1, x: 0 }}
               exit={reduce ? { opacity: 0 } : { opacity: 0, x: "100%" }}
               transition={{ duration: 0.6, ease: SETTLE }}
-              className="fixed inset-0 z-40 md:hidden"
+              className="fixed inset-0 z-40 xl:hidden"
             >
               <TornEdge
                 color="#E8E2D4"

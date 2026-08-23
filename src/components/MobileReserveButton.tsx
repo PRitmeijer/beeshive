@@ -82,7 +82,7 @@ const squareClass =
   "fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom))] right-5 z-40 flex h-14 w-14 items-center justify-center " +
   "rounded-[3px] bg-hive-700 text-paper shadow-[0_8px_20px_rgba(51,30,12,0.34)] " +
   "ring-1 ring-honey-200/25 transition-colors duration-300 ease-settle " +
-  "hover:bg-hive-800 active:translate-y-px md:hidden";
+  "hover:bg-hive-800 active:translate-y-px xl:hidden";
 
 export function MobileReserveButton({
   locale,
@@ -182,7 +182,7 @@ export function MobileReserveButton({
 
       <AnimatePresence>
         {open && (
-          <div className="fixed inset-0 z-50 flex items-end md:hidden">
+          <div className="fixed inset-0 z-50 flex items-end xl:hidden">
             <m.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
