@@ -7,6 +7,11 @@ import { describe, todayInAmsterdam } from "@/lib/openingHours";
 // concept is exactly what they are looking for, so the rows are fetched here
 // and only the expansion is borrowed.
 import { expandOccurrences, type EventDoc } from "@/lib/events";
+import {
+  historyForMany,
+  type GuestVisitHistory,
+  type HistorySubject,
+} from "@/lib/guestHistory";
 import { getUmamiStats } from "@/lib/umamiServer";
 import { defaultLocale } from "@/i18n/config";
 import type {
@@ -25,13 +30,22 @@ import type {
  * in. That check is not a formality here: Payload treats a custom admin view as
  * a public route (see isCustomAdminView in @payloadcms/next), so nothing above
  * this line has already established that there is a session — the view guards
- * itself and so does this.
+ * itself and so does this. Nothing is read, counted or looked up before that
+ * answer comes back, and the four sentences this file can reply with are fixed
+ * Dutch strings: a caller who is refused learns nothing about who ate here,
+ * and a caller who trips a bug gets the same sentence whatever broke.
  *
  * It answers three questions at once because the calendar asks all three about
  * the same window and one round trip on a phone by the bed is worth more than
  * three tidy endpoints: what the doors do that day, which tables are booked,
  * and what is on. A single-day window additionally carries the "Vandaag" panel:
  * the counters that only mean anything for one date at a time.
+ *
+ * Since every booking now also says whether the guest has eaten here before,
+ * the answer carries a second kind of secret: not just tonight's names, but the
+ * fact that a name has been here five times since 2023. That is the same
+ * session's business as the names themselves, which is why it rides along on
+ * this endpoint rather than getting one of its own — one guard, one refusal.
  *
  * The window is capped. A month view asks for about six weeks, the week view
  * for seven days; anything past four months is a caller with a bug in it, and
@@ -120,6 +134,67 @@ function amsterdamDayWindow(isoDate: string): { start: string; end: string } {
     start: new Date(start).toISOString(),
     end: new Date(start + DAY_MS - 1).toISOString(),
   };
+}
+
+/** A reservation as the database keeps it, before the calendar reshapes it. */
+interface ReservationRow {
+  id: unknown;
+  name?: string | null;
+  email?: string | null;
+  date?: string | null;
+  time?: string | null;
+  guests?: number | null;
+  status?: string | null;
+  notes?: string | null;
+  phone?: string | null;
+}
+
+/**
+ * "Zijn ze hier eerder geweest?", asked once for the whole window.
+ *
+ * The question the owners actually have at half past five is whether the table
+ * at seven needs the tour — what the place is, how the kitchen works, that the
+ * quiz is on Thursday — or whether it is Mieke again and the right thing is to
+ * say so. src/lib/guestHistory.ts knows the answer; the only thing that matters
+ * here is that it is asked in one breath. A month is six weeks of bookings, and
+ * a lookup per booking would turn opening the calendar into forty round trips
+ * to Postgres on a phone connection.
+ *
+ * Rows with neither an e-mail address nor a telephone number are left out
+ * rather than sent along, because "we found nothing" and "there was nothing to
+ * look for" are different answers and only the first one may be shown to an
+ * owner as "eerste bezoek". Both fields are required on the form, so in
+ * practice this only skips the odd row typed in by hand.
+ *
+ * And the whole thing is allowed to fail quietly. The history is the pleasant
+ * extra; the names, the times and the covers are the reason the page exists,
+ * and an evening service should not lose them because a query about 2023 fell
+ * over. What the owners see then is the calendar exactly as it was last week,
+ * with no marks on it.
+ */
+async function guestHistory(
+  payload: Awaited<ReturnType<typeof getPayloadClient>>,
+  rows: ReservationRow[],
+): Promise<Map<string | number, GuestVisitHistory>> {
+  const subjects: HistorySubject[] = rows
+    .filter((row) => row.email || row.phone)
+    .map((row) => ({
+      // Stringified on the way in so the map can be read with the same key on
+      // the way out, whatever type the database hands ids back as.
+      id: String(row.id),
+      email: row.email ?? null,
+      phone: row.phone ?? null,
+      date: String(row.date ?? "").slice(0, 10) || null,
+    }));
+
+  if (subjects.length === 0) return new Map();
+
+  try {
+    return await historyForMany(subjects, payload);
+  } catch (error) {
+    console.error("gastgeschiedenis kon niet worden opgehaald", error);
+    return new Map();
+  }
 }
 
 /**
@@ -235,18 +310,10 @@ export async function GET(request: NextRequest) {
       exceptionId: exceptionIdByDate.get(day.date) ?? null,
     }));
 
-    const reservations: AgendaReservation[] = (
-      reservationDocs.docs as {
-        id: unknown;
-        name?: string | null;
-        date?: string | null;
-        time?: string | null;
-        guests?: number | null;
-        status?: string | null;
-        notes?: string | null;
-        phone?: string | null;
-      }[]
-    ).map((doc) => ({
+    const reservationRows = reservationDocs.docs as ReservationRow[];
+    const history = await guestHistory(payload, reservationRows);
+
+    const reservations: AgendaReservation[] = reservationRows.map((doc) => ({
       id: String(doc.id),
       date: String(doc.date ?? "").slice(0, 10),
       time: doc.time || "",
@@ -255,6 +322,7 @@ export async function GET(request: NextRequest) {
       status: doc.status || "nieuw",
       notes: doc.notes || null,
       phone: doc.phone || null,
+      history: history.get(String(doc.id)) ?? null,
     }));
 
     // The events come back as occurrences rather than as documents: a weekly

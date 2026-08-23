@@ -5,6 +5,7 @@ import {
   coversOf,
   DayBand,
   ErrorLine,
+  firstTimersOf,
   Loading,
   useAdminRoutes,
   useAgenda,
@@ -27,6 +28,14 @@ import styles from "./agenda.module.scss";
  * whole weeks; the days on either end that belong to a neighbouring month are
  * dimmed rather than left out, because a Monday hole at the top of a calendar
  * reads as a bug.
+ *
+ * That is also why the guests who have never been here before are counted
+ * rather than marked. The day and the week put a "1e bezoek" on the booking
+ * itself, which is the right thing where you can read a name beside it; forty
+ * cells of little badges would be a rash, and nobody plans a month around one
+ * table anyway. What a month is good for is noticing that the last two weeks
+ * brought hardly any new faces, or that the Thursday after the quiz night
+ * brought six — so the cell carries one number and the day view has the names.
  */
 export function AgendaMonth({ from, to, date, today }: AgendaModeProps) {
   const { data, error, loading, reload } = useAgenda(from, to);
@@ -59,6 +68,7 @@ export function AgendaMonth({ from, to, date, today }: AgendaModeProps) {
             );
             const events = data.events.filter((e) => e.date === day.date);
             const covers = coversOf(reservations);
+            const firstTimers = firstTimersOf(reservations);
 
             return (
               <div
@@ -85,6 +95,19 @@ export function AgendaMonth({ from, to, date, today }: AgendaModeProps) {
                 {reservations.length > 0 ? (
                   <p className={styles.monthCount}>
                     {reservations.length}× · {covers}p
+                  </p>
+                ) : null}
+
+                {firstTimers > 0 ? (
+                  <p
+                    className={styles.monthFirst}
+                    title={
+                      firstTimers === 1
+                        ? "Eén tafel is hier voor het eerst — open de dag voor de naam."
+                        : `${firstTimers} tafels zijn hier voor het eerst — open de dag voor de namen.`
+                    }
+                  >
+                    {firstTimers}× 1e bezoek
                   </p>
                 ) : null}
 

@@ -2,6 +2,16 @@ import type { CollectionConfig, Payload } from "payload";
 import { siteUrl } from "@/i18n/config";
 import { outboundEmailFields, sendOnChange } from "@/lib/outboundEmail";
 import { newGuestToken } from "@/lib/guestToken";
+/*
+ * Safe to import from here, and deliberately so. The cycle this file already
+ * documents further down runs guestPass -> @/lib/payload -> the config -> this
+ * file, and it exists because those modules fetch a Payload instance of their
+ * own. @/lib/guestHistory does not: it is handed one, which is what the two
+ * exported functions take as their second argument, so its only imports are a
+ * type from the `payload` package and @/lib/openingHours, which imports
+ * nothing at all. Nothing here reaches back round to the config.
+ */
+import { historyFor } from "@/lib/guestHistory";
 
 /**
  * Reservation requests coming in from the public form.
@@ -47,6 +57,43 @@ async function ownersAddress(payload: Payload): Promise<string> {
 
 /** The stored date is midday UTC; the owners only ever want the day itself. */
 const dayOf = (value?: string | null) => (value ? String(value).slice(0, 10) : "-");
+
+/**
+ * The one sentence the notification mail carries about the guest themselves.
+ *
+ * Every failure mode gets its own wording rather than being folded into "eerste
+ * bezoek", because that sentence is acted on: somebody walks to the table and
+ * starts explaining the place. "We could not look it up" and "there is nothing
+ * to look up" both have to survive the trip to the inbox as themselves, or the
+ * mail quietly turns a doubt into an instruction.
+ *
+ * The date is left as a plain YYYY-MM-DD to match the `Datum:` line three rows
+ * above it; the sidebar badge in the admin is where it is spelled out in Dutch,
+ * because that is read rather than scanned.
+ */
+async function visitLine(doc: Reservation, payload: Payload): Promise<string> {
+  if (!doc.email?.trim() && !doc.phone?.trim()) {
+    return "niet na te gaan, er staat geen e-mailadres en geen telefoonnummer bij";
+  }
+  try {
+    const history = await historyFor(
+      { id: doc.id, email: doc.email, phone: doc.phone, date: doc.date },
+      payload,
+    );
+    if (history.isFirstTime) {
+      return "nee, dit is de eerste keer - leg het concept even uit";
+    }
+    const before = history.lastVisit ? `, de vorige keer was ${history.lastVisit}` : "";
+    const how =
+      history.matchedOn === "phone" ? " (herkend aan het telefoonnummer)" : "";
+    return `ja, dit wordt bezoek ${history.priorVisits + 1}${before}${how}`;
+  } catch (error) {
+    // Never worth losing the whole notification over. The booking is the point
+    // of this mail; the greeting is a courtesy on top of it.
+    console.error("guest history unavailable for reservation mail", error);
+    return "niet opgezocht, de eerdere reserveringen waren even niet te lezen";
+  }
+}
 
 export const Reservations: CollectionConfig = {
   slug: "reservations",
@@ -98,7 +145,7 @@ export const Reservations: CollectionConfig = {
           doc.email ? `${doc.name ?? doc.email} <${doc.email}>` : undefined,
         subject: (doc) =>
           `Reserveringsaanvraag: ${doc.name ?? "onbekend"}, ${dayOf(doc.date)} om ${doc.time ?? "-"} (${doc.guests ?? "?"}p)`,
-        body: (doc) =>
+        body: async (doc, payload) =>
           [
             `Naam:        ${doc.name || "-"}`,
             `E-mail:      ${doc.email || "-"}`,
@@ -107,6 +154,10 @@ export const Reservations: CollectionConfig = {
             `Tijd:        ${doc.time || "-"}`,
             `Personen:    ${doc.guests ?? "-"}`,
             `Gelegenheid: ${doc.occasion || "-"}`,
+            // The owners read this mail long before they open the admin, and
+            // on a busy evening they may never open it at all — so the one
+            // thing the sidebar badge exists to tell them is said here too.
+            `Eerder hier: ${await visitLine(doc, payload)}`,
             "",
             "Opmerkingen:",
             doc.notes || "-",
@@ -241,6 +292,19 @@ export const Reservations: CollectionConfig = {
       },
     },
     {
+      name: "guestNote",
+      label: "Bericht aan het gezelschap",
+      type: "textarea",
+      maxLength: 500,
+      // Not localized, unlike everything on the public site: this is one line
+      // written by hand to one party, and the owners know which language that
+      // party speaks better than a translation tab does.
+      admin: {
+        description:
+          "Komt op de gedeelde gastenpagina te staan, dus iedereen die de link krijgt leest dit mee. Schrijf het aan het gezelschap zelf, bijvoorbeeld: \"we houden de grote tafel bij het raam voor jullie vrij\". Laat leeg als er niets te melden is.",
+      },
+    },
+    {
       name: "occasion",
       label: "Gelegenheid (oud veld)",
       type: "text",
@@ -302,7 +366,38 @@ export const Reservations: CollectionConfig = {
           label: "Drinken",
           type: "text",
         },
+        {
+          name: "note",
+          label: "Opmerking",
+          type: "textarea",
+          maxLength: 300,
+          admin: {
+            description:
+              "Wat deze persoon zelf nog kwijt wilde. Wordt door de gast ingevuld op de gastenpagina, net als de rest van deze regel.",
+          },
+        },
       ],
+    },
+    {
+      /**
+       * "Eerste bezoek" or "Welkom terug", at the top of the sidebar.
+       *
+       * A `ui` field stores nothing and adds no column: it is a place to hang a
+       * component, and everything it shows is worked out at render time from
+       * the reservations that are already there. See
+       * src/components/admin/GuestHistory.tsx for why the component is a server
+       * one, and src/lib/guestHistory.ts for why that matters.
+       *
+       * First in the sidebar on purpose. It is the thing the owners open a
+       * booking to find out, and by the time they have scrolled past the status
+       * and the mail bookkeeping they have already decided what to say.
+       */
+      name: "guestHistory",
+      type: "ui",
+      admin: {
+        position: "sidebar",
+        components: { Field: "@/components/admin/GuestHistory#GuestHistory" },
+      },
     },
     {
       name: "status",

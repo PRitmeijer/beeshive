@@ -72,6 +72,7 @@ interface Remembered {
   name: string;
   dietary: string[];
   drinks: string[];
+  note: string;
 }
 
 const EMPTY: Remembered = {
@@ -79,6 +80,7 @@ const EMPTY: Remembered = {
   name: "",
   dietary: [],
   drinks: [],
+  note: "",
 };
 
 /** Same letterpress rule as every other field on the site. */
@@ -216,6 +218,9 @@ export function GuestPassClient({
         name: parsed.name,
         dietary: Array.isArray(parsed.dietary) ? parsed.dietary : [],
         drinks: Array.isArray(parsed.drinks) ? parsed.drinks : [],
+        // Absent in anything an older version of this page wrote, which is
+        // why it is read defensively rather than trusted to be a string.
+        note: typeof parsed.note === "string" ? parsed.note : "",
       };
       setRemembered(saved);
       setDraft(saved);
@@ -255,6 +260,7 @@ export function GuestPassClient({
         : undefined;
     if (code === "full") return t.full;
     if (code === "nameRequired") return t.nameRequired;
+    if (code === "noteNoContact") return t.noteNoContact;
     return t.error;
   };
 
@@ -276,6 +282,7 @@ export function GuestPassClient({
           name: draft.name,
           dietary: draft.dietary,
           drinks: draft.drinks,
+          note: draft.note,
         }),
       });
       const data = (await res.json().catch(() => null)) as {
@@ -292,6 +299,9 @@ export function GuestPassClient({
       const saved: Remembered = {
         ...draft,
         name: draft.name.trim(),
+        // Trimmed here too, so a box that held nothing but a stray newline
+        // does not come back looking like an answer on the next visit.
+        note: draft.note.trim(),
         responseKey: data?.responseKey ?? draft.responseKey ?? null,
       };
       setResponses(data?.responses ?? responses);
@@ -408,6 +418,24 @@ export function GuestPassClient({
                   <dd className="menu-price">{view.firstName}</dd>
                 </div>
               </dl>
+
+              {/* Outside the <dl> on purpose. Everything above is a field with
+                  a value, read at a glance; this is a sentence somebody wrote
+                  by hand, so it gets the display face, the width of a line of
+                  prose and its own rule above it, and it reads as the house
+                  saying something rather than as one more row of data. When
+                  there is no note there is nothing here at all — not a heading
+                  over an empty space. */}
+              {view.houseNote ? (
+                <div className="mt-9">
+                  <div className="rule-ink w-full" aria-hidden="true" />
+                  <h2 className="label mt-7">{t.houseNoteLabel}</h2>
+                  <p className="mt-3 max-w-prose whitespace-pre-line font-display
+                                text-[1.05rem] italic leading-relaxed text-hive-600">
+                    {view.houseNote}
+                  </p>
+                </div>
+              ) : null}
             </div>
           </Sheet>
 
@@ -520,6 +548,52 @@ export function GuestPassClient({
                     />
                   ) : null}
 
+                  {/* The one box on this page nobody has to fill in, and the
+                      only one that is not a list of things we thought of in
+                      advance. "Niet verplicht" sits in the label rather than
+                      in the hint underneath, because a thumb scrolling to the
+                      button reads labels and skips hints. The placeholder is
+                      an example of the sort of thing this is for; telling
+                      someone what to write in a box they need not use at all
+                      would be the wrong tone entirely.
+
+                      The hint says who reads it, which is the part that
+                      matters: this answer goes back out to the whole party.
+                      The endpoint holds the floor under that — it refuses a
+                      remark with a phone number or an e-mail address in it —
+                      but a sentence read before typing beats a refusal read
+                      after. maxLength mirrors GUEST_RESPONSE_LIMITS.note; it
+                      is written out rather than imported because that module
+                      is server-side and pulling it in here would drag
+                      node:crypto and the CMS into the browser bundle. */}
+                  <div>
+                    <label htmlFor="guest-note" className="label block">
+                      {t.yourNote}
+                      <span className="ml-2 font-body text-[0.7rem] normal-case tracking-label text-hive-400">
+                        {t.yourNoteOptional}
+                      </span>
+                    </label>
+                    <textarea
+                      id="guest-note"
+                      name="note"
+                      rows={3}
+                      maxLength={300}
+                      placeholder={t.yourNotePlaceholder}
+                      value={draft.note}
+                      onChange={(e) =>
+                        setDraft((prev) => ({ ...prev, note: e.target.value }))
+                      }
+                      aria-describedby="guest-note-hint"
+                      className={`${fieldClass} resize-none`}
+                    />
+                    <p
+                      id="guest-note-hint"
+                      className="mt-2 text-sm text-hive-400"
+                    >
+                      {t.yourNoteHint}
+                    </p>
+                  </div>
+
                   <div className="flex flex-wrap items-center gap-4 pt-1">
                     <button
                       type="submit"
@@ -588,6 +662,10 @@ export function GuestPassClient({
               <ul className="mt-5 space-y-5">
                 {responses.map((response, index) => {
                   const picks = [...response.dietary, ...response.drinks];
+                  // "Geen wensen doorgegeven" printed under somebody who wrote
+                  // a whole sentence is the page contradicting itself, so the
+                  // fallback line steps aside for a remark.
+                  const showPicks = picks.length > 0 || !response.note;
                   return (
                     <li key={`${response.name}-${index}`}>
                       <p className="menu-name">
@@ -598,9 +676,23 @@ export function GuestPassClient({
                           </span>
                         ) : null}
                       </p>
-                      <p className="menu-desc">
-                        {picks.length > 0 ? picks.join(" · ") : t.nothingPicked}
-                      </p>
+                      {showPicks ? (
+                        <p className="menu-desc">
+                          {picks.length > 0
+                            ? picks.join(" · ")
+                            : t.nothingPicked}
+                        </p>
+                      ) : null}
+                      {/* Their own words, so they are set as words: quoted off
+                          by a hairline rather than dropped into the same line
+                          as the tick-box answers, which are ours. */}
+                      {response.note ? (
+                        <p className="mt-2 max-w-prose whitespace-pre-line border-l
+                                      border-hive-700/20 pl-3 font-display text-[0.9rem]
+                                      italic leading-snug text-hive-500">
+                          {response.note}
+                        </p>
+                      ) : null}
                     </li>
                   );
                 })}

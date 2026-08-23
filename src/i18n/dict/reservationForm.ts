@@ -48,6 +48,45 @@ export const reservationFormNl = {
   notesHint:
     "Allergieën, een verjaardag, een kinderstoel, een rustige tafel: laat het weten.",
   honeypot: "Laat dit veld leeg",
+  /**
+   * The offer to be remembered, and the line under it. Both sit beside the
+   * button because that is where they can be read honestly: a tickbox at the
+   * top of a form is a setting to be decided before you know what you are
+   * deciding about, while one beside the button is an offer made to somebody
+   * who has just finished typing the very thing being offered back.
+   *
+   * Worded as an offer throughout, and in the guest's own voice. "Onthoud mijn
+   * gegevens" is something they ask us to do; "Gegevens onthouden" would be a
+   * preference, and a preference wants a settings screen and an explanation.
+   * The box starts empty and ticking it does nothing whatever until a booking
+   * has actually gone through.
+   */
+  remember:
+    "Onthoud mijn gegevens op dit apparaat, dan hoef ik ze de volgende keer niet opnieuw in te typen.",
+  /**
+   * The whole of what happens to those three fields, in one sentence, in the
+   * register of the mailing list's "hooguit een mail per maand, nooit spam".
+   * Short because everything it has to say is small: het blijft hier, wij zien
+   * het niet, en het gaat weg zodra je dat wilt. Every clause of it is literally
+   * true of localStorage and would not have been of a cookie — zie de kop van
+   * src/lib/rememberMe.ts.
+   */
+  rememberNote:
+    "Alleen in deze browser, op dit apparaat. Er wordt niets naar ons verstuurd, en je haalt het er zelf zo weer uit.",
+  /**
+   * Shown above the form when the fields arrived already filled in. A form that
+   * silently knows your telefoonnummer is unsettling until it says how it knows,
+   * so it says so first, in one line, before anything else is read.
+   */
+  rememberedNotice:
+    "Je naam, e-mailadres en telefoonnummer stonden nog op dit apparaat, dus die hebben we alvast ingevuld.",
+  /**
+   * Beside that line: empties the three fields and wipes what was stored, in
+   * one go. Phrased as the guest's own conclusion rather than as an
+   * instruction, because the person most likely to need it is somebody else on
+   * the household laptop who has just been called by the wrong name.
+   */
+  rememberedForget: "Dit ben ik niet \u2014 vergeet mijn gegevens",
   submit: "Reserveren",
   submitting: "Bezig...",
   error: "Er ging iets mis. Probeer het opnieuw.",
@@ -156,6 +195,13 @@ export const reservationFormEn: ReservationFormDict = {
   notesHint:
     "Allergies, a birthday, a high chair, a quiet table: do let us know.",
   honeypot: "Leave this field empty",
+  remember:
+    "Remember my details on this device, so I do not have to type them again next time.",
+  rememberNote:
+    "In this browser, on this device only. Nothing is sent to us, and you can take it out again yourself whenever you like.",
+  rememberedNotice:
+    "Your name, email address and phone number were still on this device, so we have filled them in for you.",
+  rememberedForget: "This is not me \u2014 forget my details",
   submit: "Book a table",
   submitting: "Sending...",
   error: "Something went wrong. Please try again.",

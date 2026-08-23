@@ -48,6 +48,8 @@ export interface GuestResponseRow {
   name?: string | null;
   dietary?: string | null;
   drinks?: string | null;
+  /** Whatever this companion wanted to add in their own words. */
+  note?: string | null;
   addedAt?: string | null;
 }
 
@@ -61,6 +63,14 @@ export interface ReservationDoc {
   guests?: number | null;
   duration?: number | null;
   notes?: string | null;
+  /**
+   * The owners' own line to the party, written in the admin. The opposite
+   * direction to `notes` in every way that matters: `notes` is the booker
+   * writing to the kitchen in confidence, this is the house writing to a
+   * dozen phones on purpose, which is why one of them is dropped below and
+   * the other is not.
+   */
+  guestNote?: string | null;
   occasion?: string | null;
   status?: string | null;
   guestToken?: string | null;
@@ -83,6 +93,8 @@ export interface GuestResponseView {
   name: string;
   dietary: string[];
   drinks: string[];
+  /** Their own remark, trimmed and capped, or "" when they wrote none. */
+  note: string;
 }
 
 /** A whole reservation, as the browser is allowed to see it. */
@@ -94,6 +106,14 @@ export interface GuestPassView {
   time: string;
   guests: number | null;
   status: GuestPassStatus;
+  /**
+   * The house's line to the party, or "" — never null and never whitespace,
+   * so the page can ask `houseNote ? ... : null` and be done. It is called
+   * `guestNote` on the document, where the name says who it is for; here it
+   * says who wrote it, because on this side of the door that is the thing a
+   * reader needs to know.
+   */
+  houseNote: string;
   responses: GuestResponseView[];
 }
 
@@ -115,7 +135,19 @@ export const GUEST_RESPONSE_LIMITS = {
   /** Per picked label, and how many labels one person may pick. */
   label: 60,
   picks: 12,
+  /** The remark. Matches `guestResponses[].note`'s own maxLength. */
+  note: 300,
 } as const;
+
+/**
+ * The house's note, matching `guestNote`'s maxLength in the collection.
+ *
+ * Kept here as well as there because the redaction has to cap what it renders
+ * on its own: the field's maxLength is a rule the admin enforces on the way
+ * in, and a row that predates the rule, or was written by a script, or was
+ * loosened later, still comes through this function.
+ */
+export const MAX_HOUSE_NOTE = 500;
 
 /** The shareable address itself. Dutch keeps the bare path, English gets /en. */
 export function guestPassUrl(locale: Locale, token: string): string {
@@ -190,6 +222,15 @@ function firstNameOf(value: string | null | undefined): string {
   return first.slice(0, GUEST_RESPONSE_LIMITS.name);
 }
 
+/**
+ * A note as the page may render it: trimmed, capped, and "" when there is
+ * nothing to say. Whitespace collapses to "" rather than to a blank line
+ * under a heading, which is the whole reason this is not an inline `.trim()`.
+ */
+function noteText(value: string | null | undefined, max: number): string {
+  return String(value ?? "").trim().slice(0, max);
+}
+
 /** The stored comma-joined answer, back as the list it was picked from. */
 function splitList(value: string | null | undefined): string[] {
   return String(value ?? "")
@@ -218,7 +259,8 @@ function asStatus(value: unknown): GuestPassStatus {
  *   phone        — same, and worse: it is a direct line to one person.
  *   notes        — free text the booker wrote to the kitchen, in confidence.
  *                  "My mother is recovering from chemo" is a note. It is not
- *                  for the group chat.
+ *                  for the group chat. Not to be confused with `guestNote`,
+ *                  which is let through: see below.
  *   occasion     — the retired version of the same thing.
  *   name         — only `firstNameOf(name)` survives; the surname never does.
  *   id           — an id invites walking to the next one. Nothing on this page
@@ -226,6 +268,9 @@ function asStatus(value: unknown): GuestPassStatus {
  *   guestToken   — the page already has the token from its own URL; echoing
  *                  the secret back into the HTML would put it in caches and
  *                  screenshots for no gain at all.
+ *   guestNote    — LET THROUGH. The owners wrote it in a field whose label in
+ *                  the admin says it goes to the whole party; a note nobody
+ *                  can read is not a note. It is capped here all the same.
  *   duration     — a kitchen planning number. It decides the length of the
  *                  calendar event and stops there.
  *   source       — bookkeeping.
@@ -234,6 +279,22 @@ function asStatus(value: unknown): GuestPassStatus {
  *   createdAt, updatedAt — of no interest to a guest, and updatedAt would leak
  *                  when the owners last touched the row.
  *   guestResponses[].addedAt — nobody needs to know who answered last.
+ *   guestResponses[].note    — LET THROUGH, and worth saying why, because it
+ *                  is the first free text on this list that is not dropped.
+ *                  A companion's remark is written into a box that sits on
+ *                  this very page, directly above the list it appears in, and
+ *                  showing it back to the party is the entire point of asking
+ *                  for it: "ik kom een half uur later" is of no use to anyone
+ *                  if only the kitchen reads it. The obvious danger — someone
+ *                  typing a phone number into a page that lives in a group
+ *                  chat — is handled where the words are written rather than
+ *                  here: /api/guest-pass refuses a remark containing a
+ *                  telephone number or an e-mail address and says so, so the
+ *                  guest keeps their own words instead of watching them come
+ *                  back quietly mangled. Text the owners type into the row by
+ *                  hand in the admin does not pass that door, and does not
+ *                  need to: they are the house, correcting a typo on their own
+ *                  guest list.
  *   guestResponses[].id      — Payload's row key, and no kind of secret: it is
  *                  a BSON ObjectID whose trailing counter simply increments,
  *                  so three answers to the same table are three consecutive
@@ -252,12 +313,14 @@ export function redactForGuests(doc: ReservationDoc): GuestPassView {
     time: /^([01]\d|2[0-3]):[0-5]\d$/.test(time) ? time : "",
     guests: guests !== null && guests > 0 ? Math.floor(guests) : null,
     status: asStatus(doc.status),
+    houseNote: noteText(doc.guestNote, MAX_HOUSE_NOTE),
     responses: (doc.guestResponses ?? [])
       .slice(0, MAX_GUEST_RESPONSES)
       .map((row) => ({
         name: firstNameOf(row.name),
         dietary: splitList(row.dietary),
         drinks: splitList(row.drinks),
+        note: noteText(row.note, GUEST_RESPONSE_LIMITS.note),
       }))
       // A row with no name left after redaction is a row the owners emptied
       // by hand in the admin. Showing a blank line would only look broken.
@@ -453,6 +516,20 @@ function sittingMinutes(
  * rather than the row id for the same reason the page never sees the id, and
  * it is stable, so re-adding the event updates the one already in the calendar
  * instead of laying a second one on top of it.
+ *
+ * The house's note goes in the description, and it is the one thing here that
+ * was a real decision rather than a rule. Against it: an .ics is a photograph,
+ * not a window. The owners can rewrite the note tomorrow and every calendar
+ * that already has the old wording keeps it, because nobody adds an event
+ * twice. For it: "we houden de grote tafel bij het raam voor jullie vrij" is
+ * precisely what a person wants in front of them when the reminder goes off on
+ * the way over, and it is the sort of sentence that is worth nothing at all if
+ * it is only ever read once, on a phone, in a hallway, on the day the link
+ * arrived. The staleness is survivable because the description ends in the
+ * link to the pass, which is always current and is the last thing the reader
+ * sees; a note that quietly never travelled would not have that fallback.
+ * Nothing extra is disclosed by any of this: the note is already shown to
+ * everyone holding the link, and the calendar audience is drawn from them.
  */
 export function toIcsEvent(
   doc: ReservationDoc,
@@ -470,7 +547,7 @@ export function toIcsEvent(
   return {
     uid: `${token}@debeeshive.nl`,
     title: t.icsTitle(settings.siteName),
-    description: t.icsDescription(settings.siteName, url),
+    description: t.icsDescription(settings.siteName, url, view.houseNote),
     location: addressOneLine(settings),
     start,
     end: new Date(start.getTime() + sittingMinutes(doc, settings) * 60_000),

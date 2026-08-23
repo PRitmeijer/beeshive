@@ -591,6 +591,10 @@ export interface Reservation {
    */
   notes?: string | null;
   /**
+   * Komt op de gedeelde gastenpagina te staan, dus iedereen die de link krijgt leest dit mee. Schrijf het aan het gezelschap zelf, bijvoorbeeld: "we houden de grote tafel bij het raam voor jullie vrij". Laat leeg als er niets te melden is.
+   */
+  guestNote?: string | null;
+  /**
    * Het formulier vraagt hier niet meer naar; de gasten vonden het een vreemde vraag. Wat een gast nu doorgeeft staat bij Opmerkingen. Oude aanvragen houden hun antwoord.
    */
   occasion?: string | null;
@@ -606,6 +610,10 @@ export interface Reservation {
          */
         dietary?: string | null;
         drinks?: string | null;
+        /**
+         * Wat deze persoon zelf nog kwijt wilde. Wordt door de gast ingevuld op de gastenpagina, net als de rest van deze regel.
+         */
+        note?: string | null;
         id?: string | null;
       }[]
     | null;
@@ -1058,6 +1066,7 @@ export interface ReservationsSelect<T extends boolean = true> {
   time?: T;
   duration?: T;
   notes?: T;
+  guestNote?: T;
   occasion?: T;
   guestResponses?:
     | T
@@ -1066,6 +1075,7 @@ export interface ReservationsSelect<T extends boolean = true> {
         addedAt?: T;
         dietary?: T;
         drinks?: T;
+        note?: T;
         id?: T;
       };
   status?: T;

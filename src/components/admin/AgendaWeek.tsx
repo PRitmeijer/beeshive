@@ -27,6 +27,13 @@ import styles from "./agenda.module.scss";
  * On a phone the seven columns become seven blocks stacked under each other,
  * which is the only honest thing a week can do at that width — the grid lives
  * in agenda.module.scss and collapses there rather than here.
+ *
+ * The bookings are drawn compact, which is also what shrinks the "have we met"
+ * mark from "Eerste bezoek" to a bare "1e": a column this narrow has room for
+ * a number and nothing else, and the sentence waits in the tooltip. Nothing in
+ * this file arranges that — ReservationLine carries it, exactly as it carries
+ * the time and the covers, so the three views can never drift apart on what a
+ * first-time guest looks like.
  */
 export function AgendaWeek({ from, to, today }: AgendaModeProps) {
   const { data, error, loading, reload } = useAgenda(from, to);

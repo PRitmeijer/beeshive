@@ -44,6 +44,29 @@ export interface AgendaOpening {
   exceptionId: string | null;
 }
 
+/**
+ * Whether the guest behind a booking has eaten here before.
+ *
+ * A copy of GuestVisitHistory in src/lib/guestHistory.ts rather than an import
+ * of it, for the same reason the rest of this section exists: everything below
+ * runs in the browser, and that module is server code that talks to Payload.
+ * The shapes are structurally identical, so the route assigns one to the other
+ * and the compiler holds the two honest.
+ *
+ * `null` means the question could not be asked — a row with no e-mail address
+ * and no telephone number to recognise anyone by. That is not the same as a
+ * first visit and must never be drawn as one.
+ */
+export interface AgendaGuestHistory {
+  /** Visits before this one, so 0 is a guest walking in for the first time. */
+  priorVisits: number;
+  isFirstTime: boolean;
+  firstVisit: string | null;
+  lastVisit: string | null;
+  /** How they were recognised; a telephone number is the weaker of the two. */
+  matchedOn: "email" | "phone" | null;
+}
+
 export interface AgendaReservation {
   id: string;
   date: string;
@@ -53,6 +76,7 @@ export interface AgendaReservation {
   status: string;
   notes: string | null;
   phone: string | null;
+  history: AgendaGuestHistory | null;
 }
 
 export interface AgendaEvent {
@@ -263,6 +287,106 @@ export function coversOf(rows: AgendaReservation[]): number {
     .reduce((total, r) => total + (r.guests || 0), 0);
 }
 
+/* ------------------------------------------------------- have we met? -- */
+
+/**
+ * How the agenda says "these people have never been here".
+ *
+ * The owners asked for one thing above all others: to know, before they walk
+ * to a table, whether that table needs the story — what De Bee's Hive is, how
+ * the evening works, that the kitchen closes at nine — or whether these are the
+ * neighbours from the Amsterdamsestraatweg who have been coming since 2023 and
+ * would rather be greeted than briefed. Both are worth knowing; only the first
+ * is worth *doing* something about, which is why the first-timer is drawn loud
+ * and the regular is drawn as a warm aside.
+ *
+ * Every view shows the same fact in the same words, at the length it has room
+ * for: "Eerste bezoek" and "4e bezoek" where there is a line, "1e" and "4e"
+ * where there is only a column, and the whole sentence in the title everywhere.
+ * The mark is never colour alone — an owner reading this on a phone at the
+ * kitchen door in July gets the number and the word first, the amber second.
+ *
+ * A booking with no history attached (nothing to recognise the guest by) shows
+ * nothing at all. Silence is the only honest mark for a question we could not
+ * ask; drawing such a row as a first visit would send someone off to explain
+ * the concept to a regular.
+ */
+
+const NL_DATE = new Intl.DateTimeFormat("nl-NL", {
+  timeZone: "UTC",
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+});
+
+const isIsoDate = (value: string | null): value is string =>
+  typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+
+/** 1e, 2e, 3e…: which visit this booking is, counted from the guest's first. */
+export function visitOrdinal(history: AgendaGuestHistory): string {
+  return `${Math.max(0, history.priorVisits) + 1}e`;
+}
+
+/** The whole thing in words, for the title of a mark that has no room for it. */
+export function visitSentence(history: AgendaGuestHistory): string {
+  if (history.isFirstTime) {
+    return "Eerste bezoek — leg het concept even uit.";
+  }
+  const parts = [`${visitOrdinal(history)} bezoek`];
+  if (isIsoDate(history.lastVisit)) {
+    parts.push(`laatst hier op ${NL_DATE.format(at(history.lastVisit))}`);
+  }
+  // Two people can share a telephone number and a household often does, so a
+  // match on the number is worth flagging as the softer kind of certainty.
+  if (history.matchedOn === "phone") {
+    parts.push("herkend aan het telefoonnummer");
+  }
+  return `${parts.join(" · ")}.`;
+}
+
+/** First-timers among these tables, cancellations left out. */
+export function firstTimersOf(rows: AgendaReservation[]): number {
+  return rows.filter(
+    (r) => r.status !== "geannuleerd" && r.history?.isFirstTime,
+  ).length;
+}
+
+/**
+ * The mark itself: a word in the day, two characters in a week.
+ *
+ * It sits inside the reservation link rather than beside it, so the whole row
+ * stays one tap target on a phone; the title is therefore the link's own
+ * tooltip and the sentence reads as part of the booking.
+ */
+export function GuestMark({
+  history,
+  compact = false,
+}: {
+  history: AgendaGuestHistory | null;
+  compact?: boolean;
+}) {
+  if (!history) return null;
+  // The compact form is deliberately the same "1e/4e" for both states: the
+  // number *is* the answer, and a week column has room for nothing else.
+  const label = compact
+    ? visitOrdinal(history)
+    : history.isFirstTime
+      ? "Eerste bezoek"
+      : `${visitOrdinal(history)} bezoek`;
+
+  return (
+    <span
+      className={[
+        styles.guest,
+        history.isFirstTime ? styles.guestFirst : styles.guestReturning,
+      ].join(" ")}
+      title={visitSentence(history)}
+    >
+      {label}
+    </span>
+  );
+}
+
 /** Where a document lives in the admin. */
 export function useAdminRoutes() {
   const { config } = useConfig();
@@ -410,7 +534,14 @@ export function ReservationLine({
       href={`${admin}/collections/reservations/${reservation.id}`}
     >
       <span className={styles.resTime}>{reservation.time || "—"}</span>
-      <span className={styles.resName}>{reservation.name}</span>
+      {/* Name and mark are wrapped together so the mark stays *against* the
+          name however long it is — a badge that floats off at the right edge
+          of a wide panel stops being something about this guest — while the
+          covers and the status keep their own column on the right. */}
+      <span className={styles.resWho}>
+        <span className={styles.resName}>{reservation.name}</span>
+        <GuestMark compact={compact} history={reservation.history} />
+      </span>
       <span className={styles.resGuests}>{reservation.guests}p</span>
       {!compact ? (
         <span className={styles.resStatus}>{statusLabel(reservation.status)}</span>
@@ -466,6 +597,7 @@ export function AgendaDay({ date, from, to, today }: AgendaModeProps) {
   const events = byTime(data.events.filter((e) => e.date === date));
   const covers = coversOf(reservations);
   const booked = reservations.filter((r) => r.status !== "geannuleerd");
+  const firstTimers = firstTimersOf(reservations);
 
   return (
     <div className={styles.day}>
@@ -487,6 +619,13 @@ export function AgendaDay({ date, from, to, today }: AgendaModeProps) {
               {booked.length} {booked.length === 1 ? "tafel" : "tafels"} · {covers}{" "}
               {covers === 1 ? "gast" : "gasten"}
             </span>
+            {firstTimers > 0 ? (
+              <span className={styles.panelFirst}>
+                {firstTimers === 1
+                  ? "1 tafel voor het eerst hier"
+                  : `${firstTimers} tafels voor het eerst hier`}
+              </span>
+            ) : null}
           </h3>
           {reservations.length === 0 ? (
             <p className={styles.state}>Nog geen reserveringen voor deze dag.</p>
@@ -495,6 +634,15 @@ export function AgendaDay({ date, from, to, today }: AgendaModeProps) {
               {reservations.map((r) => (
                 <li key={r.id}>
                   <ReservationLine reservation={r} />
+                  {/* The one line that turns the mark into an instruction. It
+                      is spelled out here and nowhere else, because the day view
+                      is the one they read standing up, ten minutes before the
+                      first table sits down. */}
+                  {r.history?.isFirstTime && r.status !== "geannuleerd" ? (
+                    <p className={styles.resHint}>
+                      Voor het eerst hier — leg het concept even uit.
+                    </p>
+                  ) : null}
                   {r.notes ? <p className={styles.resNotes}>{r.notes}</p> : null}
                 </li>
               ))}

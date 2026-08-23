@@ -25,6 +25,18 @@
  * never rendered on the page: they end up inside the downloaded .ics, and are
  * read months later in somebody's calendar app, with no surrounding context at
  * all. So they name the restaurant outright where the page can simply say "we".
+ * `icsDescription` also carries the house's note into the calendar when there
+ * is one, which is why it takes three arguments and lays them out over
+ * paragraphs rather than running them into one sentence.
+ *
+ * There are two notes on this page and they run in opposite directions, so the
+ * keys keep them well apart. `houseNoteLabel` heads the line the owners wrote
+ * to the whole party, and sits with the date and the address because that is
+ * what it is: part of the booking. Everything under `yourNote` belongs to the
+ * box a companion types into, and its hint says out loud who ends up reading
+ * the answer — the field is on a page that gets forwarded through a WhatsApp
+ * group, and somebody about to write down their phone number deserves to know
+ * that before they do rather than after.
  */
 export const guestPassNl = {
   metaTitle: (name: string) => `Je tafel bij ${name}`,
@@ -46,6 +58,7 @@ export const guestPassNl = {
     geannuleerd: "Geannuleerd",
   },
   guestsValue: (n: number) => (n === 1 ? "1 persoon" : `${n} personen`),
+  houseNoteLabel: "Nog even dit",
   pastNotice: "Deze avond is geweest. Leuk dat jullie er waren.",
   cancelledNotice:
     "Deze reservering is geannuleerd. Bel ons als dat niet klopt.",
@@ -57,8 +70,10 @@ export const guestPassNl = {
     download: "Los bestand (.ics)",
   },
   icsTitle: (name: string) => `Tafel bij ${name}`,
-  icsDescription: (name: string, url: string) =>
-    `Gereserveerd bij ${name}. Alle details en wie er meekomen: ${url}`,
+  icsDescription: (name: string, url: string, note: string) =>
+    note
+      ? `Gereserveerd bij ${name}.\n\n${note}\n\nAlle details en wie er meekomen: ${url}`
+      : `Gereserveerd bij ${name}. Alle details en wie er meekomen: ${url}`,
   directions: "Route hierheen",
   directionsGoogle: "Google Maps",
   directionsApple: "Apple Kaarten",
@@ -78,6 +93,11 @@ export const guestPassNl = {
   dietaryHint: "Allergie, vegetarisch, iets anders: we houden er rekening mee.",
   drinksHeading: "Alvast wat te drinken?",
   drinksHint: "Niet verplicht, maar het scheelt wachten bij binnenkomst.",
+  yourNote: "Nog iets kwijt?",
+  yourNoteOptional: "niet verplicht",
+  yourNoteHint:
+    "Iedereen met de link leest dit mee, dus hou het bij wat het gezelschap mag weten.",
+  yourNotePlaceholder: "Ik kom een half uur later",
   submit: "Doorgeven",
   submitting: "Bezig...",
   update: "Wijziging doorgeven",
@@ -89,6 +109,8 @@ export const guestPassNl = {
   alreadyJoined: "Je staat al op de lijst.",
   error: "Er ging iets mis. Probeer het opnieuw.",
   full: "De lijst zit vol. Bel ons even, dan schrijven we je erbij.",
+  noteNoContact:
+    "Zet er geen telefoonnummer of mailadres in; iedereen met de link leest mee. Bel ons even als het dringend is.",
   attending: "Wie er komen",
   noneYet: "Nog niemand heeft zich aangemeld.",
   nothingPicked: "geen wensen doorgegeven",
@@ -118,6 +140,7 @@ export const guestPassEn: GuestPassDict = {
     geannuleerd: "Cancelled",
   },
   guestsValue: (n: number) => (n === 1 ? "1 guest" : `${n} guests`),
+  houseNoteLabel: "One more thing",
   pastNotice: "This evening has been and gone. Lovely to have had you.",
   cancelledNotice:
     "This booking has been cancelled. Give us a ring if that is not right.",
@@ -129,8 +152,10 @@ export const guestPassEn: GuestPassDict = {
     download: "Plain file (.ics)",
   },
   icsTitle: (name: string) => `Table at ${name}`,
-  icsDescription: (name: string, url: string) =>
-    `Booked at ${name}. All the details and who else is coming: ${url}`,
+  icsDescription: (name: string, url: string, note: string) =>
+    note
+      ? `Booked at ${name}.\n\n${note}\n\nAll the details and who else is coming: ${url}`
+      : `Booked at ${name}. All the details and who else is coming: ${url}`,
   directions: "Directions",
   directionsGoogle: "Google Maps",
   directionsApple: "Apple Maps",
@@ -152,6 +177,11 @@ export const guestPassEn: GuestPassDict = {
     "An allergy, vegetarian, anything else: we will take it into account.",
   drinksHeading: "Something to drink already?",
   drinksHint: "Not required, but it saves waiting when you arrive.",
+  yourNote: "Anything else?",
+  yourNoteOptional: "optional",
+  yourNoteHint:
+    "Everyone with the link reads this, so keep it to what the party may know.",
+  yourNotePlaceholder: "I will be half an hour late",
   submit: "Send it through",
   submitting: "Sending...",
   update: "Send the change through",
@@ -162,6 +192,8 @@ export const guestPassEn: GuestPassDict = {
   alreadyJoined: "You are already on the list.",
   error: "Something went wrong. Please try again.",
   full: "The list is full. Give us a ring and we will add you ourselves.",
+  noteNoContact:
+    "Please leave phone numbers and e-mail addresses out; everyone with the link reads this. Give us a ring if it is urgent.",
   attending: "Who is coming",
   noneYet: "Nobody has signed up yet.",
   nothingPicked: "no wishes passed on",

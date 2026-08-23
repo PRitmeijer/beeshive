@@ -26,6 +26,7 @@ import { MetaTitleComponent as MetaTitleComponent_a8a977ebc872c5d5ea7ee689724c08
 import { MetaDescriptionComponent as MetaDescriptionComponent_a8a977ebc872c5d5ea7ee689724c0860 } from '@payloadcms/plugin-seo/client'
 import { MetaImageComponent as MetaImageComponent_a8a977ebc872c5d5ea7ee689724c0860 } from '@payloadcms/plugin-seo/client'
 import { PreviewComponent as PreviewComponent_a8a977ebc872c5d5ea7ee689724c0860 } from '@payloadcms/plugin-seo/client'
+import { GuestHistory as GuestHistory_75096490d6c26925512ec2e1d2e9723f } from '@/components/admin/GuestHistory'
 import { BackupsNavLink as BackupsNavLink_f679f967f676ba7f576a347de6902fc8 } from '@/components/admin/BackupsView'
 import { LocaleAssist as LocaleAssist_c72251904682aae6b2a3de087d04f710 } from '@/components/admin/LocaleAssist'
 import { AgendaNavLink as AgendaNavLink_d68ac0861339549dc463241353acf428 } from '@/components/admin/AgendaView'
@@ -61,6 +62,7 @@ export const importMap = {
   "@payloadcms/plugin-seo/client#MetaDescriptionComponent": MetaDescriptionComponent_a8a977ebc872c5d5ea7ee689724c0860,
   "@payloadcms/plugin-seo/client#MetaImageComponent": MetaImageComponent_a8a977ebc872c5d5ea7ee689724c0860,
   "@payloadcms/plugin-seo/client#PreviewComponent": PreviewComponent_a8a977ebc872c5d5ea7ee689724c0860,
+  "@/components/admin/GuestHistory#GuestHistory": GuestHistory_75096490d6c26925512ec2e1d2e9723f,
   "@/components/admin/BackupsView#BackupsNavLink": BackupsNavLink_f679f967f676ba7f576a347de6902fc8,
   "@/components/admin/LocaleAssist#LocaleAssist": LocaleAssist_c72251904682aae6b2a3de087d04f710,
   "@/components/admin/AgendaView#AgendaNavLink": AgendaNavLink_d68ac0861339549dc463241353acf428,

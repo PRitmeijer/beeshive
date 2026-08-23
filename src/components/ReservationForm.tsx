@@ -1,11 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { CraftIcon } from "@/components/CraftIcon";
 import { ShareActions } from "@/components/ShareActions";
 import { getDict } from "@/i18n/dictionaries";
 import { defaultLocale, type Locale } from "@/i18n/config";
 import { isReservationError } from "@/lib/reservationErrors";
+import { forget, readRemembered, remember } from "@/lib/rememberMe";
 import { EVENTS, track } from "@/lib/umami";
 import {
   LEAD_MINUTES,
@@ -250,6 +258,76 @@ export function ReservationForm({
   const [passUrl, setPassUrl] = useState<string | null>(null);
 
   /**
+   * The fast checkout for somebody who has booked here before.
+   *
+   * Two pieces of state and no more. `rememberMe` is the tickbox beside the
+   * button, and it is an intention rather than a fact: nothing is written until
+   * a booking is accepted, so ticking it and then closing the tab leaves this
+   * device exactly as clean as it was. `prefilled` is the fact, and it exists
+   * only so the form can say out loud that it filled three fields in by itself
+   * — a booking form that already knows your phone number and does not mention
+   * it is unnerving in a way that costs more trust than the typing saved is
+   * worth.
+   *
+   * Both start false, and the reading happens in an effect rather than in
+   * `useState`'s initialiser, for the same reason `clientNow` above does: this
+   * component is rendered on the server, where there is no localStorage, and
+   * the first client paint has to match that render to the character or React
+   * throws the markup away. So the server draws an empty form, the browser
+   * draws the same empty form, and only then — one frame later, invisibly —
+   * does what this device knows arrive. See src/lib/rememberMe.ts for why this
+   * is localStorage and not the cookie the feature was asked for.
+   *
+   * On a return visit the box comes back ticked, because by then it is no
+   * longer an offer but a description of how things already stand, and a form
+   * that says "we have filled this in for you" over an empty tickbox is
+   * contradicting itself. Untick it, book, and the record is gone.
+   */
+  const [rememberMe, setRememberMe] = useState(false);
+  const [prefilled, setPrefilled] = useState(false);
+  const fillFromStorage = useCallback(() => {
+    const saved = readRemembered();
+    if (!saved) return;
+    setForm((prev) => ({
+      ...prev,
+      name: saved.name,
+      email: saved.email,
+      phone: saved.phone,
+      // The party size is a habit, not a booking, so it is offered as a
+      // starting point and only when there was one to offer; the field already
+      // has a sensible two in it otherwise.
+      guests: saved.guests ? String(saved.guests) : prev.guests,
+    }));
+    setRememberMe(true);
+    setPrefilled(true);
+  }, []);
+  useEffect(() => {
+    fillFromStorage();
+  }, [fillFromStorage]);
+
+  /**
+   * "That is not me." The one button that has to work immediately rather than
+   * on the next submission: whoever presses it is very often not the person the
+   * record belongs to — a partner on the household laptop, a colleague on the
+   * shared machine at work — and telling them their details will be forgotten
+   * once they finish booking a table they may not want is no answer at all. So
+   * the fields and the stored record go together, now, and the party size falls
+   * back to the default rather than staying at somebody else's usual four.
+   */
+  const forgetMe = () => {
+    forget();
+    setForm((prev) => ({
+      ...prev,
+      name: "",
+      email: "",
+      phone: "",
+      guests: EMPTY.guests,
+    }));
+    setRememberMe(false);
+    setPrefilled(false);
+  };
+
+  /**
    * "Somebody began filling this in", once per mounted form. The ref rather
    * than state because nothing on screen depends on it and a re-render for a
    * measurement would be a real cost paid for a beacon. `track()` swallows
@@ -338,8 +416,34 @@ export function ReservationForm({
         setPassUrl(
           typeof data?.guestPassUrl === "string" ? data.guestPassUrl : null,
         );
+        /**
+         * The only place the tickbox is ever acted upon, and only once the
+         * table has actually been asked for. Which also makes this the place
+         * that keeps the record true: somebody who came back, corrected the
+         * phone number they moved house with and booked again has just told us
+         * the new one is the right one, so the write is unconditional rather
+         * than "only if there was nothing there". The mirror of it matters as
+         * much — an unticked box on a guest who was remembered is them
+         * withdrawing, so the record goes.
+         *
+         * Nothing here can throw: every function in rememberMe swallows a
+         * refusing or full localStorage, because the booking has succeeded and
+         * a storage quota is not allowed to turn a confirmed table into an
+         * error screen.
+         */
+        if (rememberMe) {
+          remember({
+            name: form.name,
+            email: form.email,
+            phone: form.phone,
+            guests: Number(form.guests),
+          });
+        } else {
+          forget();
+        }
         setStatus("success");
         setForm(EMPTY);
+        setPrefilled(false);
         return;
       }
       const data = await res.json().catch(() => null);
@@ -421,6 +525,11 @@ export function ReservationForm({
             // has not been made yet, pointing at the first party's table.
             setPassUrl(null);
             setStatus("idle");
+            // The contact details are not part of the last booking; they are
+            // the person still sitting there with the form open. Having just
+            // been asked to remember them, asking them to type it all again
+            // one screen later would be a strange way to keep the promise.
+            fillFromStorage();
           }}
           className="ink-link mt-6 text-sm"
         >
@@ -435,6 +544,21 @@ export function ReservationForm({
       onSubmit={handleSubmit}
       className="relative space-y-9"
     >
+
+      {/* Three fields that filled themselves in, said out loud. It is one line
+          and it is at the top, because the moment to explain a form that knows
+          your telephone number is before it is read, not in a footnote under
+          the button. The way out sits in the same sentence: whoever needs it is
+          usually not the person the details belong to, and asking them to hunt
+          for a setting would be asking the wrong person to do the work. */}
+      {prefilled ? (
+        <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm text-hive-500">
+          <span>{t.rememberedNotice}</span>
+          <button type="button" onClick={forgetMe} className="ink-link">
+            {t.rememberedForget}
+          </button>
+        </p>
+      ) : null}
 
       <div className="grid gap-9 sm:grid-cols-2">
         <div>
@@ -624,10 +748,66 @@ export function ReservationForm({
       </div>
 
       <div className="pt-2">
+        {/* The offer, beside the button rather than at the top of the form,
+            where it would be a setting to be decided before there is anything
+            to decide about. Drawn in the same ink as the guest pass's own
+            tickboxes: the browser's blue square is the one thing on this page
+            that would look like it came from somewhere else.
+
+            Deliberately without a `name`, and deliberately not part of the JSON
+            the submit handler builds. It changes what this browser keeps and
+            nothing whatever about what is sent, so there is nothing here for a
+            form-filling bot to turn into a different booking — it can tick this
+            all it likes and the request is byte for byte the one it would have
+            sent anyway. The honeypot two blocks up remains the only field that
+            has an opinion about robots. */}
+        <label className="flex cursor-pointer items-start gap-3">
+          <input
+            id="reserve-remember"
+            type="checkbox"
+            checked={rememberMe}
+            onChange={(e) => setRememberMe(e.target.checked)}
+            aria-describedby="reserve-remember-note"
+            className="peer sr-only"
+          />
+          <span
+            aria-hidden="true"
+            className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-[2px]
+                       border border-hive-700/25 transition-colors duration-200 ease-settle
+                       peer-checked:border-clay-500 peer-checked:bg-clay-500
+                       peer-checked:[&_svg]:opacity-100
+                       peer-focus-visible:ring-2 peer-focus-visible:ring-honey-400"
+          >
+            <svg
+              viewBox="0 0 12 12"
+              width="11"
+              height="11"
+              fill="none"
+              stroke="#F1ECE1"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              focusable="false"
+              className="opacity-0 transition-opacity duration-200"
+            >
+              <path d="M2 6.3 L4.7 9 L10 3.2" />
+            </svg>
+          </span>
+          <span className="text-[0.95rem] leading-snug text-hive-600">
+            {t.remember}
+          </span>
+        </label>
+        <p
+          id="reserve-remember-note"
+          className="mt-2 pl-8 text-sm text-hive-400"
+        >
+          {t.rememberNote}
+        </p>
         <button
           type="submit"
           disabled={status === "loading"}
-          className="btn-primary disabled:opacity-50"
+          className="btn-primary mt-8 disabled:opacity-50"
         >
           {status === "loading" ? t.submitting : t.submit}
         </button>
