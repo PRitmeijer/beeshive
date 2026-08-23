@@ -86,4 +86,55 @@ const nextConfig = {
   },
 };
 
-export default withPayload(nextConfig);
+/**
+ * Keep Payload's colour-scheme client hint off the public site.
+ *
+ * `withPayload` appends a headers rule of its own on `/:path*` carrying
+ * `Accept-CH`, `Vary` and `Critical-CH` for `Sec-CH-Prefers-Color-Scheme`. The
+ * admin wants it: it renders in the editor's light or dark theme, and knowing
+ * which one on the very first request saves a flash of the wrong one.
+ *
+ * `Critical-CH`, though, is not a hint to the browser — it is an instruction to
+ * throw the response away and ask again with the header attached. A visitor
+ * arriving at debeeshive.nl for the first time therefore pays a whole extra
+ * round trip before a single byte of the page is usable. Lighthouse reports it
+ * as "Avoid multiple page redirects", which is why it took a while to find:
+ * the chain it prints is the same URL twice, and `curl -IL` shows no redirect
+ * at all, because curl does not implement client hints.
+ *
+ * Measured here at ~610 ms of the mobile Largest Contentful Paint, on a page
+ * that has no light and dark theme to choose between. So the rule is narrowed
+ * to the admin, where it earns its cost, and the site is left alone.
+ *
+ * This has to be done by rewriting what `withPayload` produced rather than by
+ * setting something in `nextConfig`, because it appends its rule after ours
+ * and Next applies every matching rule.
+ */
+const CLIENT_HINT_KEYS = new Set(["accept-ch", "critical-ch"]);
+const payloadConfig = withPayload(nextConfig);
+
+export default {
+  ...payloadConfig,
+  headers: async () => {
+    const rules = await payloadConfig.headers();
+
+    return rules.flatMap((rule) => {
+      if (rule.source !== "/:path*") return [rule];
+
+      const hints = rule.headers.filter(
+        (h) =>
+          CLIENT_HINT_KEYS.has(h.key.toLowerCase()) ||
+          // The Vary that goes with them: without the hint being requested it
+          // only splits caches on a header nobody sends.
+          (h.key.toLowerCase() === "vary" &&
+            h.value === "Sec-CH-Prefers-Color-Scheme"),
+      );
+      const rest = rule.headers.filter((h) => !hints.includes(h));
+
+      return [
+        { ...rule, headers: rest },
+        ...(hints.length ? [{ source: "/admin/:path*", headers: hints }] : []),
+      ];
+    });
+  },
+};
