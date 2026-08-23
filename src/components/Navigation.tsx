@@ -20,14 +20,15 @@ import { EVENTS, track } from "@/lib/umami";
 const SETTLE: [number, number, number, number] = [0.16, 0.84, 0.28, 1];
 
 /**
- * How far down the page the bar takes on its paper ground and its rule.
+ * How far down the page the bar takes on its paper ground, its rule and its
+ * lockup.
  *
  * Two numbers, because the bar has two jobs on two kinds of page. Everywhere
  * else it is a running head and it should look like one almost immediately.
- * On the landing page it starts out as nothing at all — the masthead is
- * standing in front of it — and it must not put paper down until there is
- * something underneath it worth hiding: the hero's first line of type reaches
- * the underside of the bar at about ninety pixels, and that is the number.
+ * On the landing page it starts as chrome and nothing else, because the crest
+ * and the name are printed large at the top of the hero directly beneath it;
+ * it puts the paper down, and its own small lockup with it, once the reader
+ * has moved far enough that the big one is on its way out of the frame.
  */
 const SETTLE_AT: Record<MastheadVariant, number> = { standard: 50, hero: 90 };
 
@@ -201,6 +202,7 @@ export function Navigation({
           locale={locale}
           siteName={siteName}
           variant={mode}
+          settled={settled}
           away={mode === "hero" && isOpen}
         />
 

@@ -472,50 +472,7 @@
     padding-top: max(0px, calc(env(safe-area-inset-top, 0px) - var(--notice-h, 0px)));
   }
 
-  /* ---- The masthead -----------------------------------------------------
-     One lockup, two positions. At the top of the landing page it is the big
-     drawn mark and the name, centred over the hero; by the time the reader has
-     moved 180 pixels it is the running head in the corner of the bar, at the
-     exact size it has always been on every other page. Nothing crossfades:
-     it is the same bee and the same word travelling between two places.
-
-     --mh-s is the only value that moves. 1 is the big state, 0 the settled
-     one, and everything else is derived from it in CSS, so a scroll frame
-     writes a single custom property on a single element rather than three.
-     The element keeps its settled box in the layout, so the bar's own flex
-     row never learns that any of this is happening.
-
-     Read the transform right to left, which is the order it applies in:
-
-       translateX(-50% * s)  pull left by half the lockup's own width, so the
-                             big state is measured from its middle
-       scale(...)            grow from --mh-k0 down to 1 about the left edge,
-                             which is where the settled lockup starts
-       translateY(--mh-y*s)  fall down out of the bar and into the hero
-       translateX(--mh-x*s)  push right to the middle of the screen. --mh-x is
-                             the distance from the lockup's resting left edge
-                             to the centre line, written out in CSS because
-                             measuring it in JS would mean a first paint with
-                             the wrong number in it
-
-     There is deliberately no `will-change: transform` here. Promoting the
-     lockup would have Safari rasterise it once and stretch that raster, and
-     the big state — the one the reader actually looks at, motionless, at the
-     top of the page — is the end that would go soft. Letting the compositor
-     re-raster per frame keeps the drawn line crisp, and the subtree is one
-     glyph and thirteen letters, so there is nothing to save. */
-  .masthead-lockup {
-    --mh-s: 0;
-    --mh-k0: 1;
-    --mh-y: 0px;
-    --mh-x: calc(50vw - max((100vw - 80rem) / 2, 0px) - var(--mh-pad, 1.5rem));
-    transform-origin: left center;
-    transform: translateX(calc(var(--mh-x) * var(--mh-s)))
-      translateY(calc(var(--mh-y) * var(--mh-s)))
-      scale(calc(1 + (var(--mh-k0) - 1) * var(--mh-s)))
-      translateX(calc(-50% * var(--mh-s)));
   }
-}
 
 /* ==========================================================================
    PATTERNS

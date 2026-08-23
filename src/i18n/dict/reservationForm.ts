@@ -31,7 +31,7 @@ export const reservationFormNl = {
    * what they would be told on the phone; "niet beschikbaar" is what a website
    * says.
    */
-  timeOptionFull: (slot: string) => `${slot} uur \u2014 vol`,
+  timeOptionFull: (slot: string) => `${slot} uur, vol`,
   /** Shown before a date has been picked, when the day is still unknown. */
   timeHint: "Kies een datum, dan laten we zien welke tijden vrij zijn.",
   /** Once the day is known, the hours come straight uit de openingstijden. */
@@ -49,7 +49,7 @@ export const reservationFormNl = {
     "Allergieën, een verjaardag, een kinderstoel, een rustige tafel: laat het weten.",
   honeypot: "Laat dit veld leeg",
   /**
-   * The offer to be remembered, and the line under it. Both sit beside the
+   * The offer to be remembered. It sits beside the
    * button because that is where they can be read honestly: a tickbox at the
    * top of a form is a setting to be decided before you know what you are
    * deciding about, while one beside the button is an offer made to somebody
@@ -61,18 +61,7 @@ export const reservationFormNl = {
    * The box starts empty and ticking it does nothing whatever until a booking
    * has actually gone through.
    */
-  remember:
-    "Onthoud mijn gegevens op dit apparaat, dan hoef ik ze de volgende keer niet opnieuw in te typen.",
-  /**
-   * The whole of what happens to those three fields, in one sentence, in the
-   * register of the mailing list's "hooguit een mail per maand, nooit spam".
-   * Short because everything it has to say is small: het blijft hier, wij zien
-   * het niet, en het gaat weg zodra je dat wilt. Every clause of it is literally
-   * true of localStorage and would not have been of a cookie — zie de kop van
-   * src/lib/rememberMe.ts.
-   */
-  rememberNote:
-    "Alleen in deze browser, op dit apparaat. Er wordt niets naar ons verstuurd, en je haalt het er zelf zo weer uit.",
+  remember: "Onthoud mijn gegevens op dit apparaat",
   /**
    * Shown above the form when the fields arrived already filled in. A form that
    * silently knows your telefoonnummer is unsettling until it says how it knows,
@@ -86,7 +75,7 @@ export const reservationFormNl = {
    * instruction, because the person most likely to need it is somebody else on
    * the household laptop who has just been called by the wrong name.
    */
-  rememberedForget: "Dit ben ik niet \u2014 vergeet mijn gegevens",
+  rememberedForget: "Dit ben ik niet, vergeet mijn gegevens",
   submit: "Reserveren",
   submitting: "Bezig...",
   error: "Er ging iets mis. Probeer het opnieuw.",
@@ -138,9 +127,9 @@ export const reservationFormNl = {
     reservationsClosed:
       "Online reserveren staat op dit moment uit. Bel of mail ons gerust, dan regelen we het samen.",
     slotFull:
-      "Dat tijdstip is helaas vol. Kies een andere tijd, of bel ons \u2014 soms lukt er meer dan de agenda laat zien.",
+      "Dat tijdstip is helaas vol. Kies een andere tijd, of bel ons: soms lukt er meer dan de agenda laat zien.",
     dayFull:
-      "Die dag zit helemaal vol. Kies een andere datum, of bel ons \u2014 soms lukt er meer dan de agenda laat zien.",
+      "Die dag zit helemaal vol. Kies een andere datum, of bel ons: soms lukt er meer dan de agenda laat zien.",
     server: "Er ging iets mis aan onze kant. Probeer het opnieuw.",
   },
   successTitle: "Bedankt, we hebben het ontvangen",
@@ -158,7 +147,7 @@ export const reservationFormNl = {
    * this has to say what the link leads to before it asks anyone to send it on.
    */
   shareText:
-    "Dit is de pagina van jullie tafel. Stuur hem door naar wie er meekomt \u2014 zij zien wanneer en waar, en kunnen hun wensen alvast doorgeven.",
+    "Dit is de pagina van jullie tafel. Stuur hem door naar wie er meekomt: zij zien wanneer en waar, en kunnen hun wensen alvast doorgeven.",
   copyLink: "Kopieer de link",
   copied: "Gekopieerd",
   shareWhatsApp: "Stuur via WhatsApp",
@@ -185,7 +174,7 @@ export const reservationFormEn: ReservationFormDict = {
   timeNeedsDate: "Choose a date first",
   timeNoneThatDay: "We are closed that day",
   timeOption: (slot: string) => `${slot}`,
-  timeOptionFull: (slot: string) => `${slot} \u2014 fully booked`,
+  timeOptionFull: (slot: string) => `${slot}, fully booked`,
   timeHint: "Choose a date and we will show you which times are free.",
   timeHintForDay: (hours: string, last: string) =>
     `Open ${hours}. Last table at ${last}.`,
@@ -195,13 +184,10 @@ export const reservationFormEn: ReservationFormDict = {
   notesHint:
     "Allergies, a birthday, a high chair, a quiet table: do let us know.",
   honeypot: "Leave this field empty",
-  remember:
-    "Remember my details on this device, so I do not have to type them again next time.",
-  rememberNote:
-    "In this browser, on this device only. Nothing is sent to us, and you can take it out again yourself whenever you like.",
+  remember: "Remember my details on this device",
   rememberedNotice:
     "Your name, email address and phone number were still on this device, so we have filled them in for you.",
-  rememberedForget: "This is not me \u2014 forget my details",
+  rememberedForget: "This is not me, forget my details",
   submit: "Book a table",
   submitting: "Sending...",
   error: "Something went wrong. Please try again.",
@@ -233,16 +219,16 @@ export const reservationFormEn: ReservationFormDict = {
     reservationsClosed:
       "Online booking is switched off at the moment. Do call or email us and we will sort it out together.",
     slotFull:
-      "That time is fully booked. Please pick another time, or call us \u2014 sometimes more is possible than the diary shows.",
+      "That time is fully booked. Please pick another time, or call us: sometimes more is possible than the diary shows.",
     dayFull:
-      "That day is fully booked. Please pick another date, or call us \u2014 sometimes more is possible than the diary shows.",
+      "That day is fully booked. Please pick another date, or call us: sometimes more is possible than the diary shows.",
     server: "Something went wrong on our side. Please try again.",
   },
   successTitle: "Thank you, we have got it",
   successText:
     "Your request is noted; it is not a confirmation yet. We will let you know whether the table is free.",
   shareText:
-    "This is your table's own page. Send it on to whoever is coming \u2014 they will see when and where, and can pass on their wishes in advance.",
+    "This is your table's own page. Send it on to whoever is coming: they will see when and where, and can pass on their wishes in advance.",
   copyLink: "Copy the link",
   copied: "Copied",
   shareWhatsApp: "Send on WhatsApp",

@@ -767,7 +767,6 @@ export function ReservationForm({
             type="checkbox"
             checked={rememberMe}
             onChange={(e) => setRememberMe(e.target.checked)}
-            aria-describedby="reserve-remember-note"
             className="peer sr-only"
           />
           <span
@@ -798,12 +797,6 @@ export function ReservationForm({
             {t.remember}
           </span>
         </label>
-        <p
-          id="reserve-remember-note"
-          className="mt-2 pl-8 text-sm text-hive-400"
-        >
-          {t.rememberNote}
-        </p>
         <button
           type="submit"
           disabled={status === "loading"}

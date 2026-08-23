@@ -12,6 +12,7 @@ import {
   type FocalPoint,
   type StampPanel,
 } from "@/components/StampStrip";
+import { HeroLockup } from "@/components/HeroLockup";
 import type { SiteSettingsData } from "@/lib/payload";
 import { getDict } from "@/i18n/dictionaries";
 import { localeHref, type Locale } from "@/i18n/config";
@@ -187,7 +188,7 @@ export function HomeClient({ locale, settings: s, today }: Props) {
       alt: t.home.stamps.familyAlt,
       caption: t.home.stamps.familyCaption,
       aspect: 900 / 581,
-      zoom: 78,
+      zoom: 100,
     },
     {
       src: "/food-03.webp",
@@ -219,23 +220,22 @@ export function HomeClient({ locale, settings: s, today }: Props) {
   return (
     <>
       {/* ===== HERO: the sheet itself, not a dark room =====
-           The name is not printed here any more. It is the masthead in the
-           header — big and centred over this sheet until the reader moves,
-           then folded away into the running head — so what is left below is
-           the part that was always doing the work: when they are open, what
-           the place is, and the way in.
+           The crest and the name are printed here, at the top, as ordinary
+           content (see HeroLockup.tsx). They used to be a transformed element
+           borrowed from the header, which left an empty box in the bar and put
+           a moving element inside a fixed one; they are page content now and
+           they leave the screen because the page does.
 
-           `items-start` rather than centred, and the top padding says exactly
-           where the type begins. Vertical centring used to be fine because
-           the block filled the screen; now that the lockup has been lifted out
-           it would float the remaining lines up under a masthead whose
-           position is fixed to the header, and the two would collide on some
-           screen sizes and not others. `svh` rather than `vh` because iOS
-           measures `vh` against the tallest the viewport ever gets and then
-           collapses its URL bar into the difference. */}
+           `items-start`, because the block starts under the bar rather than
+           floating in the middle of what is left. A full `svh` of minimum
+           height so the next section cannot show through underneath the fold:
+           the hero is the first impression and it does not share the frame.
+           `svh` rather than `vh` because iOS measures `vh` against the tallest
+           the viewport ever gets and then collapses its URL bar into the
+           difference, which is how a hero ends up cropped on a phone. */}
       <section
         ref={heroRef}
-        className="relative flex min-h-[88svh] items-start overflow-hidden bg-paper xl:min-h-[max(44rem,88svh)]"
+        className="relative flex min-h-[100svh] items-start overflow-hidden bg-paper"
         aria-label={t.home.heroLabel}
       >
         {/* The drawn bees sit still on the sheet, the way they do on the
@@ -244,7 +244,7 @@ export function HomeClient({ locale, settings: s, today }: Props) {
 
         <m.div
           style={{ opacity: heroOpacity, y: heroY }}
-          className="relative z-10 w-full px-6 pb-24 pt-44 md:px-12 md:pb-28 md:pt-56 lg:px-20 lg:pt-64 xl:pt-60"
+          className="relative z-10 w-full px-6 pb-20 pt-28 md:px-12 md:pb-24 md:pt-32 lg:px-20 lg:pt-36"
         >
           {/* A column below xl so the photographs can be dealt in above the
               buttons; the old block layout again from xl up, where the strip
@@ -252,10 +252,10 @@ export function HomeClient({ locale, settings: s, today }: Props) {
               mattering. */}
           <div className="relative mx-auto flex w-full max-w-6xl flex-col xl:block">
             <div className="relative z-10 max-w-3xl">
-              <p className="sr-only">{heroTitleSpoken}</p>
+              <HeroLockup siteName={heroTitleSpoken} />
 
               <div
-                className="hero-rise rule-ink mb-8 w-28 [--rise-delay:0.15s] [--rise-travel:0px]"
+                className="hero-rise rule-ink mb-8 w-28 [--rise-delay:0.2s] [--rise-travel:0px]"
                 aria-hidden="true"
               />
 
