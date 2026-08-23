@@ -125,6 +125,31 @@ async function bookingsBetween(
 /** One day of them. */
 const bookingsFor = (isoDate: string) => bookingsBetween(isoDate, isoDate);
 
+/**
+ * The half hours a sitting is in the room for, as keys on the grid.
+ *
+ * Keyed to the grid rather than to the sitting's own start, because the two are
+ * not always the same. Everything the form offers lands on :00 or :30, but the
+ * owners type reservations in by hand as well, and a party entered at 19:07
+ * whose seats are counted under 19:07 occupies a key nothing else ever reads:
+ * the picker asks about 19:00, finds the room empty, and hands out forty chairs
+ * that are already sat in. A table from 19:07 to 21:07 is in the room for part
+ * of the 19:00 half hour and part of the 21:00 one, and takes its seats out of
+ * both.
+ */
+function coveredSlots(start: number, minutes: number): number[] {
+  const end = start + minutes;
+  const slots: number[] = [];
+  for (
+    let t = Math.floor(start / SLOT_MINUTES) * SLOT_MINUTES;
+    t < end;
+    t += SLOT_MINUTES
+  ) {
+    slots.push(t);
+  }
+  return slots;
+}
+
 /** Seats taken per half hour, keyed by minutes from midnight. */
 function seatsBySlot(
   bookings: Booking[],
@@ -136,10 +161,7 @@ function seatsBySlot(
     if (start === null) continue;
     const seats = Number(booking.guests);
     if (!Number.isFinite(seats) || seats <= 0) continue;
-    // The last slot the sitting still overlaps: a two hour table from 19:00
-    // runs to 21:00, and 20:30 is the final half hour inside it.
-    const last = start + sittingMinutes(booking, durationMinutes) - SLOT_MINUTES;
-    for (let t = start; t <= last; t += SLOT_MINUTES) {
+    for (const t of coveredSlots(start, sittingMinutes(booking, durationMinutes))) {
       taken.set(t, (taken.get(t) ?? 0) + seats);
     }
   }
@@ -154,7 +176,9 @@ function roomFrom(
 ): number {
   const duration = Math.max(SLOT_MINUTES, opts.durationMinutes || DEFAULT_DURATION);
   let left = opts.capacity;
-  for (let t = start; t <= start + duration - SLOT_MINUTES; t += SLOT_MINUTES) {
+  // The same walk `seatsBySlot` used to put the seats there, so the question
+  // and the answer cannot land on different keys.
+  for (const t of coveredSlots(start, duration)) {
     left = Math.min(left, opts.capacity - (taken.get(t) ?? 0));
   }
   return left;
@@ -225,7 +249,11 @@ export async function canSeat(
   if (!counting(opts)) return { ok: true };
 
   const start = timeToMinutes(time);
-  if (start === null) return { ok: true };
+  // A time that is not a time cannot be checked against anything, and the
+  // module's default answer must not be "there is room": the callers that
+  // validate the format before asking lose nothing, and one that forgets to
+  // gets a refusal it can see rather than a table nobody counted.
+  if (start === null) return { ok: false, reason: "slotFull" };
 
   const seats = Math.max(1, guests);
   const taken = seatsBySlot(await bookingsFor(isoDate), opts.durationMinutes);

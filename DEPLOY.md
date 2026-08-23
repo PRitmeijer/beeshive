@@ -13,6 +13,9 @@ repeated here:
   and the three ways to restore.
 - `scripts/README.md` — what the export, import and verify scripts do to ids,
   to files and to passwords, and what they cannot do.
+- `docs/rate-limiting.md` — which endpoints are throttled, and the one
+  environment variable (`TRUSTED_PROXY_HOPS`) that has to match the number of
+  proxies in front of the container for the throttle to mean anything.
 
 Read the two paragraphs under **Before you touch anything** now rather than
 later. The rest can be followed in order.
@@ -219,8 +222,13 @@ One thing follows immediately from having run the import and the verify at all,
 and it has to be done before the container goes into service: both scripts
 leave a marker in `payload_migrations` that stops Payload dead on start-up.
 **Read *When the container comes up healthy and serves nothing new*, below, and
-do what it says, now.** It is one `DELETE` and it takes a second; skipped, it
-produces a site that answers every request and serves nothing from the CMS.
+do what it says, now.** It is one `DELETE` and it takes a second.
+
+Skipping it no longer produces a site that answers every request and serves
+nothing from the CMS — `ops/preflight.mjs` refuses to start the container while
+that marker is there, and prints what to do about it. But it does produce a
+container that will not come up until you have done this, so you may as well do
+it here rather than in the middle of step 12.
 
 ## 8. Where the photographs ended up
 
@@ -367,13 +375,15 @@ ever set one up, `BUILD_DATABASE_URI` in `.env` is where it goes.
 So, after every `docker compose up -d`, read this:
 
 ```bash
-docker compose logs beeshive | grep warm-up
+docker compose logs beeshive | grep -E 'preflight|warm-up'
 ```
 
-A healthy start looks like this — the first pass finds the pages stale, which
-is the whole point, and the second finds nothing left:
+A healthy start looks like this — the preflight passes in one line before the
+server starts at all, the first pass finds the pages stale, which is the whole
+point, and the second finds nothing left:
 
 ```
+preflight: geen dev-push-markering in payload_migrations. Doorstarten.
 warm-up: server answering after 11s
 warm-up: pass 1 (triggering): 17 requested, 0 did not answer 2xx/3xx, 16 still stale
 warm-up: pass 2 (verifying): 17 requested, 0 did not answer 2xx/3xx, 0 still stale
@@ -383,16 +393,23 @@ warm-up: every page rendered against the live database. Nothing left stale.
 Anything else is worth stopping for. Pages still stale after pass two mean the
 regeneration is not completing, and an `ALARM` line means the CMS never
 answered at all — see the next section, which is the fault that produces it.
-You can run the warm-up again by hand at any time, and it is worth doing after
-an import or after a large edit in the admin:
+A `preflight: STOP` line means the container did not start, and the next
+section is that too.
+
+You can run either script again by hand at any time, and the warm-up is worth
+running after an import or after a large edit in the admin:
 
 ```bash
+docker compose exec beeshive node /app/ops/preflight.mjs
 docker compose exec beeshive /app/ops/warm-up.sh
 ```
 
 ## When the container comes up healthy and serves nothing new
 
-This one deserves its own heading because everything about it looks fine.
+This one has its own heading because for a long time everything about it looked
+fine. It cannot any more — `ops/preflight.mjs` now stops the container instead
+— but the fault is worth understanding, because the preflight's message assumes
+you know what it is talking about.
 
 Payload records a row named `dev` with batch `-1` in `payload_migrations`
 whenever it pushes the schema straight from the collections instead of running
@@ -417,7 +434,59 @@ already started, so the port is open and every prerendered page answers `200`
 from the HTML built into the image, forever. `docker compose ps` says healthy.
 The site looks up. Meanwhile every request that actually needs the CMS —
 `/api/availability`, `/api/reserve`, `/api/active-notifications`, the admin —
-hangs until the client gives up.
+hangs until the client gives up. The site takes no bookings and nothing in the
+log says so.
+
+### What stops it
+
+Three things, and they are worth telling apart.
+
+**`ops/preflight.mjs`, before the server starts.** It is the first thing the
+container's `CMD` runs. It connects to `DATABASE_URI`, looks for a row with
+batch `-1`, and if there is one it prints the explanation below in Dutch and
+exits non-zero — so the shell never reaches `node server.js`, the container
+goes down, and Docker restarts it into the same message. That is the point: a
+container that visibly will not start is a fault somebody fixes in five
+minutes. A container that is up and useless is one that goes unnoticed until an
+owner asks why the phone has stopped ringing.
+
+What you will see in `docker compose logs beeshive`:
+
+```
+preflight: STOP — deze database draagt een dev-push-markering ('dev').
+...
+```
+
+It is the *only* thing about that script allowed to keep the container down.
+A database it cannot reach, a `payload_migrations` table that does not exist
+yet, no `DATABASE_URI`, no `pg` in the image — every one of those prints its
+reason and exits 0. Refusing to start over a check that could not run would
+invent an outage rather than prevent one, and the application has its own
+reconnect loop besides. `PREFLIGHT=off` in `.env` skips it altogether.
+
+**`src/payload.config.ts`, if the preflight was skipped.** The adapter's own
+`migrate` is wrapped there, and refuses the same row with a one-paragraph Dutch
+message *when there is no TTY* — which is exactly the condition that makes the
+prompt fatal. Run `npm run migrate` in a real terminal and Payload asks its
+question as it always has. Run anything without one and this stops it in
+seconds rather than hanging forever. It exists for the run that went around the
+preflight: `PREFLIGHT=off`, a bare `node server.js`, `npm start` on a laptop.
+
+There is no supported flag for any of this, and it is worth writing down that
+we looked. In payload 3.10.0 `migrate` takes `{ migrations }` and nothing else
+(`payload/dist/database/types.d.ts`) and reads no environment variable;
+`forceAcceptWarning` exists but only on `migrateFresh` and `createMigration`,
+neither of which is on the `prodMigrations` path. Wrapping the adapter is what
+there is.
+
+**`ops/warm-up.sh`, after the server starts.** Unchanged, and still worth
+having. Its `ALARM` line is this fault seen from outside, and it is why it asks
+for `/api/active-notifications` before it asks for any page: the pages can all
+answer `200` without the CMS having been reached at all, and that one route
+cannot. It catches a Payload that is stuck for a reason nobody predicted, which
+is the half the preflight cannot cover.
+
+### Getting past it
 
 Delete the row, once, after the import and verify are finished and before you
 open the doors:
@@ -427,21 +496,46 @@ docker compose exec postgres psql -U beeshive -d beeshive -c \
   "SELECT id, name, batch FROM payload_migrations ORDER BY id;"
 
 docker compose exec postgres psql -U beeshive -d beeshive -c \
-  "DELETE FROM payload_migrations WHERE name = 'dev';"
+  "DELETE FROM payload_migrations WHERE batch = -1;"
 
-docker compose restart beeshive
+docker compose up -d beeshive
 ```
+
+Keyed on the batch rather than on the name, because that is what Payload keys
+on — `migrationsInDB.find((m) => m.batch === -1)`. The row is called `dev` in
+practice, but a row with that batch under any other name stops the site just as
+dead and a `DELETE` written against the name would leave it sitting there.
+
+`restart: unless-stopped` means Docker is already restarting the container over
+and over while the row is there, backing off a little further each time, so the
+next attempt after the `DELETE` would eventually succeed on its own. `up -d` is
+how you stop waiting for it.
 
 Deleting it is safe in exactly this situation and not in general: it is safe
 here because the schema came from `npm run migrate` in step 5 and the migration
 row is still sitting above it, so the migrations and the tables genuinely do
 agree. If you ever find this row on a database whose schema you cannot account
-for, do not delete it — work out what pushed it first.
+for, do not delete it — work out what pushed it first. The other way out is to
+accept the push and run `npm run migrate` by hand, from a checkout with the
+Payload CLI in it, in a terminal that can answer the question.
 
-The warm-up checks for this on every start. That is what its `ALARM` line
-means, and it is why it asks for `/api/active-notifications` before it asks for
-any page: the pages can all answer `200` without the CMS having been reached at
-all, and that one route cannot.
+You can ask the question without deploying anything:
+
+```bash
+docker compose exec beeshive node /app/ops/preflight.mjs
+```
+
+### Not creating it in the first place
+
+`npm run dev` against the production database is how this row gets written, so
+the config refuses that too: the dev schema push is now allowed only when
+`DATABASE_URI` names a database on this machine. Point it anywhere else and the
+push is skipped with a warning saying so. `ALLOW_REMOTE_SCHEMA_PUSH=true` is
+the way through for the developer who genuinely means it.
+
+That does not cover the `npm run db:*` scripts — they connect through Payload
+the same way and still push — which is why the runbook still ends with a
+`DELETE` and why the preflight exists.
 
 ## If it goes wrong
 
@@ -497,9 +591,9 @@ For the second time you do this, or for reading over somebody's shoulder.
 | 6 | `npm run migrate` && `npm run migrate:status` |
 | 7 | `MEDIA_IMPORT_DIR=… npm run db:import -- content-export.json`, keep the password list |
 | 8 | `npm run db:verify -- content-export.json` |
-| 9 | `DELETE FROM payload_migrations WHERE name = 'dev'` — see the section on it |
+| 9 | `DELETE FROM payload_migrations WHERE batch = -1` — see the section on it; skipped, the preflight keeps the container down until you do |
 | 10 | `/galerij` in a browser: every photograph loads |
 | 11 | Owners reset their passwords through *Wachtwoord vergeten* |
 | 12 | `docker compose up -d`, stanza created, `ops/backup.sh full`, `info` shows it |
 | 13 | `rm docker-compose.override.yml`, `docker compose up -d`, proxy over, page down |
-| 14 | `docker compose logs beeshive \| grep warm-up` — pass 2 clean, no ALARM |
+| 14 | `docker compose logs beeshive \| grep -E 'preflight\|warm-up'` — preflight clean, pass 2 clean, no ALARM |

@@ -107,6 +107,15 @@ Two kinds of output are expected rather than alarming:
   is not set. A media document whose file is not there cannot be created at all
   — Payload refuses an upload document without a file — so it is named in a
   warning at the end, and anything that pointed at it lost the link.
+- **Nothing is mailed.** Reservations and contact messages carry an
+  afterChange hook that notifies the owners, and a dump of the old database is
+  history rather than news — importing it unguarded sends one
+  "Reserveringsaanvraag: …" per historical booking, all at once, none of them
+  true. Every write the script makes carries the `skipOutboundEmail` flag in
+  `req.context` (see `src/lib/outboundEmail.ts`), and each imported row is then
+  settled at verzendstatus "Niet verstuurd" so that opening it in the admin and
+  saving does not send it either. A dump that already says `sent` keeps saying
+  so. The script prints how many rows it settled at the end.
 - **Passwords cannot be imported.** Only hashes exist in the dump and the Local
   API takes plaintext. Every account is created with a random password and
   listed at the end; each one uses "Wachtwoord vergeten" once.

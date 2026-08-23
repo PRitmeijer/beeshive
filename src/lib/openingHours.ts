@@ -45,8 +45,31 @@ export interface ScheduledDay {
   text?: string | null;
 }
 
-/** The whole cell reads "Gesloten" or "Closed", never a time. */
-const CLOSED = /^\s*(gesloten|closed|dicht)\s*$/i;
+/**
+ * The cell says the doors are shut.
+ *
+ * Matched loosely, because the word rarely arrives alone: "Gesloten (vakantie
+ * 1-15 juli)" is exactly how a person writes a holiday, and anchoring this to
+ * the whole cell read the dates in the explanation as opening times. What keeps
+ * "11:00 - 21:00 (keuken gesloten na 20:00)" open is not the anchor but the
+ * order — see `parseRanges`, which only believes the word when it comes before
+ * the first time on the line.
+ */
+const CLOSED = /\b(gesloten|closed|dicht)\b/i;
+
+/** Minutes in a day, for the times that run past the end of one. */
+const DAY_MINUTES = 24 * 60;
+
+/**
+ * How far past midnight a closing time is still believable.
+ *
+ * A kitchen that runs to one or two in the morning is an ordinary Saturday; a
+ * line reading "20:00 - 07:00" is somebody who swapped the two ends round. The
+ * cut sits at four, past the latest hour a Utrecht eetcafé may serve and well
+ * short of any plausible morning opening, so a real late kitchen is read as one
+ * and a typo is still refused.
+ */
+const LATEST_CLOSE_AFTER_MIDNIGHT = 4 * 60;
 
 /**
  * The last table we take online sits down this long before the doors close,
@@ -80,28 +103,53 @@ export function timeToMinutes(time: string): number | null {
   return m ? toMinutes(m[1], m[2]) : null;
 }
 
+/**
+ * Minutes from midnight as a clock reads them. A range that runs past midnight
+ * carries a close beyond 24:00, and 01:00 is what a person — and schema.org's
+ * `closes` — expects to see there, never "25:00".
+ */
 export function formatTime(minutes: number): string {
-  const h = String(Math.floor(minutes / 60)).padStart(2, "0");
-  const m = String(minutes % 60).padStart(2, "0");
+  const clock = ((minutes % DAY_MINUTES) + DAY_MINUTES) % DAY_MINUTES;
+  const h = String(Math.floor(clock / 60)).padStart(2, "0");
+  const m = String(clock % 60).padStart(2, "0");
   return `${h}:${m}`;
 }
 
 /**
  * Every time range in one day's line. Anything with no times in it at all —
  * "Gesloten", a note, an empty cell — yields none, which reads as closed.
+ *
+ * A close after midnight comes back as minutes past this day's midnight, so a
+ * Saturday running to one o'clock is `{ open: 1020, close: 1500 }`. Everything
+ * downstream compares `open` and `close` and nothing divides by the length of a
+ * day, so the only place that has to know is `formatTime`, which wraps, and
+ * `slotsFor`, which stops offering tables at midnight because a slot is a time
+ * on a date and half past midnight belongs to the next one.
  */
 export function parseRanges(hours: string | null | undefined): Range[] {
-  if (!hours || CLOSED.test(hours)) return [];
+  if (!hours) return [];
   // Built per call: a /g regex carries lastIndex between uses.
   const pattern =
     /(\d{1,2})(?:[:.](\d{2}))?\s*(?:[–—−-]|tot|to|till|until)\s*(\d{1,2})(?:[:.](\d{2}))?/gi;
+  const found = [...hours.matchAll(pattern)];
+
+  // "Gesloten (vakantie 1-15 juli)" is shut and says why; "11:00 - 21:00
+  // (keuken gesloten na 20:00)" is open and says how late the kitchen runs.
+  // Whichever comes first on the line is the one being said about the day.
+  const closed = CLOSED.exec(hours);
+  if (closed && (found.length === 0 || closed.index < found[0].index)) return [];
+
   const ranges: Range[] = [];
-  for (const m of hours.matchAll(pattern)) {
+  for (const m of found) {
     const open = toMinutes(m[1], m[2]);
-    const close = toMinutes(m[3], m[4]);
-    // A close time before the open time means someone typed it wrong, or the
-    // kitchen runs past midnight. Neither is something to guess at.
-    if (close > open && close <= 24 * 60) ranges.push({ open, close });
+    let close = toMinutes(m[3], m[4]);
+    // A close at or before the open is either a kitchen that runs past
+    // midnight or two ends typed the wrong way round, and the hour tells them
+    // apart: carried over the date line it has to land before the small hours.
+    if (close <= open) close += DAY_MINUTES;
+    if (close > open && close <= DAY_MINUTES + LATEST_CLOSE_AFTER_MIDNIGHT) {
+      ranges.push({ open, close });
+    }
   }
   return ranges.sort((a, b) => a.open - b.open);
 }
@@ -149,15 +197,27 @@ export function slotsFor(ranges: Range[], notBefore = -1): string[] {
     const last = close - LAST_SITTING_BEFORE_CLOSE;
     // Walk the half-hour grid from the door opening, so the slots stay on
     // :00 and :30 whatever `notBefore` happens to be, and keep the ones that
-    // have not already gone.
-    for (let t = open; t <= last; t += SLOT_MINUTES) {
+    // have not already gone. A day that closes after midnight stops offering
+    // at midnight: a booking is a date and a time of day, and a guest wanting
+    // half past twelve books it on the date the clock will show.
+    for (let t = open; t <= last && t < DAY_MINUTES; t += SLOT_MINUTES) {
       if (t >= notBefore) found.add(t);
     }
   }
   return [...found].sort((a, b) => a - b).map(formatTime);
 }
 
-/** Whether a HH:MM string is one of the day's bookable slots. */
+/**
+ * Whether a HH:MM string is one of the day's bookable slots.
+ *
+ * One of the slots, not merely a minute inside the hours: the grid is part of
+ * the answer, or this says yes to 19:07 on a day whose form only ever offered
+ * 19:00 and 19:30. The seat counting in src/lib/capacity.ts walks that same
+ * grid, and a booking taken off it is one nothing else can see.
+ *
+ * The step is measured from each range's own opening, exactly as `slotsFor`
+ * lays it out, so a day that opens at 11:15 offers — and accepts — 11:45.
+ */
 export function isBookable(
   ranges: Range[],
   time: string,
@@ -169,7 +229,9 @@ export function isBookable(
   if (minutes < notBefore) return false;
   return ranges.some(
     ({ open, close }) =>
-      minutes >= open && minutes <= close - LAST_SITTING_BEFORE_CLOSE,
+      minutes >= open &&
+      minutes <= close - LAST_SITTING_BEFORE_CLOSE &&
+      (minutes - open) % SLOT_MINUTES === 0,
   );
 }
 

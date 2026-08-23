@@ -148,6 +148,10 @@ if [ "$canary_code" = "000" ]; then
   log "is not reaching the database. The usual cause is a 'dev' row in"
   log "payload_migrations left behind by a script run outside production, which"
   log "makes Payload stop on an interactive prompt that nothing can answer."
+  log "ops/preflight.mjs refuses to start the server when that row is there, so"
+  log "if you are reading this and the log above says the preflight passed, look"
+  log "for a different cause: a database that went away after the start, or a"
+  log "migration still running. Either way it needs a person."
   log "See DEPLOY.md, 'When the container comes up healthy and serves nothing new'."
 elif [ "$canary_code" != "200" ]; then
   log "note: ${CANARY} answered ${canary_code}"

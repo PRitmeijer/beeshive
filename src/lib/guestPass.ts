@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { getPayloadClient, type SiteSettingsData } from "@/lib/payload";
 import { canonicalUrl, type Locale } from "@/i18n/config";
 import { nowMinutesInAmsterdam, todayInAmsterdam } from "@/lib/openingHours";
@@ -41,8 +42,8 @@ import type { IcsEvent } from "@/lib/ics";
  * a hand-written list makes that reviewable.
  */
 export interface GuestResponseRow {
-  /** Payload's own type for an array row's key. Compared as a string, and
-   *  only ever by the endpoint, which is the one place a row is rewritten. */
+  /** Payload's own key for an array row. Never leaves the server: see
+   *  `responseEditKey` for what the browser is given instead. */
   id?: string | null;
   name?: string | null;
   dietary?: string | null;
@@ -233,10 +234,13 @@ function asStatus(value: unknown): GuestPassStatus {
  *   createdAt, updatedAt — of no interest to a guest, and updatedAt would leak
  *                  when the owners last touched the row.
  *   guestResponses[].addedAt — nobody needs to know who answered last.
- *   guestResponses[].id      — the id of a row is what lets it be rewritten.
- *                  Only the browser that wrote a row is told its id, in the
- *                  POST response; publishing all of them here would let anyone
- *                  with the link edit anyone else's answer.
+ *   guestResponses[].id      — Payload's row key, and no kind of secret: it is
+ *                  a BSON ObjectID whose trailing counter simply increments,
+ *                  so three answers to the same table are three consecutive
+ *                  ids. It never leaves the server in any form. What the
+ *                  browser that wrote a row is given instead is the
+ *                  unguessable handle from `responseEditKey` below, in the
+ *                  POST response body only.
  */
 export function redactForGuests(doc: ReservationDoc): GuestPassView {
   const time = String(doc.time ?? "");
@@ -259,6 +263,78 @@ export function redactForGuests(doc: ReservationDoc): GuestPassView {
       // by hand in the admin. Showing a blank line would only look broken.
       .filter((row) => row.name.length > 0),
   };
+}
+
+/**
+ * The handle a companion keeps so they can come back and change their answer.
+ *
+ * The obvious thing to hand out is the array row's own id, and it was, and it
+ * was wrong. Payload mints BSON ObjectIDs: twelve bytes of which the last
+ * three are a counter that goes up by one each time, so the answers of one
+ * party are consecutive numbers. Anyone who had answered once held a valid
+ * "proof" that they had written the row before theirs and the row after it,
+ * and could overwrite either — on a page whose whole audience is a WhatsApp
+ * group.
+ *
+ * What is needed is a value the holder of a row id cannot compute, and the
+ * cheapest one that needs no new column is a signature: HMAC-SHA256 over the
+ * reservation and the row, keyed by the server's own secret. The party knows
+ * the link, and may well be able to guess a neighbouring row id, but without
+ * PAYLOAD_SECRET none of that produces a key — and the key is never rendered
+ * into the page, only returned in the body of the POST that wrote the row.
+ *
+ * Being derived rather than stored is the point: there is nothing extra on the
+ * document for the admin to show by accident, nothing to migrate, and nothing
+ * that survives in a backup. The price is that rotating PAYLOAD_SECRET makes
+ * every remembered handle stop matching, and a guest whose handle no longer
+ * matches adds a second line instead of editing their first. That is a bad
+ * afternoon for a table of ten, not a data loss, and it is the same thing that
+ * happens when they open the link on a different phone.
+ */
+function editKeySecret(): string {
+  // Mirrors payloadSecret() in src/payload.config.ts, including its throwaway:
+  // that file already refuses to boot in production without a real secret, so
+  // the fallback can only ever be reached on somebody's laptop.
+  return process.env.PAYLOAD_SECRET || "dev-only-insecure-secret";
+}
+
+export function responseEditKey(
+  doc: Pick<ReservationDoc, "id">,
+  rowId: string | null | undefined,
+): string | null {
+  const id = String(rowId ?? "");
+  if (!id) return null;
+  return createHmac("sha256", editKeySecret())
+    .update(`${doc.id}:${id}`)
+    .digest("base64url");
+}
+
+/**
+ * Which row a returning companion is allowed to rewrite, or -1.
+ *
+ * Compared with `timingSafeEqual` rather than `===`. The difference is
+ * academic against a phone on café wifi, but the alternative is a comment
+ * explaining why a string comparison against a MAC is fine here, and there is
+ * no version of that comment that stays true when somebody moves the code.
+ */
+export function findResponseByEditKey(
+  doc: Pick<ReservationDoc, "id">,
+  rows: GuestResponseRow[],
+  key: string | null | undefined,
+): number {
+  const offered = Buffer.from(String(key ?? ""), "utf8");
+  if (offered.length === 0) return -1;
+
+  let found = -1;
+  for (let index = 0; index < rows.length; index += 1) {
+    const expected = responseEditKey(doc, rows[index]?.id);
+    if (!expected) continue;
+    const mine = Buffer.from(expected, "utf8");
+    if (mine.length === offered.length && timingSafeEqual(mine, offered)) {
+      found = index;
+    }
+  }
+  return found;
 }
 
 /** The address as the printed pages set it: street, then postcode and place. */

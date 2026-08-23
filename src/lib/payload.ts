@@ -244,14 +244,18 @@ const defaultsByLocale: Record<Locale, SiteSettingsData> = {
 };
 
 /**
- * Drop anything that carries no content, so a blank CMS field cannot beat a
- * default.
+ * Whether a value carries anything a reader would see, so a blank CMS field
+ * cannot beat a default.
  *
  * Arrays need the same treatment as scalars. A localised array such as
  * openingHours or features still returns one row per entry in an untranslated
  * locale, with every value inside it null. That array is truthy, so a naive
  * check keeps it and the locale's defaults never apply, which is how the
  * English home page ended up rendering rows with no opening time in them.
+ *
+ * A list with no rows at all is a different matter and `filled()` below, not
+ * this, is where it is judged: rows full of nulls are a translation nobody made,
+ * but no rows is somebody who deleted them.
  */
 function hasContent(value: unknown): boolean {
   if (value === null || value === undefined || value === "") return false;
@@ -265,9 +269,22 @@ function hasContent(value: unknown): boolean {
   return true;
 }
 
+/**
+ * The fields of one CMS object that should override the defaults.
+ *
+ * An empty list overrides. Deleting the seven opening-hours rows in the admin —
+ * the ordinary first half of retyping them — used to leave `hasContent` looking
+ * at nothing, drop the field, and put the stock Mon/Thu/Fri/Sat 11:00–21:00 back
+ * on the homepage, the contact page and both booking endpoints, hours nobody had
+ * typed and nobody could get rid of. An emptied list is an editor's decision and
+ * is taken as one; the untranslated-locale case `hasContent` guards against
+ * arrives as rows that exist and are blank, which is still dropped.
+ */
 function filled(source: Record<string, unknown> | null | undefined) {
   return Object.fromEntries(
-    Object.entries(source || {}).filter(([, v]) => hasContent(v)),
+    Object.entries(source || {}).filter(
+      ([, v]) => (Array.isArray(v) && v.length === 0) || hasContent(v),
+    ),
   );
 }
 

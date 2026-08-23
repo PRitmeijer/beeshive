@@ -26,8 +26,26 @@ export const Events: CollectionConfig = {
     plural: "Evenementen",
   },
   access: {
-    // The agenda is a public page; the rest needs a login.
-    read: () => true,
+    /**
+     * The agenda is a public page, but "public" is not the same as `true`.
+     *
+     * `read: () => true` opens Payload's own REST endpoint as well, and that
+     * one takes no notice of the filter in src/lib/events.ts: `GET
+     * /api/events` with no cookie hands out every row, `status` and all. A
+     * concept is then public the moment it is saved — the New Year's dinner
+     * the owners are still arguing about over the price of, readable by
+     * anyone who thinks to ask.
+     *
+     * Returning a query instead of a boolean makes the filter part of the
+     * access rule rather than something each caller has to remember: a
+     * logged-in user sees the whole collection, and everybody else sees
+     * published rows and cannot even count the others. The site itself reads
+     * through the Local API, which bypasses access by design, so loadEvents,
+     * the sitemap, the .ics feed and the admin agenda — the last of which
+     * wants the concepts — are unaffected.
+     */
+    read: ({ req: { user } }) =>
+      user ? true : { status: { equals: "published" } },
     create: ({ req: { user } }) => Boolean(user),
     update: ({ req: { user } }) => Boolean(user),
     delete: ({ req: { user } }) => Boolean(user),

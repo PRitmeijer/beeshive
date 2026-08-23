@@ -423,9 +423,18 @@ export function expandOccurrences(
 
     // `until` is a day, so the series runs to the end of it rather than to
     // its midnight — "loopt tot 30 juni" includes the thirtieth.
+    //
+    // Which day it is can be read two ways when the value was stored at a local
+    // midnight rather than at midday: 2026-04-06T22:00Z is the sixth in UTC and
+    // the seventh here. `skipDates` above honours both readings, and the later
+    // one is the match here for the same reason — an owner who typed an end date
+    // meant that evening to happen, and dropping it is the mistake they would
+    // notice. Payload's own date picker normalises to midday so both readings
+    // agree; an import is what produces the other kind.
     let untilKey: string | null = null;
     if (isRecurring && event.recurrence?.until) {
-      untilKey = dayKeysOf(event.recurrence.until)[0] ?? null;
+      const keys = dayKeysOf(event.recurrence.until);
+      untilKey = keys.length ? keys.reduce((a, b) => (a > b ? a : b)) : null;
     }
 
     for (const day of seriesDays(event, first, fromDay, toDay)) {

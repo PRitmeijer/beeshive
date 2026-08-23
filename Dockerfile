@@ -66,15 +66,17 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/public ./public
-# The warm-up, in the runner rather than carried through the builder: it is
-# not part of the build and it changes for reasons the build does not care
-# about. `.dockerignore` excludes ops/ wholesale — the database and backup
-# images are built from their own contexts — and re-admits this one file.
+# The preflight and the warm-up, in the runner rather than carried through the
+# builder: neither is part of the build and both change for reasons the build
+# does not care about. `.dockerignore` excludes ops/ wholesale — the database
+# and backup images are built from their own contexts — and re-admits these
+# two files.
+COPY ops/preflight.mjs ./ops/preflight.mjs
 COPY ops/warm-up.sh ./ops/warm-up.sh
 # The executable bit survives a Linux checkout and does not survive every
 # other one. Setting it here costs a layer of nothing and removes a failure
 # that would only ever show up on somebody else's machine.
-RUN chmod 755 ./ops/warm-up.sh
+RUN chmod 755 ./ops/preflight.mjs ./ops/warm-up.sh
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
@@ -100,22 +102,34 @@ ENV HOSTNAME="0.0.0.0"
 # build argument; that is a separate stage and none of its environment reaches
 # this one.
 
-# The warm-up runs beside the server, not before it.
+# Three things, in an order that matters: check, then serve, then warm.
 #
-# It has to be after the server is listening, and it must not delay the server
-# listening, which normally argues for a supervisor. It does not need one. The
-# `&` starts the warm-up in the background, where it polls the port until
-# something answers; `exec` then replaces the shell with node, so node is PID 1
-# and Docker's SIGTERM reaches it directly on `docker compose stop` rather than
-# being swallowed by a wrapper that would have to forward it. Adding tini or
-# s6 here would buy nothing except the reaping of one short-lived child that
-# outlives nothing.
+# ops/preflight.mjs runs to completion first and is the only one of the three
+# allowed to stop the container. It looks for the dev-push marker in
+# `payload_migrations` — the row that makes Payload stop on a stdin prompt no
+# container can answer, after which the site serves the HTML baked into the
+# image forever and looks healthy doing it. `|| exit 1` is what turns that
+# silent hang into a container that visibly does not start, with the reason in
+# `docker compose logs`. Every other outcome, an unreachable database included,
+# exits 0 and gets out of the way; see the file for why that rule is absolute.
+#
+# The warm-up then runs beside the server rather than before it. It has to be
+# after the server is listening and it must not delay the server listening,
+# which normally argues for a supervisor. It does not need one. The `&` starts
+# it in the background, where it polls the port until something answers; `exec`
+# then replaces the shell with node, so node is PID 1 and Docker's SIGTERM
+# reaches it directly on `docker compose stop` rather than being swallowed by a
+# wrapper that would have to forward it. Adding tini or s6 here would buy
+# nothing except the reaping of one short-lived child that outlives nothing.
+# The preflight cannot disturb that: it is finished and reaped before the shell
+# reaches `exec`.
 #
 # ops/warm-up.sh always exits 0 and is a background job besides, so it cannot
-# fail the container however badly it goes. It is also runnable on its own,
+# fail the container however badly it goes. Both are runnable on their own,
 # which is what you want after an import:
 #
+#     docker compose exec beeshive node /app/ops/preflight.mjs
 #     docker compose exec beeshive /app/ops/warm-up.sh
 #
-# WARMUP=off in the environment skips it.
-CMD ["/bin/sh", "-c", "/app/ops/warm-up.sh & exec node server.js"]
+# PREFLIGHT=off and WARMUP=off in the environment skip them.
+CMD ["/bin/sh", "-c", "node /app/ops/preflight.mjs || exit 1; /app/ops/warm-up.sh & exec node server.js"]

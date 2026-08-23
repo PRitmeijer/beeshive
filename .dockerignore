@@ -44,8 +44,9 @@ README.md
 DEPLOY.md
 # The database and backup images are built from their own contexts
 # (ops/postgres, ops/pgbackrest); none of that belongs in the application
-# image. The one exception is the warm-up, which the application container runs
-# beside the server — the negation has to come after the exclusion, or Docker
+# image. The exceptions are the two scripts the application container runs
+# around the server — the negations have to come after the exclusion, or Docker
 # never reconsiders the directory.
 ops
+!ops/preflight.mjs
 !ops/warm-up.sh

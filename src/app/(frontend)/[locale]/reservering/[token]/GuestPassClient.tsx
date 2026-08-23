@@ -66,15 +66,21 @@ interface Props {
 
 /** What this browser last sent, so a second visit offers an edit, not a copy. */
 interface Remembered {
-  /** Only the browser that wrote a row is ever told its id. */
-  responseId: string | null;
+  /**
+   * The endpoint's proof that this phone wrote one of the rows: a signature
+   * over that row, handed back in the POST response and stored nowhere else.
+   * Never the row's own id — those run consecutively, so holding one would be
+   * a licence to edit the answer next to it. See `responseEditKey` in
+   * src/lib/guestPass.ts.
+   */
+  responseKey: string | null;
   name: string;
   dietary: string[];
   drinks: string[];
 }
 
 const EMPTY: Remembered = {
-  responseId: null,
+  responseKey: null,
   name: "",
   dietary: [],
   drinks: [],
@@ -209,8 +215,11 @@ export function GuestPassClient({
       const parsed = JSON.parse(raw) as Partial<Remembered>;
       if (typeof parsed?.name !== "string" || !parsed.name) return;
       const saved: Remembered = {
-        responseId:
-          typeof parsed.responseId === "string" ? parsed.responseId : null,
+        // Anything stored by an older version of this page held the row id
+        // under another name; it is not read, so that guest is offered a fresh
+        // line rather than an edit. One retyped answer, once.
+        responseKey:
+          typeof parsed.responseKey === "string" ? parsed.responseKey : null,
         name: parsed.name,
         dietary: Array.isArray(parsed.dietary) ? parsed.dietary : [],
         drinks: Array.isArray(parsed.drinks) ? parsed.drinks : [],
@@ -306,14 +315,14 @@ export function GuestPassClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           token,
-          responseId: draft.responseId ?? undefined,
+          responseKey: draft.responseKey ?? undefined,
           name: draft.name,
           dietary: draft.dietary,
           drinks: draft.drinks,
         }),
       });
       const data = (await res.json().catch(() => null)) as {
-        responseId?: string | null;
+        responseKey?: string | null;
         responses?: GuestResponseView[];
       } | null;
 
@@ -326,7 +335,7 @@ export function GuestPassClient({
       const saved: Remembered = {
         ...draft,
         name: draft.name.trim(),
-        responseId: data?.responseId ?? draft.responseId ?? null,
+        responseKey: data?.responseKey ?? draft.responseKey ?? null,
       };
       setResponses(data?.responses ?? responses);
       setRemembered(saved);

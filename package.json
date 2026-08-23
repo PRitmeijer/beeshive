@@ -7,6 +7,7 @@
         "prebuild": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\"",
         "build": "next build",
         "start": "next start",
+        "preflight": "node ops/preflight.mjs",
         "lint": "eslint .",
         "lint:fix": "eslint . --fix",
         "payload": "cross-env PAYLOAD_CONFIG_PATH=src/payload.config.ts NODE_OPTIONS=\"--import tsx\" payload --disable-transpile",

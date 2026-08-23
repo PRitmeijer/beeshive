@@ -61,6 +61,14 @@ services:
       # published port above; the Dockerfile's 3000 is the standalone default
       # for a plain `docker run`, and this overrides it.
       - PORT=${HOST_PORT:-3100}
+      # The start-up check in ops/preflight.mjs, which refuses to start the
+      # server when this database still carries the dev-push marker that makes
+      # Payload stop on a prompt nothing in a container can answer. On by
+      # default, and it is the one thing here allowed to keep the container
+      # down: without it that fault produces a container compose calls healthy,
+      # serving the pages built into the image and taking no bookings.
+      # PREFLIGHT=off in .env turns it off.
+      - PREFLIGHT=${PREFLIGHT:-on}
       # The start-up warm-up in ops/warm-up.sh, which asks the site for every
       # public page once so that Next regenerates it against this database
       # rather than serving what the image was built with. On by default;
@@ -94,6 +102,14 @@ services:
       # Read-only key for the visitor statistics shown in the admin. Unset
       # simply means no statistics.
       - UMAMI_API_KEY=${UMAMI_API_KEY:-}
+      # How many proxies of our own stand in front of this container, which is
+      # how far in from the right of x-forwarded-for the rate limiter finds the
+      # visitor. One — Nginx Proxy Manager — is the default and is right for
+      # this stack; put Cloudflare in front of NPM and it becomes 2. Named here
+      # as well as in .env.example because nothing else forwards it into the
+      # container, and a value set in .env alone would silently do nothing.
+      # See docs/rate-limiting.md.
+      - TRUSTED_PROXY_HOPS=${TRUSTED_PROXY_HOPS:-1}
       # Outgoing mail: reservation requests and contact messages. Leave these
       # blank and Payload writes mail to the container log instead of sending
       # it — the site will take bookings that nobody is told about.

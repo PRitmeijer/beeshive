@@ -1,11 +1,17 @@
 # Operations: PostgreSQL, Cloudflare R2 and backups
 
 Most of this directory is about the two things the website cannot regenerate if
-they are lost: the database and the uploaded photographs. `warm-up.sh` is the
-exception and belongs to the application container rather than to the database
-— it is described in `DEPLOY.md`, and the short version is that it asks the
-site for every public page once after a start so that Next renders them against
-this database instead of serving the content the image was built with.
+they are lost: the database and the uploaded photographs. Two files are the
+exception and belong to the application container rather than to the database.
+Both are described in `DEPLOY.md`; the short versions are:
+
+- `preflight.mjs` runs before the server and refuses to start it when the
+  database still carries a dev-push marker — the row that would otherwise leave
+  Payload waiting on a prompt nothing can answer, with the site up and serving
+  the content its image was built with.
+- `warm-up.sh` runs beside the server and asks the site for every public page
+  once after a start, so that Next renders them against this database instead
+  of serving the content the image was built with.
 
 **Doing the cutover from the old SQLite site, rather than reading about the
 machinery? [`DEPLOY.md`](../DEPLOY.md) is the runbook.** This file is the
@@ -181,11 +187,24 @@ Do a dry run of this on a spare machine once, before you need it. A backup
 that has never been restored is a hypothesis.
 
 One step that is easy to miss on a rebuild: after the restore, look at
-`payload_migrations` for a row named `dev`. A database that was ever touched by
-one of the `npm run db:*` scripts has one, and it stops the application
-container on an interactive prompt that nothing in a container can answer —
-while every prerendered page goes on answering 200. `DEPLOY.md` has the section
-on it.
+`payload_migrations` for a row with batch `-1`, named `dev` in practice. A
+database that was ever touched by one of the `npm run db:*` scripts has one,
+and it stops the application container on an interactive prompt that nothing in
+a container can answer.
+
+You will not have to go looking, in fact — `ops/preflight.mjs` runs before the
+server on every start and refuses to bring the container up while that row is
+there, with the explanation and the two ways out in the log:
+
+```bash
+docker compose logs beeshive | grep preflight
+```
+
+That is deliberate. Before it existed, this fault produced a container compose
+called healthy that served the pages baked into its image forever and took no
+bookings, which is a far worse thing to hand back after a restore than a
+container that will not start. `DEPLOY.md` has the section on it, including
+when deleting the row is *not* safe.
 
 ## Warnings, collected
 

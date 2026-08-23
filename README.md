@@ -176,6 +176,15 @@ drops a column it can no longer account for, which is exactly what a field
 newly marked `localized: true` looks like before its values have moved into the
 `_locales` side table.
 
+The push is also off whenever `DATABASE_URI` names a database that is not on
+this machine, whatever `NODE_ENV` says. `localhost`, `127.0.0.1`, `::1` and
+`host.docker.internal` count as local and nothing else does, so ordinary local
+development is untouched; point it at a remote host and the push is skipped
+with a warning that says which host and why. `ALLOW_REMOTE_SCHEMA_PUSH=true` is
+the way through if you mean it. The reason is the next section — `npm run dev`
+against the production database is the most common way to break a deployment
+that this repository has.
+
 In production the adapter is given `prodMigrations`, so Payload applies anything
 outstanding itself when it connects. Nothing has to be run by hand on deploy,
 and the container logs which migration it applied. That matters here because the
@@ -191,7 +200,28 @@ schema, and stops on an interactive prompt. There is no terminal in a
 container, so nothing answers it — and because Next has already bound the port
 by then, every prerendered page goes on answering `200` from the HTML built
 into the image while everything that needs the CMS hangs. `docker compose ps`
-says healthy throughout.
+says healthy throughout, and the site takes no bookings.
+
+Three things stand between that row and a deployment, in the order they run:
+
+- **`ops/preflight.mjs`** runs before `node server.js` in the container's
+  `CMD`. It looks for the row and, if it is there, prints what it is and what
+  to do about it and exits non-zero, so the server never starts. A container
+  that visibly will not come up gets fixed; one that is up and useless does
+  not. Only that one outcome exits non-zero — an unreachable database, a
+  missing table, no `DATABASE_URI` all print a line and get out of the way.
+  `PREFLIGHT=off` skips it.
+- **`src/payload.config.ts`** wraps the adapter's own `migrate` and refuses the
+  same row *when there is no TTY*, which is the condition that makes the prompt
+  fatal. In a real terminal Payload asks its question as it always has. This is
+  the belt for the run that went around the preflight. There is no supported
+  flag for it: `migrate` in payload 3.10.0 takes `{ migrations }` and nothing
+  else, and `forceAcceptWarning` is only on `migrateFresh` and
+  `createMigration`.
+- **`ops/warm-up.sh`** checks the symptom after the start and says so in the
+  log, which still catches a Payload stuck for a reason nobody predicted.
+
+To look for it yourself:
 
 ```bash
 docker compose exec postgres psql -U beeshive -d beeshive -c \
@@ -200,8 +230,7 @@ docker compose exec postgres psql -U beeshive -d beeshive -c \
 
 If there is a `dev` row on a database whose schema came from `npm run migrate`,
 delete it. `DEPLOY.md` has the command and, more usefully, the reasoning about
-when deleting it is *not* safe. `ops/warm-up.sh` checks for the symptom on
-every container start and says so in the log.
+when deleting it is *not* safe.
 
 **Run `npm run dev` in a real terminal.** The dev push asks for confirmation
 whenever it spots a change it considers risky, and `prompts` treats a missing

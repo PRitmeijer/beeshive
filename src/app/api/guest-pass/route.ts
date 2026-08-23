@@ -6,11 +6,14 @@ import {
   GUEST_RESPONSE_LIMITS,
   MAX_GUEST_RESPONSES,
   findByToken,
+  findResponseByEditKey,
   hasPassed,
   redactForGuests,
+  responseEditKey,
   toIcsEvent,
   type GuestResponseRow,
 } from "@/lib/guestPass";
+import { SKIP_OUTBOUND_EMAIL } from "@/lib/outboundEmail";
 import { buildIcs, icsFilename } from "@/lib/ics";
 
 /**
@@ -199,21 +202,30 @@ export async function POST(request: Request) {
      * is built field by field from validated input rather than spread from the
      * request body.
      *
-     * The collection's own afterChange hook only sends the owners' mail while
-     * `emailStatus` is still "pending", so a response arriving here cannot
-     * mail anybody a second time.
+     * The write also carries the flag that keeps the collection's outbound
+     * mail hook out of it; the comment on `context` below says why.
      */
     const rows: GuestResponseRow[] = (doc.guestResponses ?? []).map((row) => ({
       ...row,
     }));
 
-    // Only the browser that wrote a row is told its id (below), so holding one
-    // is proof of having written it. That is what turns "I already answered"
-    // into an edit instead of a second, contradictory line on the list.
-    const responseId = str(input.responseId, 64);
-    const existing = responseId
-      ? rows.findIndex((row) => String(row.id ?? "") === responseId)
-      : -1;
+    /**
+     * "I already answered" turned into an edit rather than a second,
+     * contradictory line on the list.
+     *
+     * What proves it is `responseKey`: the signature over this row that
+     * `responseEditKey` produced when it was written, handed to that browser
+     * in the POST response and to nobody else. The row's own id used to do
+     * this job and could not — Payload's array ids are sequential enough that
+     * one answer let a guest walk to their neighbour's and overwrite it. A
+     * key that does not match any row is not an error; it is a guest whose
+     * phone has forgotten, and they get a new line.
+     */
+    const existing = findResponseByEditKey(
+      doc,
+      rows,
+      str(input.responseKey, 128),
+    );
 
     const answer = {
       name,
@@ -238,6 +250,14 @@ export async function POST(request: Request) {
       data: { guestResponses: rows },
       overrideAccess: true,
       depth: 0,
+      // A companion writing down that they do not eat fish is not a new
+      // reservation, and the owners must not be mailed about it. The
+      // collection's afterChange hook only announces a document whose
+      // emailStatus is still "pending", and this one usually is — the mail
+      // about the booking itself may not have gone out yet, or may have failed
+      // and be waiting for a retry — so the status is not the thing to lean
+      // on. This says it outright instead: see src/lib/outboundEmail.ts.
+      context: { [SKIP_OUTBOUND_EMAIL]: true },
     })) as { guestResponses?: GuestResponseRow[] | null };
 
     const stored = updated.guestResponses ?? [];
@@ -246,7 +266,9 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         ok: true,
-        responseId: written?.id ? String(written.id) : null,
+        // The body, and only the body. Nothing renders this into the page, so
+        // it cannot end up in a screenshot of the guest pass or in a cache.
+        responseKey: responseEditKey(doc, written?.id),
         // The list comes back through the same redaction the page uses, so the
         // browser can never learn more from answering than from arriving.
         responses: redactForGuests({ ...doc, guestResponses: stored }).responses,

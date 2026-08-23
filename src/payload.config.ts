@@ -229,6 +229,161 @@ function dutchify(field: Field): Field {
   return field;
 }
 
+/** The one place the connection string is decided, so both guards below agree. */
+const databaseURI =
+  process.env.DATABASE_URI ||
+  "postgresql://beeshive:beeshive@localhost:5433/beeshive";
+
+/**
+ * Whether that URI names a database on this machine.
+ *
+ * Only used to decide whether the dev-time schema push is allowed to run. The
+ * test is deliberately conservative — anything it cannot recognise counts as
+ * remote — because the cost of the two mistakes is not symmetric. A false
+ * "remote" means a developer sees a warning and adds one variable; a false
+ * "local" means drizzle quietly alters a production table.
+ */
+function looksLikeALocalDatabase(uri: string): boolean {
+  try {
+    const host = new URL(uri).hostname.toLowerCase();
+    return (
+      host === "" ||
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "::1" ||
+      host === "[::1]" ||
+      host === "host.docker.internal" ||
+      host.endsWith(".localhost")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The dev push, and why it is not simply `!isProduction`.
+ *
+ * `npm run dev` against the production database is what puts the `dev` row in
+ * `payload_migrations` in the first place, and that row is the whole of the
+ * fault ops/preflight.mjs exists to stop: it makes the production container
+ * halt on a prompt no container can answer, after which the site serves the
+ * pages built into its image forever and looks healthy doing it. The push is
+ * also free to ALTER or DROP a column on its own judgement while it is there.
+ *
+ * So the push is allowed against a database on this machine and refused
+ * against anything else. Ordinary local development is untouched — the default
+ * above and every `localhost` URI pass — and the refusal is a warning plus a
+ * named way through rather than a wall, because the developer who genuinely
+ * has a database on another host is not the person this is protecting.
+ */
+function devPushAllowed(): boolean {
+  if (looksLikeALocalDatabase(databaseURI)) return true;
+
+  const host = (() => {
+    try {
+      return new URL(databaseURI).host;
+    } catch {
+      return "(unparseable DATABASE_URI)";
+    }
+  })();
+
+  if (process.env.ALLOW_REMOTE_SCHEMA_PUSH === "true") {
+    console.warn(
+      `\n  payload: schema push ENABLED against ${host} by ALLOW_REMOTE_SCHEMA_PUSH.\n` +
+        `  Drizzle may alter or drop columns there without asking, and this run\n` +
+        `  will leave a 'dev' row in payload_migrations that stops a production\n` +
+        `  container dead. See README.md, "The \`dev\` row".\n`,
+    );
+    return true;
+  }
+
+  console.warn(
+    `\n  payload: schema push REFUSED. DATABASE_URI points at ${host}, which is\n` +
+      `  not a database on this machine.\n\n` +
+      `  The push rewrites the schema from the collections and answers to nobody\n` +
+      `  about how — and it leaves a 'dev' row in payload_migrations that makes a\n` +
+      `  production container halt on a prompt nothing can answer, serving the\n` +
+      `  pages baked into its image while compose calls it healthy.\n\n` +
+      `  Collection changes will not reach that database this run. Point\n` +
+      `  DATABASE_URI at a local copy, or write a migration and run\n` +
+      `  \`npm run migrate\`. If you really do mean to push there, set\n` +
+      `  ALLOW_REMOTE_SCHEMA_PUSH=true.\n`,
+  );
+  return false;
+}
+
+/**
+ * The second belt against the prompt that stops a deployment dead.
+ *
+ * `prodMigrations` is applied on connect, and @payloadcms/drizzle's `migrate`
+ * opens with an interactive `prompts()` question whenever it finds a row in
+ * `payload_migrations` with batch -1 — the marker left by any run that pushed
+ * the schema. In a container nothing answers it: the promise never settles,
+ * `getPayload()` never resolves, and the server sits there serving prerendered
+ * HTML and taking no bookings. ops/preflight.mjs is the first belt and refuses
+ * to start the container at all; this is what catches the run that skipped it
+ * — PREFLIGHT=off, a bare `node server.js`, `npm start` on a laptop.
+ *
+ * There is no supported flag for this. `migrate` in payload 3.10.0 takes
+ * `{ migrations }` and nothing else (payload/dist/database/types.d.ts) and
+ * reads no environment variable; `forceAcceptWarning` exists, but only on
+ * `migrateFresh` and `createMigration`, neither of which is on this path. So
+ * the adapter's own `migrate` is wrapped instead.
+ *
+ * It only intervenes when there is no terminal, which is exactly the condition
+ * that makes the prompt fatal. Run `npm run migrate` in a real shell and
+ * Payload asks its question as it always has and you answer it; run anything
+ * without a TTY and this refuses first, loudly, in one line.
+ */
+function refuseToPromptWithoutATerminal(
+  adapterObj: ReturnType<typeof postgresAdapter>,
+): ReturnType<typeof postgresAdapter> {
+  return {
+    ...adapterObj,
+    init: (args) => {
+      const adapter = adapterObj.init(args);
+      const migrate = adapter.migrate.bind(adapter);
+
+      adapter.migrate = async (migrateArgs) => {
+        if (!process.stdin.isTTY && adapter.pool) {
+          // Two statements, because Postgres parses a whole statement before it
+          // runs any of it: naming payload_migrations inside a CASE fails just
+          // as hard on a fresh database as naming it on its own.
+          const { rows: table } = await adapter.pool.query(
+            "select to_regclass('payload_migrations') is not null as present",
+          );
+          if (table[0]?.present) {
+            const { rows: markers } = await adapter.pool.query(
+              "select name from payload_migrations where batch = -1",
+            );
+            if (markers.length > 0) {
+              // Keyed on the batch rather than the name, because that is what
+              // @payloadcms/drizzle keys on.
+              console.error(
+                `\n  payload: deze database draagt een dev-push-markering ` +
+                  `(payload_migrations, batch -1).\n\n` +
+                  `  Payload zou hier op een vraag op de terminal blijven staan, en er is\n` +
+                  `  geen terminal. De site zou dan draaien zonder de CMS ooit te bereiken:\n` +
+                  `  elke pagina 200, geen enkele boeking. Daarom stopt dit proces nu.\n\n` +
+                  `  Draai node ops/preflight.mjs voor de volledige uitleg en de twee\n` +
+                  `  uitwegen, of zie DEPLOY.md.\n`,
+              );
+              // The same exit the adapter itself takes when it cannot connect.
+              // Under compose this is a restart, with the reason in the log,
+              // rather than a container that is up and useless.
+              process.exit(1);
+            }
+          }
+        }
+
+        return migrate(migrateArgs);
+      };
+
+      return adapter;
+    },
+  };
+}
+
 export default buildConfig({
   admin: {
     user: Users.slug,
@@ -441,35 +596,39 @@ export default buildConfig({
   typescript: {
     outputFile: path.resolve(dirname, "payload-types.ts"),
   },
-  db: postgresAdapter({
-    pool: {
-      connectionString:
-        process.env.DATABASE_URI ||
-        "postgresql://beeshive:beeshive@localhost:5433/beeshive",
-    },
-    // Development may keep pushing the schema straight from the collections,
-    // which is what makes local iteration quick. Production must not. Postgres
-    // is kinder about this than SQLite was — it ALTERs a table rather than
-    // rebuilding it — but the dangerous case is unchanged: drizzle compares the
-    // collections to the live tables and will DROP a column it can no longer
-    // account for, which is precisely what a field newly marked
-    // `localized: true` looks like, its values not yet copied into the
-    // `_locales` side table. It also decides on its own when a change needs a
-    // destructive rewrite, and answers to nobody about it.
-    push: !isProduction && !isBuild,
-    migrationDir: path.resolve(dirname, "migrations"),
-    // Production is driven by src/migrations instead, applied on connect. The
-    // container is a standalone Next build with no Payload CLI in it, so there
-    // is nowhere to run `payload migrate` from; importing the list here bundles
-    // it with the server and Payload runs anything outstanding itself.
-    //
-    // Never during `next build`. Payload connects once per static worker there,
-    // and against a database that was built by dev push it stops to ask on
-    // stdin whether to migrate anyway. Nothing can answer, the worker sits at
-    // "Collecting page data" until the 60 second export timeout fires three
-    // times, and the build dies without ever naming the prompt as the cause.
-    ...(isBuild ? {} : { prodMigrations: migrations }),
-  }),
+  db: refuseToPromptWithoutATerminal(
+    postgresAdapter({
+      pool: {
+        connectionString: databaseURI,
+      },
+      // Development may keep pushing the schema straight from the collections,
+      // which is what makes local iteration quick. Production must not. Postgres
+      // is kinder about this than SQLite was — it ALTERs a table rather than
+      // rebuilding it — but the dangerous case is unchanged: drizzle compares the
+      // collections to the live tables and will DROP a column it can no longer
+      // account for, which is precisely what a field newly marked
+      // `localized: true` looks like, its values not yet copied into the
+      // `_locales` side table. It also decides on its own when a change needs a
+      // destructive rewrite, and answers to nobody about it.
+      //
+      // Nor against a database that is not on this machine, whatever NODE_ENV
+      // says: see devPushAllowed(). The `&&` short-circuit is what keeps its
+      // warning out of production and out of the build.
+      push: !isProduction && !isBuild && devPushAllowed(),
+      migrationDir: path.resolve(dirname, "migrations"),
+      // Production is driven by src/migrations instead, applied on connect. The
+      // container is a standalone Next build with no Payload CLI in it, so there
+      // is nowhere to run `payload migrate` from; importing the list here bundles
+      // it with the server and Payload runs anything outstanding itself.
+      //
+      // Never during `next build`. Payload connects once per static worker there,
+      // and against a database that was built by dev push it stops to ask on
+      // stdin whether to migrate anyway. Nothing can answer, the worker sits at
+      // "Collecting page data" until the 60 second export timeout fires three
+      // times, and the build dies without ever naming the prompt as the cause.
+      ...(isBuild ? {} : { prodMigrations: migrations }),
+    }),
+  ),
   sharp,
   upload: {
     limits: {

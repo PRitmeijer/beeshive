@@ -71,6 +71,76 @@ const GENERATED = new Set([
 ]);
 
 /**
+ * Nothing an import writes may go out as mail.
+ *
+ * Every document here is created through the Local API, and the Local API runs
+ * the collections' afterChange hooks — which is what makes relationships and
+ * slugs come out right, and which also means that importing a reservation from
+ * 2023 announces it to the owners as though somebody had just booked a table.
+ * With SMTP finally configured at cutover that is one "Reserveringsaanvraag:
+ * …" per historical booking, all of them arriving at once, none of them true.
+ *
+ * src/lib/outboundEmail.ts's hook leaves immediately when it finds this flag
+ * on the request, which is how its own bookkeeping write avoids waking itself
+ * up. The key is spelled out here rather than imported from that module
+ * because what the two files share is the contract about `req.context`, not
+ * any of the machinery either side of it; rename it and both ends move.
+ */
+const SKIP_OUTBOUND_EMAIL = "skipOutboundEmail";
+
+/** Handed to every write that could run an afterChange hook. */
+const importContext = { [SKIP_OUTBOUND_EMAIL]: true };
+
+/**
+ * The bookkeeping field the mail hook reads, and the values that mean the
+ * question has already been answered for this document.
+ */
+const EMAIL_STATE = "emailStatus";
+const SETTLED_EMAIL_STATES = new Set(["sent", "failed", "skipped"]);
+
+/** Whether a collection carries the outbound-mail bookkeeping at all. */
+function hasEmailState(fields: Field[]): boolean {
+  return fields.some((field) => {
+    if ("name" in field && field.name === EMAIL_STATE) return true;
+    if ("fields" in field && Array.isArray(field.fields)) return hasEmailState(field.fields);
+    if (field.type === "tabs") return field.tabs.some((tab) => hasEmailState(tab.fields));
+    return false;
+  });
+}
+
+/**
+ * What an imported reservation or contact message should say about its mail.
+ *
+ * The flag above stops the message being sent; this decides what the row then
+ * claims, and none of the obvious answers will do. "Verstuurd" is a lie — the
+ * owners never got it. "In de wachtrij" is worse than a lie: the hook only
+ * acts on documents at "pending", so every imported row would sit there as a
+ * landmine waiting for the first person to open it in the admin and press
+ * save, and the flood arrives weeks later with nobody able to explain it.
+ * "Niet verstuurd" is what actually happened, and it is a state the collection
+ * already has for exactly this shape of thing — the hook itself writes it when
+ * there is no address to send to.
+ *
+ * A dump taken from this branch may already carry a settled value, and those
+ * are left alone: a row that really was sent goes on saying so. Only what
+ * arrives empty or still queued — which is everything in a dump from the old
+ * database, where the field did not exist — is settled here. `emailError`
+ * comes with `emailStatus` from `outboundEmailFields()` and is where the hook
+ * puts its own explanation, so the line the owners read sits there too.
+ */
+function settleImportedMail(fields: Field[], doc: Doc): boolean {
+  if (!hasEmailState(fields)) return false;
+
+  const current = doc[EMAIL_STATE];
+  if (typeof current === "string" && SETTLED_EMAIL_STATES.has(current)) return false;
+
+  doc[EMAIL_STATE] = "skipped";
+  doc.emailError =
+    "Geïmporteerd uit de oude database. Dit bericht is destijds buiten deze site om afgehandeld en is niet opnieuw verstuurd.";
+  return true;
+}
+
+/**
  * Where the old site's uploaded files are, for the media documents to be
  * re-created from.
  *
@@ -554,6 +624,7 @@ async function main() {
           slug: global.slug as never,
           data: detach as never,
           overrideAccess: true,
+          context: importContext,
         });
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
@@ -586,6 +657,11 @@ async function main() {
   const missingFiles: string[] = [];
   const resetPasswords: string[] = [];
   const summary: { collection: string; created: number; failed: number }[] = [];
+  // Per collection, how many rows were stored with their notification mail
+  // deliberately not sent. Reported at the end: somebody running this at
+  // cutover should read that historical mail stayed where it was, rather than
+  // discover it by the owners' inbox staying quiet.
+  const mailSettledBy = new Map<string, number>();
   const pending: {
     collection: string;
     newId: string | number;
@@ -615,10 +691,13 @@ async function main() {
 
     let created = 0;
     let failed = 0;
+    let mailSettled = 0;
 
     for (const source of nlDocs) {
       const unresolved: string[] = [];
       const data = remapRelations(collection.fields, strip(source), unresolved);
+
+      if (settleImportedMail(collection.fields, data)) mailSettled++;
 
       // Users carry a password hash, and the Local API only accepts a
       // plaintext password — there is no way to re-import a hash through it.
@@ -679,6 +758,9 @@ async function main() {
           data: data as never,
           ...(filePath ? { filePath } : {}),
           overrideAccess: true,
+          // See SKIP_OUTBOUND_EMAIL: a create runs the collection's
+          // afterChange hooks, and one of those sends mail.
+          context: importContext,
           // Nobody is signing up here: these accounts already existed, and a
           // "confirm your address" mail to the owners in the middle of a
           // migration is confusing at best.
@@ -705,6 +787,7 @@ async function main() {
       }
     }
 
+    if (mailSettled) mailSettledBy.set(slug, mailSettled);
     summary.push({ collection: slug, created, failed });
     console.log(`  ${slug}: ${created} created${failed ? `, ${failed} failed` : ""}`);
   }
@@ -724,12 +807,18 @@ async function main() {
     const notes: string[] = [];
     try {
       if (Object.keys(item.nl).length) {
+        const nl = remapRelations(collection.fields, item.nl, still);
+        // The dump is sent again in full here, `emailStatus` included, so the
+        // same answer has to be given twice or the second write puts the row
+        // back at "In de wachtrij" that the first one took it out of.
+        settleImportedMail(collection.fields, nl);
         await payload.update({
           collection: item.collection as never,
           id: item.newId,
           locale: "nl",
-          data: remapRelations(collection.fields, item.nl, still) as never,
+          data: nl as never,
           overrideAccess: true,
+          context: importContext,
         });
       }
       if (Object.keys(item.en).length) {
@@ -745,12 +834,14 @@ async function main() {
           "",
           notes,
         );
+        settleImportedMail(collection.fields, en);
         await payload.update({
           collection: item.collection as never,
           id: item.newId,
           locale: "en",
           data: en as never,
           overrideAccess: true,
+          context: importContext,
         });
         updated++;
       }
@@ -795,6 +886,7 @@ async function main() {
         locale,
         data: data as never,
         overrideAccess: true,
+        context: importContext,
       });
       saved = (await payload.findGlobal({
         slug: global.slug as never,
@@ -824,6 +916,23 @@ async function main() {
     );
   }
   console.log(`\n${updated} documents given their English values.`);
+
+  // Said out loud rather than left to be noticed. The person running this at
+  // cutover has just pointed a freshly configured mail server at a database
+  // full of old reservations, and "no mail went out, and none is queued to"
+  // is the sentence they need to read.
+  if (mailSettledBy.size) {
+    const total = [...mailSettledBy.values()].reduce((a, b) => a + b, 0);
+    const per = [...mailSettledBy]
+      .map(([slug, count]) => `${slug} ${count}`)
+      .join(", ");
+    console.log(
+      `\nNo notification mail was sent for anything in this dump (${per}).` +
+        `\n${total} imported documents are stored with verzendstatus "Niet verstuurd",` +
+        "\nso opening one in the admin and saving it will not send it either." +
+        "\nHistorical reservations and contact messages are history, not news.",
+    );
+  }
 
   fs.rmSync(stagingDir, { recursive: true, force: true });
 
