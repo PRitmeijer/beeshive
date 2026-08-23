@@ -11,6 +11,12 @@
  * The ordinals are their own little table for the same reason. They are only
  * ever used inside `everyMonthOn`, but keeping them separate means a monthly
  * event can be described without the code having to build "vierde" by hand.
+ *
+ * `everyMonthOnDate` takes the day as a number rather than a ready-made string
+ * because the ordinal suffix is part of the language: Dutch writes 1ste, 2de,
+ * 8ste, 20ste on a rule that has nothing to do with English's st/nd/rd/th. The
+ * two halves of this file each keep their own rule, and neither the agenda nor
+ * the shared expansion code in src/lib/events.ts has to know either of them.
  */
 export const eventsNl = {
   metaTitle: (name: string) => `Evenementen | ${name}`,
@@ -47,6 +53,8 @@ export const eventsNl = {
     `Om de week op ${weekday.toLowerCase()}`,
   everyMonthOn: (ordinal: string, weekday: string) =>
     `Elke ${ordinal} ${weekday.toLowerCase()} van de maand`,
+  everyMonthOnDate: (day: number) =>
+    `Elke ${day}${day === 1 || day === 8 || day >= 20 ? "ste" : "de"} van de maand`,
   ordinals: {
     first: "eerste",
     second: "tweede",
@@ -58,6 +66,25 @@ export const eventsNl = {
   timeRange: (from: string, to: string) => `${from} - ${to}`,
   allDay: "Hele dag",
   cancelled: "Gaat niet door",
+  standingFixture: "Vaste afspraak",
+  featured: "Uitgelicht",
+  nextDate: (date: string) => `Eerstvolgend: ${date}`,
+  nextDates: "Volgende keren",
+  seriesIcs: "Hele serie (.ics)",
+  subscribeCalendar: "Abonneer op de agenda",
+  subscribeHint:
+    "Voeg de agenda \u00e9\u00e9n keer toe en nieuwe avonden verschijnen er vanzelf bij.",
+  calendarName: (name: string) => `Agenda ${name}`,
+  eventMetaTitle: (title: string, name: string) => `${title} | ${name}`,
+  monthHeading: (month: string, year: number) => `${month} ${year}`,
+  categories: {
+    buurt: "Buurt",
+    muziek: "Muziek",
+    workshop: "Workshop",
+    proeverij: "Proeverij",
+    feest: "Feest",
+    overig: "Overig",
+  },
 };
 
 export type EventsDict = typeof eventsNl;
@@ -96,6 +123,19 @@ export const eventsEn: EventsDict = {
   everyTwoWeeksOn: (weekday: string) => `Every other ${weekday}`,
   everyMonthOn: (ordinal: string, weekday: string) =>
     `Every ${ordinal} ${weekday} of the month`,
+  everyMonthOnDate: (day: number) => {
+    const teen = day % 100 >= 11 && day % 100 <= 13;
+    const suffix = teen
+      ? "th"
+      : day % 10 === 1
+        ? "st"
+        : day % 10 === 2
+          ? "nd"
+          : day % 10 === 3
+            ? "rd"
+            : "th";
+    return `Every ${day}${suffix} of the month`;
+  },
   ordinals: {
     first: "first",
     second: "second",
@@ -107,4 +147,23 @@ export const eventsEn: EventsDict = {
   timeRange: (from: string, to: string) => `${from} - ${to}`,
   allDay: "All day",
   cancelled: "Cancelled",
+  standingFixture: "Standing fixture",
+  featured: "Featured",
+  nextDate: (date: string) => `Next: ${date}`,
+  nextDates: "Coming dates",
+  seriesIcs: "Whole series (.ics)",
+  subscribeCalendar: "Subscribe to the agenda",
+  subscribeHint:
+    "Add the agenda once and new evenings turn up in it by themselves.",
+  calendarName: (name: string) => `${name} agenda`,
+  eventMetaTitle: (title: string, name: string) => `${title} | ${name}`,
+  monthHeading: (month: string, year: number) => `${month} ${year}`,
+  categories: {
+    buurt: "Neighbourhood",
+    muziek: "Music",
+    workshop: "Workshop",
+    proeverij: "Tasting",
+    feest: "Party",
+    overig: "Other",
+  },
 };

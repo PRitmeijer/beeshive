@@ -30,6 +30,12 @@ export const RESERVATION_ERRORS = [
   "dayClosed",
   "timeOutsideHours",
   "timePassed",
+  // Set by the owners in the CMS rather than by the calendar: bookings through
+  // the site are switched off entirely, the day is sold out at that time, or
+  // the day is sold out at every time it offers.
+  "reservationsClosed",
+  "slotFull",
+  "dayFull",
   "server",
 ] as const;
 

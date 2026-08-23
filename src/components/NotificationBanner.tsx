@@ -165,9 +165,21 @@ export function NotificationBanner({
                 color: bannerStyle.ink,
               }}
             >
+              {/* The bar is the topmost thing on the page, so with
+                  viewport-fit=cover it begins under the clock and the battery.
+                  Its ground already reaches the true top of the screen; the
+                  padding here is what keeps the message out from behind them.
+                  It is written into the top padding rather than worn as a
+                  class because a utility would win over the class and quietly
+                  drop the inset again.
+
+                  This element is what --notice-h measures, so the inset is
+                  counted in it: "how much vertical space the banner takes"
+                  has to include the strip it is holding clear, or the header
+                  below would ride up into it. */}
               <div
                 ref={barRef}
-                className="px-6 md:px-12 py-2.5 pr-12 max-w-7xl mx-auto flex flex-wrap items-center gap-x-3 gap-y-1"
+                className="relative px-6 md:px-12 pb-2.5 pt-[calc(0.625rem+env(safe-area-inset-top,0px))] pr-12 max-w-7xl mx-auto flex flex-wrap items-center gap-x-3 gap-y-1"
               >
                 <CraftIcon
                   name={bannerStyle.icon}
@@ -194,7 +206,7 @@ export function NotificationBanner({
                 {currentBanner.dismissible && (
                   <button
                     onClick={() => dismiss(currentBanner.id)}
-                    className="absolute right-4 md:right-6 top-1/2 -translate-y-1/2 p-1 opacity-80 transition-opacity duration-500 ease-settle hover:opacity-100"
+                    className="absolute right-4 md:right-6 top-[calc(50%+env(safe-area-inset-top,0px)/2)] -translate-y-1/2 p-1 opacity-80 transition-opacity duration-500 ease-settle hover:opacity-100"
                     aria-label={t.close}
                   >
                     <CrossMark />

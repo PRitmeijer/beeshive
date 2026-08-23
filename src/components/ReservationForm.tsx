@@ -1,14 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { CraftIcon } from "@/components/CraftIcon";
 import { getDict } from "@/i18n/dictionaries";
 import { defaultLocale, type Locale } from "@/i18n/config";
 import { isReservationError } from "@/lib/reservationErrors";
+import { EVENTS, track } from "@/lib/umami";
 import {
   LEAD_MINUTES,
   availableDates,
+  availableDatesFromSchedule,
+  dayFromSchedule,
   describe,
   nowMinutesInAmsterdam,
   parseWeek,
@@ -16,6 +19,8 @@ import {
   todayInAmsterdam,
   weekdayIndex,
   type HoursRow,
+  type Range,
+  type ScheduledDay,
 } from "@/lib/openingHours";
 
 /**
@@ -36,7 +41,6 @@ const EMPTY = {
   date: "",
   time: "",
   guests: "2",
-  occasion: "",
   notes: "",
 };
 
@@ -60,6 +64,18 @@ interface ReservationFormProps {
    * admin changes what a guest can book without anyone touching the code.
    */
   openingHours?: HoursRow[];
+  /**
+   * The window already resolved on the server, with the repeating rules and
+   * the one-off exceptions folded in. When it is here it wins over
+   * `openingHours`: only the server can see that the last Sunday of the month
+   * is open and that Eerste Kerstdag is not, so offering the plain weekly
+   * pattern beside it would offer days the endpoint will refuse.
+   *
+   * Optional because the booking sheet on phones is mounted without a server
+   * render and has nothing to hand down; that path still reads the seven
+   * weekly rows, which is what it has always done.
+   */
+  schedule?: ScheduledDay[];
 }
 
 export function ReservationForm({
@@ -67,6 +83,7 @@ export function ReservationForm({
   minDate,
   nowMinutes: nowMinutes0,
   openingHours,
+  schedule,
 }: ReservationFormProps) {
   const dict = getDict(locale);
   const t = dict.reservationForm;
@@ -88,10 +105,29 @@ export function ReservationForm({
   const today = minDate ?? clientNow?.date;
   const nowMinutes = minDate ? nowMinutes0 : clientNow?.minutes;
 
+  // A resolved window beats the weekly pattern; see the prop's own note.
+  const resolved = schedule && schedule.length > 0 ? schedule : null;
+
   const dates = useMemo(
-    () => (today ? availableDates(today, week, nowMinutes) : []),
-    [today, week, nowMinutes],
+    () =>
+      !today
+        ? []
+        : resolved
+          ? availableDatesFromSchedule(resolved, today, nowMinutes)
+          : availableDates(today, week, nowMinutes),
+    [today, week, nowMinutes, resolved],
   );
+
+  /**
+   * The hours a given date really offers, from whichever of the two sources
+   * this render has. One function so the list of times, the hint under it and
+   * the pruning in `setDate` can never disagree about a day.
+   */
+  const rangesForDate = (iso: string): Range[] | null => {
+    if (resolved) return dayFromSchedule(resolved, iso)?.ranges ?? null;
+    const index = weekdayIndex(iso);
+    return index === null ? null : week[index];
+  };
 
   /**
    * "Zaterdag 29 augustus", written from the dictionary rather than through
@@ -114,8 +150,11 @@ export function ReservationForm({
   // Which day the guest picked, and therefore what is on offer. No date yet
   // means no list: offering times before knowing the day would be inventing
   // them, and half of them would be on a day the café is shut.
-  const dayIndex = form.date ? weekdayIndex(form.date) : null;
-  const dayRanges = dayIndex === null ? null : week[dayIndex];
+  const dayRanges = form.date ? rangesForDate(form.date) : null;
+  // Why this day differs, in the reader's language, when the owners said so.
+  const dayNote = form.date && resolved
+    ? (dayFromSchedule(resolved, form.date)?.note ?? null)
+    : null;
   // Only today is measured against the clock; every other day is open from
   // the door opening.
   const notBefore =
@@ -131,39 +170,60 @@ export function ReservationForm({
   const [error, setError] = useState(t.error);
   const reduce = useReducedMotion();
 
-  const set = (key: keyof typeof EMPTY) => (value: string) =>
+  /**
+   * "Somebody began filling this in", once per mounted form. The ref rather
+   * than state because nothing on screen depends on it and a re-render for a
+   * measurement would be a real cost paid for a beacon. `track()` swallows
+   * everything, so no keystroke can be lost to it.
+   */
+  const started = useRef(false);
+  const markStarted = () => {
+    if (started.current) return;
+    started.current = true;
+    track(EVENTS.reservationStarted);
+  };
+
+  const set = (key: keyof typeof EMPTY) => (value: string) => {
+    markStarted();
     setForm((prev) => ({ ...prev, [key]: value }));
+  };
 
   /**
    * Days can differ from one another, so changing the date can strand a time
    * the new day does not offer. Drop it whenever it is no longer on the list
    * rather than submitting something we know is refused.
    */
-  const setDate = (value: string) =>
+  const setDate = (value: string) => {
+    markStarted();
     setForm((prev) => {
-      const index = weekdayIndex(value);
+      const ranges = rangesForDate(value);
       const cutoff =
         value === today && typeof nowMinutes === "number"
           ? nowMinutes + LEAD_MINUTES
           : -1;
-      const next = index === null ? [] : slotsFor(week[index], cutoff);
+      const next = ranges ? slotsFor(ranges, cutoff) : [];
       return {
         ...prev,
         date: value,
         time: next.includes(prev.time) ? prev.time : "",
       };
     });
+  };
 
   /**
    * /api/reserve answers a refusal with a code, not a sentence, so the reason
    * arrives from the server and the wording comes from the reader's own
    * dictionary. A code we have no line for falls back to the generic one.
    */
-  const messageFrom = (data: unknown): string => {
+  const codeFrom = (data: unknown): string => {
     const code =
       data && typeof data === "object"
         ? (data as { error?: unknown }).error
         : undefined;
+    return isReservationError(code) ? code : "unknown";
+  };
+  const messageFrom = (data: unknown): string => {
+    const code = codeFrom(data);
     return isReservationError(code) ? t.errors[code] : t.error;
   };
 
@@ -181,20 +241,24 @@ export function ReservationForm({
           date: form.date,
           time: form.time,
           guests: Number(form.guests),
-          occasion: form.occasion,
           notes: form.notes,
           website,
         }),
       });
       if (res.ok) {
+        // The refusal code, never the guest: a reason is a fact about us, a
+        // name or a party size is a fact about them.
+        track(EVENTS.reservationSubmitted);
         setStatus("success");
         setForm(EMPTY);
         return;
       }
       const data = await res.json().catch(() => null);
+      track(EVENTS.reservationFailed, { reason: codeFrom(data) });
       setError(messageFrom(data));
       setStatus("error");
     } catch {
+      track(EVENTS.reservationFailed, { reason: "network" });
       setError(t.error);
       setStatus("error");
     }
@@ -337,7 +401,7 @@ export function ReservationForm({
             ))}
           </select>
           <p id="reserve-date-hint" className="mt-2 text-sm text-hive-400">
-            {t.dateHint}
+            {dayNote || t.dateHint}
           </p>
         </div>
         <div>
@@ -375,22 +439,13 @@ export function ReservationForm({
         </div>
       </div>
 
-      <div>
-        <label htmlFor="reserve-occasion" className="label block">
-          {t.occasion}
-        </label>
-        <input
-          id="reserve-occasion"
-          name="occasion"
-          type="text"
-          maxLength={120}
-          placeholder={t.occasionPlaceholder}
-          value={form.occasion}
-          onChange={(e) => set("occasion")(e.target.value)}
-          className={fieldClass}
-        />
-      </div>
-
+      {/* There was a "Gelegenheid" field here, and it asked a stranger to
+          account for why they were coming out to eat before they had so much
+          as sat down. The one answer that ever changed anything on the floor
+          was a birthday, and that fits perfectly well in the notes alongside
+          the allergies and the high chair, where it is offered rather than
+          demanded. The column and its server-side check both survive, for
+          browsers still holding the old page. */}
       <div>
         <label htmlFor="reserve-notes" className="label block">
           {t.notes}

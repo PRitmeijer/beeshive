@@ -24,6 +24,7 @@ interface Reservation {
   guests?: number | null;
   notes?: string | null;
   occasion?: string | null;
+  guestToken?: string | null;
 }
 
 /**
@@ -111,6 +112,17 @@ export const Reservations: CollectionConfig = {
             doc.notes || "-",
             "",
             `Bekijk en bevestig: ${siteUrl}/admin/collections/reservations/${doc.id}`,
+            /*
+             * The guest's own page. There is no confirmation mail to the guest
+             * yet, so this line is the only way the link reaches them: the
+             * owners forward it once the table is confirmed. Built by hand
+             * rather than through `guestPassUrl()` from @/lib/guestPass on
+             * purpose — that module imports @/lib/payload, which imports the
+             * config, which imports this file. If a guest-facing mail is ever
+             * added, use `guestPassUrl()` there, where the cycle does not
+             * exist.
+             */
+            `Gastenpagina:  ${doc.guestToken ? `${siteUrl}/reservering/${doc.guestToken}` : "nog niet aangemaakt"}`,
             "",
             "Let op: dit is een aanvraag, nog geen bevestiging. De gast wacht op bericht.",
           ].join("\n"),

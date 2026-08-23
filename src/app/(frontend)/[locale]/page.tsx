@@ -1,6 +1,15 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getSiteSettings } from "@/lib/payload";
+import { getSiteSettings, type SiteSettingsData } from "@/lib/payload";
+import { loadSchedule } from "@/lib/schedule";
+import {
+  describe,
+  formatTime,
+  nowMinutesInAmsterdam,
+  parseWeek,
+  todayInAmsterdam,
+  type Week,
+} from "@/lib/openingHours";
 import { getDict } from "@/i18n/dictionaries";
 import {
   alternatesFor,
@@ -41,95 +50,72 @@ export async function generateMetadata({
 }
 
 /**
- * Monday-first weekday index for right now in the café's own timezone. The
- * index rather than the name, because the CMS rows may be filled in either
- * language while the page is being translated.
+ * Today, as the café would answer the phone.
+ *
+ * This used to be seven CMS rows and a regular expression, which could only
+ * ever be right about an ordinary week: on the last Sunday of the month — the
+ * one Sunday they are open — the front page said "Vandaag gesloten", and on
+ * Eerste Kerstdag it cheerfully offered lunch. The question belongs to
+ * src/lib/schedule.ts now, which folds the repeating rules and the one-off
+ * exceptions into the week before answering, so the line under the hero is the
+ * same answer the booking form gives.
+ *
+ * Resolved here on the server rather than in the client component, because
+ * `new Date()` during render is a hydration hazard; by the time it reaches the
+ * browser it is a sentence in the HTML.
+ *
+ * `note` is the reason the day is unusual, in the reader's language, when the
+ * owners wrote one down. HomeClient may render it beside the hours.
  */
-function amsterdamWeekdayIndex(now: Date): number {
-  const english = new Intl.DateTimeFormat("en-GB", {
-    weekday: "long",
-    timeZone: "Europe/Amsterdam",
-  }).format(now);
-  const index = getDict("en").weekdays.findIndex(
-    (d) => d.toLowerCase() === english.toLowerCase(),
-  );
-  return index;
-}
+async function resolveToday(
+  locale: Locale,
+  settings: SiteSettingsData,
+): Promise<{ label: string; open: boolean; note?: string }> {
+  const t = getDict(locale);
+  const today = todayInAmsterdam();
+  const { days } = await loadSchedule(today, today, locale, settings);
+  const day = days[0];
+  const note = day?.note || undefined;
 
-/** "Gesloten" or "Closed", whichever language the row happens to be in. */
-const CLOSED = /gesloten|closed/i;
+  if (!day || (day.ranges.length === 0 && !day.text)) {
+    return { label: t.hours.closedToday, open: false, note };
+  }
+  // No range could be read, but something was typed — "vanaf 17:00", a line
+  // about a private party. Print what it says rather than claiming a closure
+  // it does not state; nobody can be told the doors are open on the strength
+  // of a sentence, so `open` stays false.
+  if (day.ranges.length === 0) {
+    return { label: t.hours.todayIs(day.text as string), open: false, note };
+  }
+
+  const now = nowMinutesInAmsterdam();
+  return {
+    label: t.hours.todayIs(describe(day.ranges)),
+    open: day.ranges.some((r) => now >= r.open && now < r.close),
+    note,
+  };
+}
 
 /**
- * Today's hours, resolved on the server in the café's own timezone. Doing this
- * in the client component would mean `new Date()` during render, which is a
- * hydration hazard; here it is just a string in the HTML.
+ * The weekly hours as schema.org wants them: English day names, one entry per
+ * stretch the doors are open, so a split service is two entries rather than a
+ * regular expression's best guess at the first and last time on the line.
+ *
+ * Built from the parsed week rather than from the raw rows, so the structured
+ * data and the site cannot disagree about what a line means. The repeating
+ * rules and the exceptions stay out of it: an OpeningHoursSpecification
+ * describes an ordinary week, and "the last Sunday of the month" is not one.
  */
-function resolveToday(
-  hours: { day: string; hours: string }[],
-  locale: Locale,
-) {
-  const t = getDict(locale);
-  const now = new Date();
-  const index = amsterdamWeekdayIndex(now);
-  const names = [
-    getDict("nl").weekdays[index],
-    getDict("en").weekdays[index],
-  ].filter(Boolean);
-
-  const entry = hours.find((h) =>
-    names.some((n) => h.day.trim().toLowerCase() === n.toLowerCase()),
+function buildOpeningHoursSpec(week: Week) {
+  const days = getDict("en").weekdays;
+  return week.flatMap((ranges, index) =>
+    ranges.map((range) => ({
+      "@type": "OpeningHoursSpecification",
+      dayOfWeek: days[index],
+      opens: formatTime(range.open),
+      closes: formatTime(range.close),
+    })),
   );
-  if (!entry || CLOSED.test(entry.hours)) {
-    return { label: t.hours.closedToday, open: false };
-  }
-
-  const match = entry.hours.match(/(\d{1,2}):(\d{2})\s*[^\d]{1,3}\s*(\d{1,2}):(\d{2})/);
-  let open = false;
-  if (match) {
-    const [hh, mm] = new Intl.DateTimeFormat("nl-NL", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-      timeZone: "Europe/Amsterdam",
-    })
-      .format(now)
-      .split(":")
-      .map(Number);
-    const mins = hh * 60 + mm;
-    const from = Number(match[1]) * 60 + Number(match[2]);
-    const till = Number(match[3]) * 60 + Number(match[4]);
-    open = mins >= from && mins < till;
-  }
-  return { label: t.hours.todayIs(entry.hours), open };
-}
-
-// Map the CMS day names, in either language, to the English ones schema.org
-// wants. Built from the dictionaries so the two can never drift apart.
-const dayMap: Record<string, string> = (() => {
-  const map: Record<string, string> = {};
-  const english = getDict("en").weekdays;
-  for (const dict of [getDict("nl"), getDict("en")]) {
-    dict.weekdays.forEach((day, i) => {
-      map[day.toLowerCase()] = english[i];
-    });
-  }
-  return map;
-})();
-
-function buildOpeningHoursSpec(
-  hours: { day: string; hours: string }[],
-) {
-  return hours
-    .filter((h) => !CLOSED.test(h.hours))
-    .map((h) => {
-      const match = h.hours.match(/(\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2})/);
-      return {
-        "@type": "OpeningHoursSpecification",
-        dayOfWeek: dayMap[h.day.toLowerCase()] || h.day,
-        opens: match?.[1] || "12:00",
-        closes: match?.[2] || "22:00",
-      };
-    });
 }
 
 export default async function HomePage({ params }: PageProps) {
@@ -164,7 +150,7 @@ export default async function HomePage({ params }: PageProps) {
       addressCountry: s.address.countryCode,
     },
     openingHoursSpecification: buildOpeningHoursSpec(
-      s.openingHours as { day: string; hours: string }[],
+      parseWeek(s.openingHours as { day: string; hours: string }[]),
     ),
     sameAs: [
       s.socialMedia.instagram,
@@ -185,7 +171,7 @@ export default async function HomePage({ params }: PageProps) {
       <HomeClient
         locale={locale}
         settings={s}
-        today={resolveToday(s.openingHours, locale)}
+        today={await resolveToday(locale, s)}
       />
     </>
   );

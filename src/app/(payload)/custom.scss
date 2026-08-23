@@ -1,1 +1,14 @@
 // Custom admin styles
+//
+// Nothing imports this file. The generated src/app/(payload)/layout.tsx that
+// ships with this project pulls in @payloadcms/next/css and nothing else, so a
+// rule written here reaches no browser until that layout gains an
+// `import "./custom.scss"` — and that file says, in capitals, that Payload may
+// rewrite it at any moment.
+//
+// So anything the admin needs to look right is written where it cannot be lost:
+// the agenda at /admin/agenda keeps its styles in
+// src/components/admin/agenda.module.scss, a CSS module imported by the
+// components that use it. If a genuinely global admin rule is ever needed —
+// one that has to apply to Payload's own markup rather than to ours — this is
+// the place for it, and the layout will have to import it.

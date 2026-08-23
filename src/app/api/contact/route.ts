@@ -1,16 +1,37 @@
 import { NextResponse } from "next/server";
-import { getPayloadClient, getSiteSettings } from "@/lib/payload";
+import { getPayloadClient } from "@/lib/payload";
 import { rateLimit, readJsonBody } from "@/lib/apiGuard";
+import { defaultLocale, isLocale } from "@/i18n/config";
 import type { ContactError } from "@/lib/contactErrors";
 
 /**
  * Public endpoint for the contact form.
  *
- * The form used to hand off to `mailto:`, which opens whatever mail client the
- * visitor's device thinks it has — often none at all, on a phone — and left the
- * page claiming the message had been sent when nothing had. This posts it
- * instead, and the mail goes out from the server to the same address the
- * reservation requests do.
+ * Store first, send after.
+ *
+ * This form has now been wrong twice. It began as a `mailto:` link, which
+ * opens whatever mail client the visitor's device believes it has — often none
+ * at all, on a phone — while the page cheerfully claimed the message had been
+ * sent. It was then made to post here and mail from the server, which was
+ * honest but brittle: the send *was* the endpoint, so when it failed the
+ * visitor was told to go away and try something else, and nothing whatsoever
+ * was left behind. The owners do not have working SMTP credentials yet, which
+ * means that path is not a rare accident but the ordinary case.
+ *
+ * So the message is written into the contact-messages collection and the
+ * request answers 200 the moment it is stored. That document is the record.
+ * Mailing it out is a notification about a record that already exists, and it
+ * is the collection's own afterChange hook that does it (see
+ * src/lib/outboundEmail.ts), writing the outcome back onto the row. A dead
+ * mail server now costs the owners a look at the admin instead of costing them
+ * the conversation, and the visitor is never told to try again about something
+ * that has, in every sense that matters, already arrived.
+ *
+ * Refusals still answer with a code from src/lib/contactErrors.ts rather than
+ * a sentence: the site is bilingual and the reader's own dictionary picks the
+ * words. Everything the browser sends is validated here — the form is a
+ * convenience, not a gate — and the document is assembled field by field so a
+ * hand-rolled request cannot set `status`, `emailStatus` or `source` itself.
  */
 
 const MAX = { name: 120, email: 200, message: 4000 };
@@ -18,6 +39,10 @@ const MAX = { name: 120, email: 200, message: 4000 };
 const fail = (code: ContactError, status = 400) =>
   NextResponse.json({ error: code }, { status });
 
+/**
+ * Trims and caps one character beyond the limit, so a body that is exactly at
+ * the ceiling is still distinguishable from one that overran it.
+ */
 function str(value: unknown, max: number): string {
   return typeof value === "string" ? value.trim().slice(0, max + 1) : "";
 }
@@ -48,29 +73,39 @@ export async function POST(request: Request) {
     if (!message) return fail("messageRequired");
     if (message.length > MAX.message) return fail("messageTooLong");
 
-    const settings = await getSiteSettings();
-    const to = settings.contactEmail || "info@debeeshive.nl";
+    // Which language version the visitor was reading, so the owners know which
+    // one to answer in. Anything unrecognised is Dutch, the source language.
+    const localeInput = str(input.locale, 8);
+    const locale = isLocale(localeInput) ? localeInput : defaultLocale;
+
     const payload = await getPayloadClient();
 
-    // Unlike a reservation there is nothing stored here, so the send is the
-    // whole job: if it fails the visitor has to be told, or they will believe
-    // a message was delivered that never left the building.
-    await payload.sendEmail({
-      to,
-      replyTo: `${name} <${email}>`,
-      subject: `Bericht via de website: ${name}`,
-      text: [
-        `Naam:   ${name}`,
-        `E-mail: ${email}`,
-        "",
-        "Bericht:",
+    await payload.create({
+      collection: "contact-messages",
+      data: {
+        // Cut rather than refused. The column stops at 120 characters and
+        // there is no refusal code for an overlong name, so a name that runs
+        // past the ceiling would otherwise throw on write and cost the visitor
+        // the whole message over the least important field on the form.
+        name: name.slice(0, MAX.name),
+        email,
         message,
-      ].join("\n"),
+        locale,
+        // Never read from the request. A message starts as "nieuw" and its
+        // mail starts in the queue, full stop.
+        status: "nieuw",
+        emailStatus: "pending",
+        source: "website",
+      },
     });
 
+    // Stored is delivered, as far as the visitor is concerned.
     return NextResponse.json({ ok: true });
   } catch (error) {
-    console.error("contact message failed", error);
+    // The only way to get here now is a database that would not take the row,
+    // which is the one failure the visitor genuinely has to hear about: there
+    // is nothing waiting in the admin for the owners to find.
+    console.error("contact message could not be stored", error);
     return fail("server", 500);
   }
 }

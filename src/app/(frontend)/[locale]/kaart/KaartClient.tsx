@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { TornEdge } from "@/components/TornEdge";
@@ -9,6 +9,7 @@ import { SketchBee } from "@/components/SketchBee";
 import { CraftIcon, type CraftIconName } from "@/components/CraftIcon";
 import { getDict, type Dict } from "@/i18n/dictionaries";
 import type { Locale } from "@/i18n/config";
+import { EVENTS, track } from "@/lib/umami";
 
 interface MenuItem {
   id: string;
@@ -129,6 +130,12 @@ export function KaartClient({
   items: MenuItem[];
 }) {
   const t = getDict(locale);
+  // "Somebody read the card." Fired once on mount rather than on a scroll
+  // depth: the whole menu is one page, and arriving on it is the interesting
+  // fact. `track()` swallows everything, so the effect cannot fail.
+  useEffect(() => {
+    track(EVENTS.menuViewed);
+  }, []);
   const reduce = useReducedMotion();
   const sample = sampleCard(t);
   const categories = cmsCategories.length > 0 ? cmsCategories : sample.categories;

@@ -8,6 +8,7 @@ const staticPaths: { path: string; changeFrequency: "weekly" | "monthly"; priori
   { path: "/kaart", changeFrequency: "weekly", priority: 0.9 },
   { path: "/galerij", changeFrequency: "weekly", priority: 0.7 },
   { path: "/blog", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/evenementen", changeFrequency: "weekly", priority: 0.7 },
   { path: "/contact", changeFrequency: "monthly", priority: 0.6 },
 ];
 
@@ -59,5 +60,32 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // CMS not ready
   }
 
-  return [...staticPages, ...blogPages];
+  // The agenda's detail pages. A series is one URL however often it repeats:
+  // the page names the event and resolves the date itself, so there is exactly
+  // one address per row here and nothing for the expansion in src/lib/events.ts
+  // to multiply. Drafts stay out, same as the blog.
+  let eventPages: MetadataRoute.Sitemap = [];
+  try {
+    const { getPayloadClient } = await import("@/lib/payload");
+    const payload = await getPayloadClient();
+    const events = await payload.find({
+      collection: "events",
+      where: { status: { equals: "published" } },
+      limit: 1000,
+      depth: 0,
+    });
+    eventPages = events.docs.flatMap((event: any) =>
+      locales.map((locale) => ({
+        url: canonicalUrl(locale, `/evenementen/${event.slug}`),
+        lastModified: new Date(event.updatedAt || event.createdAt),
+        changeFrequency: "weekly" as const,
+        priority: locale === defaultLocale ? 0.6 : 0.5,
+        alternates: alternates(`/evenementen/${event.slug}`),
+      })),
+    );
+  } catch {
+    // CMS not ready
+  }
+
+  return [...staticPages, ...blogPages, ...eventPages];
 }

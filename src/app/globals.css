@@ -21,10 +21,35 @@
     --edge: rgba(66, 40, 16, 0.15);
     --edge-soft: rgba(66, 40, 16, 0.08);
     --ease-settle: cubic-bezier(0.16, 0.84, 0.28, 1);
+    /* The height of the running head. Declared here rather than left as the
+       `h-20` in Navigation because two other things have to agree with it: the
+       scroll padding below, and the masthead, which has to know where the bar's
+       centre line is before it can settle onto it. */
+    --nav-h: 5rem;
+    /* Published by NotificationBanner and read by the header, the body padding
+       and the scroll padding. Declared with a value here so that a page whose
+       banner has never mounted still resolves it rather than falling through to
+       every individual fallback. */
+    --notice-h: 0px;
+    /* Everything pinned to the top of the screen, added up: the notification
+       bar or the status-bar strip, whichever is taller, plus the running head.
+       The mobile menu hangs off the bottom of it, and so does anything else
+       that has to start where the chrome stops. */
+    --chrome-h: calc(
+      max(var(--notice-h, 0px), env(safe-area-inset-top, 0px)) + var(--nav-h)
+    );
   }
 
   html {
     scroll-behavior: smooth;
+    /* An anchor jump lands the target at the top of the viewport, which on this
+       site is underneath a bar that is always there and, on the landing page,
+       is still moving. Reserve the bar, the banner above it and the strip of
+       screen iOS keeps for the status bar, so a jump lands the heading in the
+       reader's eyeline instead of behind the chrome. */
+    scroll-padding-top: calc(
+      var(--notice-h, 0px) + var(--nav-h) + env(safe-area-inset-top, 0px) + 1rem
+    );
   }
 
   body {
@@ -47,7 +72,16 @@
        blends. Safari has to rasterise it together with whatever it blends
        over, so the fixed header joined the scrolling group and, when the URL
        bar collapses mid-scroll, was repainted in document order underneath
-       the page. The menu vanished behind the content. */
+       the page. The menu vanished behind the content.
+
+       The masthead on the landing page is the same hazard wearing different
+       clothes. It is a transformed element living inside that fixed header,
+       and it moves on every scroll frame. Keeping it above this layer rather
+       than under it is what stops Safari from having to rasterise the header
+       together with the scrolling sheet again. The cost is that the big drawn
+       lockup does not pick up the fibre multiply the hero around it does —
+       accepted knowingly: it is near-black ink on cream, where the multiply
+       was never going to be visible, and the alternative is the bug above. */
     z-index: 30;
     pointer-events: none;
     mix-blend-mode: multiply;
@@ -309,6 +343,71 @@
      so the server and client always agree on the tree. */
   .motion-only {
     display: block;
+  }
+
+  /* ---- The strip iOS keeps for itself -----------------------------------
+     With `viewport-fit=cover` the page finally owns the whole screen, notch
+     included, which is the only way to stop the sheet from scrolling past a
+     bar of some other colour. The bill for that is that the top of the
+     viewport is now underneath the clock and the battery, so anything pinned
+     there has to hold its own contents clear of them.
+
+     Both pinned bars therefore start their ground at the true top of the
+     screen and their type one inset lower, so there is never a transparent
+     band for the page to show through — which was the complaint. The
+     notification bar folds the inset into its own top padding, because it has
+     a padding utility there already and a component class would lose to it.
+
+     The header only pays the inset when nothing is above it. When the
+     notification bar is up, the bar has already taken the strip and published
+     its own height, inset included, as --notice-h; subtracting that and
+     clamping at zero is the whole rule. */
+  .safe-head-below-notice {
+    padding-top: max(0px, calc(env(safe-area-inset-top, 0px) - var(--notice-h, 0px)));
+  }
+
+  /* ---- The masthead -----------------------------------------------------
+     One lockup, two positions. At the top of the landing page it is the big
+     drawn mark and the name, centred over the hero; by the time the reader has
+     moved 180 pixels it is the running head in the corner of the bar, at the
+     exact size it has always been on every other page. Nothing crossfades:
+     it is the same bee and the same word travelling between two places.
+
+     --mh-s is the only value that moves. 1 is the big state, 0 the settled
+     one, and everything else is derived from it in CSS, so a scroll frame
+     writes a single custom property on a single element rather than three.
+     The element keeps its settled box in the layout, so the bar's own flex
+     row never learns that any of this is happening.
+
+     Read the transform right to left, which is the order it applies in:
+
+       translateX(-50% * s)  pull left by half the lockup's own width, so the
+                             big state is measured from its middle
+       scale(...)            grow from --mh-k0 down to 1 about the left edge,
+                             which is where the settled lockup starts
+       translateY(--mh-y*s)  fall down out of the bar and into the hero
+       translateX(--mh-x*s)  push right to the middle of the screen. --mh-x is
+                             the distance from the lockup's resting left edge
+                             to the centre line, written out in CSS because
+                             measuring it in JS would mean a first paint with
+                             the wrong number in it
+
+     There is deliberately no `will-change: transform` here. Promoting the
+     lockup would have Safari rasterise it once and stretch that raster, and
+     the big state — the one the reader actually looks at, motionless, at the
+     top of the page — is the end that would go soft. Letting the compositor
+     re-raster per frame keeps the drawn line crisp, and the subtree is one
+     glyph and thirteen letters, so there is nothing to save. */
+  .masthead-lockup {
+    --mh-s: 0;
+    --mh-k0: 1;
+    --mh-y: 0px;
+    --mh-x: calc(50vw - max((100vw - 80rem) / 2, 0px) - var(--mh-pad, 1.5rem));
+    transform-origin: left center;
+    transform: translateX(calc(var(--mh-x) * var(--mh-s)))
+      translateY(calc(var(--mh-y) * var(--mh-s)))
+      scale(calc(1 + (var(--mh-k0) - 1) * var(--mh-s)))
+      translateX(calc(-50% * var(--mh-s)));
   }
 }
 

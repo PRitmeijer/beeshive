@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { Sheet } from "@/components/Sheet";
 import { SketchBee } from "@/components/SketchBee";
 import { TornEdge } from "@/components/TornEdge";
 import { getDict } from "@/i18n/dictionaries";
 import { localeHref, localeTags, type Locale } from "@/i18n/config";
+import { EVENTS, track } from "@/lib/umami";
 
 interface BlogPostProps {
   /** The dictionary is looked up here rather than passed: it holds functions. */
@@ -27,6 +29,12 @@ interface BlogPostProps {
 
 export function BlogPostClient({ locale, post }: BlogPostProps) {
   const t = getDict(locale);
+
+  // The title, and nothing else: which piece was read is a fact about the
+  // writing, not about the reader.
+  useEffect(() => {
+    track(EVENTS.blogPostRead, { title: post.title });
+  }, [post.title]);
 
   // Fixed timezone so the server and the browser print the same date; without
   // it the two can land on different days around midnight.

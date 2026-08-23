@@ -5,6 +5,19 @@ import { motion, useReducedMotion } from "framer-motion";
 import { CraftIcon } from "@/components/CraftIcon";
 import { getDict } from "@/i18n/dictionaries";
 import { defaultLocale, type Locale } from "@/i18n/config";
+import { EVENTS, track } from "@/lib/umami";
+
+/**
+ * The mailing list sign-up.
+ *
+ * The one thing standing between a visitor and the address field is the fear
+ * of what happens to the address afterwards, so the form says so itself rather
+ * than leaving it to whichever page happens to be hosting it. The sentence is
+ * CMS content — the owners can promise whatever they can keep — but the form
+ * carries a dictionary line of its own as well, because a component that is
+ * dropped somewhere without settings to hand must not go quiet on exactly the
+ * point the reader is weighing up.
+ */
 
 /** Letterpress field: no box, just a rule the ink sits on. Paper ground. */
 const fieldClass =
@@ -15,10 +28,18 @@ const fieldClass =
 
 export function MailingListForm({
   locale = defaultLocale,
+  privacyNote,
 }: {
   locale?: Locale;
+  /**
+   * Site Instellingen -> Homepage -> `newsletterPrivacyNote`, already resolved
+   * for this locale by the page that renders the form. Left out, the
+   * dictionary's own wording stands in.
+   */
+  privacyNote?: string;
 }) {
   const t = getDict(locale).newsletter;
+  const note = privacyNote?.trim() || t.privacyNote;
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [status, setStatus] = useState<
@@ -36,6 +57,7 @@ export function MailingListForm({
         body: JSON.stringify({ email, name }),
       });
       if (res.ok) {
+        track(EVENTS.newsletterSubscribed);
         setStatus("success");
         setEmail("");
         setName("");
@@ -100,8 +122,15 @@ export function MailingListForm({
           placeholder={t.email}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          aria-describedby="newsletter-privacy"
           className={fieldClass}
         />
+        <p
+          id="newsletter-privacy"
+          className="mt-3 text-sm leading-snug text-hive-400"
+        >
+          {note}
+        </p>
       </div>
       <button
         type="submit"

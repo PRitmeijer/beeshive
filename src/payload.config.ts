@@ -157,6 +157,65 @@ export default buildConfig({
     meta: {
       titleSuffix,
     },
+    /**
+     * The agenda at /admin/agenda.
+     *
+     * Reserveringen, evenementen and afwijkende dagen are three collections
+     * and were three lists; the question the owners actually ask — "wat
+     * gebeurt er donderdag" — needs all three at once, so there is one page
+     * that puts them on a calendar. src/components/admin/AgendaView.tsx has
+     * the details, including the two things about Payload 3.10 that make it
+     * look more elaborate than it is: a custom view has to render the admin
+     * chrome itself, and Payload does not treat one as a page that requires a
+     * login, so the view guards itself.
+     *
+     * `beforeNavLinks` rather than `afterNavLinks` because this sits above the
+     * collections rather than beside them: it is the first thing to open in
+     * the morning, not an afterthought under Instellingen.
+     *
+     * Both entries have to exist in src/app/(payload)/admin/importMap.js as
+     * well — that file is generated (`npm run generate:importmap`) and is what
+     * turns these strings into real imports.
+     */
+    components: {
+      beforeNavLinks: ["@/components/admin/AgendaView#AgendaNavLink"],
+      /**
+       * Below the collections rather than above them: the backup page is
+       * something you open when you are worried, not every morning, and the
+       * translation counter is a nudge rather than a destination.
+       */
+      afterNavLinks: [
+        "@/components/admin/BackupsView#BackupsNavLink",
+        "@/components/admin/LocaleAssist#LocaleAssist",
+      ],
+      views: {
+        agenda: {
+          Component: "@/components/admin/AgendaView#AgendaView",
+          path: "/agenda",
+          // Only /admin/agenda itself; without this a prefix match would also
+          // swallow anything below it, and nothing below it exists.
+          exact: true,
+          meta: {
+            title: "Agenda",
+          },
+        },
+        /**
+         * The backups at /admin/backups. Same two Payload 3.10 facts as the
+         * agenda: the view renders the admin chrome itself and guards its own
+         * login, because a registered custom view is a public route as far as
+         * Payload is concerned. See src/components/admin/BackupsView.tsx and
+         * docs/backups.md.
+         */
+        backups: {
+          Component: "@/components/admin/BackupsView#BackupsView",
+          path: "/backups",
+          exact: true,
+          meta: {
+            title: "Backups",
+          },
+        },
+      },
+    },
   },
   collections: [
     Users,

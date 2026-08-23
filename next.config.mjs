@@ -22,6 +22,29 @@ const nextConfig = {
       },
     ],
   },
+  /**
+   * The guest pass, kept out of every index.
+   *
+   * The page already sets `robots: { index: false }` in its metadata, but a
+   * meta tag only helps a crawler that fetched and parsed the HTML — and the
+   * URL carries the token, so by then the token is already in somebody's logs.
+   * The header says the same thing in the response itself, which is also what
+   * a crawler following a link out of a chat app preview sees first.
+   *
+   * The locale segment is optional in the pattern because Dutch is served on
+   * the bare path and English under /en, and `:token*` rather than `:token`
+   * so a mangled link with a trailing segment is covered too.
+   */
+  async headers() {
+    return [
+      {
+        source: "/:locale(en)?/reservering/:token*",
+        headers: [
+          { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+        ],
+      },
+    ];
+  },
 };
 
 export default withPayload(nextConfig);

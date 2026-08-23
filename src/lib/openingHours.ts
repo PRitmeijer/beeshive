@@ -23,6 +23,28 @@ export interface HoursRow {
 /** One entry per weekday, Monday first. An empty list means closed. */
 export type Week = Range[][];
 
+/**
+ * One date after the schedule has had its say.
+ *
+ * The full answer, with the layer it came from and the loader that fetches it,
+ * is `DaySchedule` in src/lib/schedule.ts — but that module reads the CMS, so
+ * it belongs to the server alone. This is the part of the shape the browser
+ * needs, declared in the module both sides already import, so the form and the
+ * pages can hold a resolved schedule without dragging Payload into the bundle.
+ * `DaySchedule` extends it, so a server-resolved day is one of these.
+ */
+export interface ScheduledDay {
+  /** YYYY-MM-DD in the café's own timezone. */
+  date: string;
+  /** Empty means the doors stay shut. */
+  ranges: Range[];
+  closed: boolean;
+  /** Why this day differs, when it does, in the reader's language. */
+  note?: string | null;
+  /** The hours as they were typed, for a line no range could be read out of. */
+  text?: string | null;
+}
+
 /** The whole cell reads "Gesloten" or "Closed", never a time. */
 const CLOSED = /^\s*(gesloten|closed|dicht)\s*$/i;
 
@@ -32,7 +54,13 @@ const CLOSED = /^\s*(gesloten|closed|dicht)\s*$/i;
  */
 export const LAST_SITTING_BEFORE_CLOSE = 60;
 
-const SLOT_MINUTES = 30;
+/**
+ * The grid every offered time sits on. Exported because the seat counting in
+ * src/lib/capacity.ts walks the same grid: a table booked at 19:00 has to
+ * occupy the very slots the form is offering, or the two disagree about what
+ * "full" means.
+ */
+export const SLOT_MINUTES = 30;
 
 /**
  * How far ahead of now the earliest same-day booking may be. Without it the
@@ -44,6 +72,12 @@ export const LEAD_MINUTES = 60;
 /** "9", "09:30", "9.30" -> minutes from midnight. */
 function toMinutes(hour: string, minute: string | undefined): number {
   return Number(hour) * 60 + Number(minute ?? 0);
+}
+
+/** "19:00" -> 1140, or null for anything that is not a time of day. */
+export function timeToMinutes(time: string): number | null {
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(time);
+  return m ? toMinutes(m[1], m[2]) : null;
 }
 
 export function formatTime(minutes: number): string {
@@ -206,6 +240,45 @@ export function availableDates(
     if (slotsFor(week[index], notBefore).length > 0) dates.push(iso);
   }
   return dates;
+}
+
+/**
+ * The same list, but read off days somebody has already resolved.
+ *
+ * `availableDates()` above knows only the seven weekly rows, so it offers a
+ * Sunday exactly never — including the last Sunday of the month, when the café
+ * is open, and including the Tuesday in December they open on purpose. Handed
+ * the output of `resolveDay()` for the window instead, this offers the days the
+ * café is really open and nothing else, because by then the exceptions and the
+ * repeating rules have already been folded in.
+ *
+ * It is a second function rather than a changed one: the booking form still
+ * runs off the weekly rows in the sheet on phones, where there is no server
+ * render to resolve anything, and that has to keep working.
+ */
+export function availableDatesFromSchedule(
+  days: ScheduledDay[],
+  today: string,
+  nowMinutes?: number,
+): string[] {
+  return days
+    .filter((day) => {
+      // Today drops off the list once its last sitting is inside the lead time.
+      const notBefore =
+        day.date === today && typeof nowMinutes === "number"
+          ? nowMinutes + LEAD_MINUTES
+          : -1;
+      return slotsFor(day.ranges, notBefore).length > 0;
+    })
+    .map((day) => day.date);
+}
+
+/** One resolved day out of a window, by date. */
+export function dayFromSchedule(
+  days: ScheduledDay[],
+  isoDate: string,
+): ScheduledDay | null {
+  return days.find((day) => day.date === isoDate) ?? null;
 }
 
 /** "11:00 – 21:00", or "12:00 – 16:00, 17:00 – 22:00" for a split day. */

@@ -12,6 +12,11 @@ export const hoursNl = {
   todayIs: (hours: string) => `Vandaag ${hours}`,
   openNow: "Nu open.",
   allTimes: "Alle tijden",
+  /**
+   * The heading over the days in the weeks ahead that do not follow the table
+   * above them: a Monday they open on purpose, a Tuesday they do not.
+   */
+  exceptionsHeading: "Afwijkende dagen",
   /** Written into the CMS defaults and matched case-insensitively. */
   closed: "Gesloten",
 };
@@ -24,5 +29,6 @@ export const hoursEn: HoursDict = {
   todayIs: (hours: string) => `Today ${hours}`,
   openNow: "Open now.",
   allTimes: "All hours",
+  exceptionsHeading: "Days that differ",
   closed: "Closed",
 };

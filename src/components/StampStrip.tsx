@@ -61,12 +61,76 @@ function scallop(totalW: number, totalH: number) {
   return d + " Z";
 }
 
+export type FocalPoint = "center" | "top" | "bottom" | "left" | "right";
+
 export interface StampPanel {
   src: string;
   /** Describe the photograph for anyone who cannot see it. */
   alt: string;
   /** One short line. Two lines turn to mush at this size. */
   caption: string;
+  /**
+   * The photograph's own width divided by its own height. Without it there is
+   * no way to work out how much of the picture a plate is currently showing,
+   * and the zoom below degrades to the old behaviour — see `place()`.
+   */
+  aspect?: number;
+  /** 100 fills the plate, as it always did. Below that, less of it is used. */
+  zoom?: number;
+  /** Which part of the photograph to keep when the plate has to crop it. */
+  focalPoint?: FocalPoint;
+}
+
+/**
+ * Where the photograph actually lands inside its plate.
+ *
+ * The owners' word for what they wanted was "zoomed out a little" — the family
+ * portrait was arriving cropped so tight that the family was half off the
+ * edges. The obvious implementation, shrinking the drawn box, does not do it:
+ * a cover crop of a small box and a cover crop of a large box show the same
+ * part of the picture, only at different sizes. The photograph has to be
+ * allowed to become smaller than the frame it is clipped to, with the sheet
+ * showing behind it, and that is only calculable if we know the shape of the
+ * original.
+ *
+ * So: work out the scale at which the picture would exactly cover the plate,
+ * multiply it by the zoom, and lay the result out inside the plate at the
+ * chosen focal point. Above 100 the picture spills over the edges and is
+ * clipped — a real zoom in. Below it the picture pulls its edges inside the
+ * plate and the paper stands in the gap, which is what "shows more of the
+ * photograph" means in practice.
+ */
+function place(
+  frameX: number,
+  frameY: number,
+  frameW: number,
+  frameH: number,
+  aspect: number,
+  zoom: number,
+  focal: FocalPoint,
+) {
+  // Measure the original as `aspect` wide by 1 tall; only the ratio matters.
+  const cover = Math.max(frameW / aspect, frameH) * (zoom / 100);
+  const w = cover * aspect;
+  const h = cover;
+  const x =
+    focal === "left"
+      ? frameX
+      : focal === "right"
+        ? frameX + frameW - w
+        : frameX + (frameW - w) / 2;
+  const y =
+    focal === "top"
+      ? frameY
+      : focal === "bottom"
+        ? frameY + frameH - h
+        : frameY + (frameH - h) / 2;
+  return { x, y, width: w, height: h };
+}
+
+/** The owners' slider stops here; anything wider is a different photograph. */
+function clampZoom(zoom: number | undefined) {
+  return Math.min(200, Math.max(60, zoom ?? 100));
 }
 
 interface StampStripProps {
@@ -135,7 +199,9 @@ export function StampStrip({
             const top = across ? 0 : cellH * i;
             const clipId = `photo-${uid}-${i}`;
             return (
-              <g key={panel.src}>
+              // Two rows in the CMS can point at the same photograph; the
+              // index is what keeps them apart.
+              <g key={`${panel.src}-${i}`}>
                 <defs>
                   <clipPath id={clipId}>
                     <rect
@@ -147,12 +213,32 @@ export function StampStrip({
                   </clipPath>
                 </defs>
 
+                {/* Two ways of drawing the same thing. With the original's
+                    shape known, the box is computed outright and matches the
+                    picture exactly, so `slice` has nothing left to crop and
+                    the clip path is what holds it inside the plate. Without
+                    it — a CMS image saved before Payload recorded its
+                    dimensions — there is nothing to compute from, so the plate
+                    falls back to the cover crop it has always used and the
+                    zoom only scales the box it is drawn in. */}
                 <image
                   href={panel.src}
-                  x={left + margin}
-                  y={top + margin}
-                  width={photoW}
-                  height={photoH}
+                  {...(panel.aspect
+                    ? place(
+                        left + margin,
+                        top + margin,
+                        photoW,
+                        photoH,
+                        panel.aspect,
+                        clampZoom(panel.zoom),
+                        panel.focalPoint || "center",
+                      )
+                    : {
+                        x: left + margin,
+                        y: top + margin,
+                        width: photoW,
+                        height: photoH,
+                      })}
                   preserveAspectRatio="xMidYMid slice"
                   clipPath={`url(#${clipId})`}
                 >

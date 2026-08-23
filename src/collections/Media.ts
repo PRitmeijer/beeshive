@@ -91,6 +91,21 @@ export const Media: CollectionConfig = {
     mimeTypes: ["image/*"],
   },
   fields: [
+    /**
+     * "Neem de Nederlandse tekst over in het Engels" — one button that copies
+     * every localized field the editor has not filled in yet, so adding a
+     * photo no longer means saving, switching tab and saving again for fields
+     * that were never going to differ. A `ui` field: nothing is stored, no
+     * migration, and the component decides its own direction from the locale
+     * the editor is looking at. See src/components/admin/CopyToLocale.tsx.
+     */
+    {
+      name: "vertalingen",
+      type: "ui",
+      admin: {
+        components: { Field: "@/components/admin/CopyToLocale#CopyToLocale" },
+      },
+    },
     {
       name: "alt",
       label: "Alt-tekst",

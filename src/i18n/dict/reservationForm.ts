@@ -7,7 +7,7 @@ export const reservationFormNl = {
   name: "Naam",
   email: "E-mailadres",
   phone: "Telefoonnummer",
-  phoneHint: "Hierop bellen we je om de tafel te bevestigen.",
+  phoneHint: "Alleen voor het geval we je iets moeten vragen.",
   guests: "Aantal personen",
   guestsHint: "Maximaal 20 personen.",
   date: "Datum",
@@ -23,10 +23,9 @@ export const reservationFormNl = {
   /** Once the day is known, the hours come straight uit de openingstijden. */
   timeHintForDay: (hours: string, last: string) =>
     `Open ${hours}. Laatste tafel om ${last} uur.`,
-  occasion: "Gelegenheid",
-  occasionPlaceholder: "Verjaardag, familiediner, zomaar",
   notes: "Opmerkingen",
-  notesHint: "Allergieën, een kinderstoel, een rustige tafel: laat het weten.",
+  notesHint:
+    "Allergieën, een verjaardag, een kinderstoel, een rustige tafel: laat het weten.",
   honeypot: "Laat dit veld leeg",
   submit: "Reserveren",
   submitting: "Bezig...",
@@ -43,10 +42,18 @@ export const reservationFormNl = {
     tooLarge: "Je bericht is te lang. Kort het wat in en probeer het opnieuw.",
     nameRequired: "Vul je naam in.",
     nameTooLong: "Je naam is te lang.",
-    phoneRequired: "Vul je telefoonnummer in, daarop bevestigen we de tafel.",
+    phoneRequired:
+      "Vul je telefoonnummer in, voor het geval we ergens op moeten terugkomen.",
     emailRequired: "Vul je e-mailadres in.",
     emailInvalid: "Vul een geldig e-mailadres in.",
     phoneTooLong: "Je telefoonnummer is te lang.",
+    /**
+     * The Gelegenheid field is gone from the form: asking a stranger why they
+     * are coming out to eat reads as nosy, and the one useful answer to it —
+     * a birthday — belongs in the notes with the allergies and the high chair.
+     * The server still validates the column for browsers holding an older copy
+     * of the page, so the sentence has to stay here to be shown.
+     */
     occasionTooLong: "De gelegenheid is te lang.",
     notesTooLong: "Je opmerking is te lang, houd het onder 2000 tekens.",
     guestsInvalid: "Vul een aantal personen in tussen 1 en 20.",
@@ -60,10 +67,25 @@ export const reservationFormNl = {
       "Die tijd valt buiten onze openingstijden. Kies een tijd uit de lijst.",
     timePassed:
       "Die tijd is al geweest. Kies een latere tijd, of bel ons voor vandaag.",
+    /**
+     * The three refusals that come from the owners rather than from the clock:
+     * online reserveren switched off in the CMS, that half hour already
+     * seated, or the whole day seated. `dayFull` and `slotFull` are kept apart
+     * on purpose — one of them is worth trying another time for, the other is
+     * not, and telling a guest to pick another time on a day that has nothing
+     * left is the sort of small lie that costs a table.
+     */
+    reservationsClosed:
+      "Online reserveren staat op dit moment uit. Bel of mail ons gerust, dan regelen we het samen.",
+    slotFull:
+      "Dat tijdstip is helaas vol. Kies een andere tijd, of bel ons \u2014 soms lukt er meer dan de agenda laat zien.",
+    dayFull:
+      "Die dag zit helemaal vol. Kies een andere datum, of bel ons \u2014 soms lukt er meer dan de agenda laat zien.",
     server: "Er ging iets mis aan onze kant. Probeer het opnieuw.",
   },
   successTitle: "Bedankt, we hebben het ontvangen",
-  successText: "We nemen contact met je op om de tafel te bevestigen.",
+  successText:
+    "Je aanvraag staat genoteerd; een bevestiging is het nog niet. Je hoort van ons of de tafel vrij is.",
   successAgain: "Nog een tafel reserveren",
 };
 
@@ -73,7 +95,7 @@ export const reservationFormEn: ReservationFormDict = {
   name: "Name",
   email: "Email address",
   phone: "Phone number",
-  phoneHint: "We ring this number to confirm your table.",
+  phoneHint: "Only in case we need to ask you something.",
   guests: "Number of guests",
   guestsHint: "Up to 20 guests.",
   date: "Date",
@@ -87,10 +109,9 @@ export const reservationFormEn: ReservationFormDict = {
   timeHint: "Choose a date and we will show you which times are free.",
   timeHintForDay: (hours: string, last: string) =>
     `Open ${hours}. Last table at ${last}.`,
-  occasion: "Occasion",
-  occasionPlaceholder: "Birthday, family dinner, no reason at all",
   notes: "Notes",
-  notesHint: "Allergies, a high chair, a quiet table: do let us know.",
+  notesHint:
+    "Allergies, a birthday, a high chair, a quiet table: do let us know.",
   honeypot: "Leave this field empty",
   submit: "Book a table",
   submitting: "Sending...",
@@ -102,7 +123,8 @@ export const reservationFormEn: ReservationFormDict = {
     tooLarge: "Your message is too long. Shorten it and try again.",
     nameRequired: "Please fill in your name.",
     nameTooLong: "Your name is too long.",
-    phoneRequired: "Please fill in your phone number; that is how we confirm the table.",
+    phoneRequired:
+      "Please fill in your phone number, in case we need to check something with you.",
     emailRequired: "Please fill in your email address.",
     emailInvalid: "Please fill in a valid email address.",
     phoneTooLong: "Your phone number is too long.",
@@ -119,9 +141,16 @@ export const reservationFormEn: ReservationFormDict = {
       "That time falls outside our opening hours. Please pick one from the list.",
     timePassed:
       "That time has already passed. Pick a later one, or call us for today.",
+    reservationsClosed:
+      "Online booking is switched off at the moment. Do call or email us and we will sort it out together.",
+    slotFull:
+      "That time is fully booked. Please pick another time, or call us \u2014 sometimes more is possible than the diary shows.",
+    dayFull:
+      "That day is fully booked. Please pick another date, or call us \u2014 sometimes more is possible than the diary shows.",
     server: "Something went wrong on our side. Please try again.",
   },
   successTitle: "Thank you, we have got it",
-  successText: "We will be in touch to confirm your table.",
+  successText:
+    "Your request is noted; it is not a confirmation yet. We will let you know whether the table is free.",
   successAgain: "Book another table",
 };

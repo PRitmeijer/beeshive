@@ -7,7 +7,9 @@ import { Sheet } from "@/components/Sheet";
 import { SocialRow, followLinks, reviewLink } from "@/components/SocialMarks";
 import { TornEdge } from "@/components/TornEdge";
 import type { SiteSettingsData } from "@/lib/payload";
+import { describe, type ScheduledDay } from "@/lib/openingHours";
 import { isContactError } from "@/lib/contactErrors";
+import { EVENTS, track } from "@/lib/umami";
 import { getDict } from "@/i18n/dictionaries";
 import type { Locale } from "@/i18n/config";
 
@@ -15,6 +17,15 @@ interface Props {
   /** The dictionary is looked up here rather than passed: it holds functions. */
   locale: Locale;
   settings: SiteSettingsData;
+  /** Today in Amsterdam, YYYY-MM-DD, decided on the server so the printed
+   *  dates cannot disagree with the markup that hydrates over them. */
+  today?: string;
+  /**
+   * The next four weeks, resolved on the server. The seven-row table below is
+   * the ordinary week; these are the days that break it. Optional so the page
+   * still renders if it is ever mounted without them.
+   */
+  schedule?: ScheduledDay[];
 }
 
 /**
@@ -44,7 +55,12 @@ const NL_WEEKDAYS = [
   "Zondag",
 ];
 
-export function ContactClient({ locale, settings: s }: Props) {
+export function ContactClient({
+  locale,
+  settings: s,
+  today,
+  schedule = [],
+}: Props) {
   const t = getDict(locale);
 
   const countryName = (() => {
@@ -83,9 +99,13 @@ export function ContactClient({ locale, settings: s }: Props) {
       const res = await fetch("/api/contact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, website }),
+        // The locale rides along so the stored message records which language
+        // version the visitor was reading, and the owners know what to answer
+        // in. Everything the server keeps is validated there regardless.
+        body: JSON.stringify({ ...form, locale, website }),
       });
       if (res.ok) {
+        track(EVENTS.contactSubmitted);
         setStatus("sent");
         setForm({ name: "", email: "", message: "" });
         return;
@@ -114,6 +134,25 @@ export function ContactClient({ locale, settings: s }: Props) {
   }[];
   const follow = followLinks(s);
   const review = reviewLink(s);
+
+  /**
+   * A day earns a line here only when the owners wrote a reason for it. The
+   * loader attaches a note when an exception or a repeating rule had the last
+   * word, so this is the same thing as "the week above does not describe this
+   * day" — without the client needing the server-only `source` field to say so.
+   */
+  const differing = schedule.filter((day) => day.note && day.date >= (today ?? ""));
+
+  /**
+   * "Zondag 30 augustus", written from the dictionary rather than through Intl,
+   * for the same reason the booking form does it: two ICU builds need not
+   * agree, and the server and the browser must produce the same string.
+   */
+  const dayLabel = (iso: string) => {
+    const d = new Date(`${iso}T12:00:00.000Z`);
+    const weekday = t.weekdays[(d.getUTCDay() + 6) % 7];
+    return `${weekday} ${d.getUTCDate()} ${t.months[d.getUTCMonth()]}`;
+  };
 
   return (
     <>
@@ -163,6 +202,36 @@ export function ContactClient({ locale, settings: s }: Props) {
                         {s.openingHoursNote}
                       </p>
                     ) : null}
+
+                    {/* The weeks ahead that do not follow the table above. */}
+                    {differing.length > 0 && (
+                      <div className="mt-8">
+                        <h3 className="label text-hive-500">
+                          {t.hours.exceptionsHeading}
+                        </h3>
+                        <dl className="mt-3 space-y-2 text-sm">
+                          {differing.map((day) => (
+                            <div key={day.date}>
+                              <div className="grid grid-cols-[1fr_auto] gap-x-8">
+                                <dt className="text-hive-500">
+                                  {dayLabel(day.date)}
+                                </dt>
+                                <dd className="figures-old text-right text-hive-400">
+                                  {day.closed
+                                    ? t.hours.closed
+                                    : day.ranges.length > 0
+                                      ? describe(day.ranges)
+                                      : (day.text ?? "")}
+                                </dd>
+                              </div>
+                              <p className="mt-0.5 text-xs italic leading-snug text-hive-400">
+                                {day.note}
+                              </p>
+                            </div>
+                          ))}
+                        </dl>
+                      </div>
+                    )}
                   </>
                 )}
 
@@ -322,6 +391,7 @@ export function ContactClient({ locale, settings: s }: Props) {
                   {s.phone && (
                     <a
                       href={`tel:${s.phone.replace(/\s/g, "")}`}
+                      onClick={() => track(EVENTS.phoneClicked)}
                       className="ink-link figures-old"
                     >
                       {s.phone}
@@ -336,11 +406,19 @@ export function ContactClient({ locale, settings: s }: Props) {
                 </p>
               </address>
 
-              {/* The map sits with the address it belongs to. */}
+              {/* The map sits with the address it belongs to, and it is the
+                  one rectangle on the page that is not ours: Google's own
+                  greys and reds, pulled towards our pigments by the filter
+                  below but never entirely. Mounting it on the khaki cover
+                  stock rather than the sheet it lies on gives it a border of
+                  warm card to sit in, so it reads as a photograph pasted into
+                  the page instead of a window cut through it. The mat needs
+                  room to be read as a mat, hence the wider padding; the rest
+                  of the page is deliberately tighter and stays that way. */}
               {s.googleMapsEmbedUrl && (
                 <figure className="mt-6">
-                  <Sheet tone="deep" edge="soft">
-                    <div className="p-2.5 md:p-3">
+                  <Sheet tone="cover" edge="soft">
+                    <div className="p-4 md:p-5">
                       <iframe
                         src={s.googleMapsEmbedUrl}
                         width="100%"
@@ -381,6 +459,13 @@ export function ContactClient({ locale, settings: s }: Props) {
                   <h3 className="label">{t.contact.reviewsHeading}</h3>
                   <a
                     href={review.url}
+                    /* The Google listing is where the reviews are and where
+                       the "route" button is; one tap serves both, so the event
+                       carries where it was fired from rather than pretending
+                       to know which of the two the reader wanted. */
+                    onClick={() =>
+                      track(EVENTS.directionsClicked, { source: "google-listing" })
+                    }
                     target="_blank"
                     rel="noopener noreferrer"
                     className="ink-link mt-3 inline-flex items-center gap-2.5 text-sm"

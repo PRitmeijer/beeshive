@@ -8,6 +8,7 @@ import { TornEdge } from "@/components/TornEdge";
 import { getDict } from "@/i18n/dictionaries";
 import { localeHref, locales, type Locale } from "@/i18n/config";
 import type { SiteSettingsData } from "@/lib/payload";
+import type { ScheduledDay } from "@/lib/openingHours";
 
 interface Props {
   locale: Locale;
@@ -15,6 +16,15 @@ interface Props {
   today: string;
   /** Minutes past midnight in Amsterdam at render time. */
   nowMinutes: number;
+  /**
+   * The days the page resolved on the server, with the repeating rules and the
+   * afwijkende dagen already folded in. Forwarded straight to the form, which
+   * offers exactly these days when it has them and falls back to the seven
+   * weekly rows when it does not. `ScheduledDay` rather than `DaySchedule`
+   * because this is a client component: the server type lives in
+   * src/lib/schedule.ts, which imports Payload.
+   */
+  schedule?: ScheduledDay[];
 }
 
 // Must stay in step with `bg-paper-deep` in tailwind.config.ts, since a torn
@@ -50,6 +60,7 @@ export function ReserverenClient({
   settings: s,
   today,
   nowMinutes,
+  schedule = [],
 }: Props) {
   const t = getDict(locale);
   const openingHours = (s.openingHours || []) as {
@@ -85,6 +96,7 @@ export function ReserverenClient({
               minDate={today}
               nowMinutes={nowMinutes}
               openingHours={openingHours}
+              schedule={schedule}
             />
           </ScrollReveal>
 

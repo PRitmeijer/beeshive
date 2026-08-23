@@ -7,6 +7,7 @@ import { ReservationForm } from "@/components/ReservationForm";
 import { getDict } from "@/i18n/dictionaries";
 import { localeHref, type Locale } from "@/i18n/config";
 import type { HoursRow } from "@/lib/openingHours";
+import { EVENTS, track } from "@/lib/umami";
 
 /**
  * The standing reservation control on phones.
@@ -69,8 +70,16 @@ function CloseMark() {
   );
 }
 
+/*
+ * The mark floats above the page on phones, and with `viewport-fit=cover` the
+ * page now runs the full height of the screen — so plain `bottom-5` puts a
+ * 56px tap target half under the home indicator on any notched iPhone. The
+ * inset is added to the gap rather than replacing it, so the mark keeps the
+ * same 1.25rem of air above whatever the bottom of the usable screen is; on a
+ * device with no inset `env()` resolves to 0px and nothing moves.
+ */
 const squareClass =
-  "fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center " +
+  "fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom))] right-5 z-40 flex h-14 w-14 items-center justify-center " +
   "rounded-[3px] bg-hive-700 text-paper shadow-[0_8px_20px_rgba(51,30,12,0.34)] " +
   "ring-1 ring-honey-200/25 transition-colors duration-300 ease-settle " +
   "hover:bg-hive-800 active:translate-y-px md:hidden";
@@ -130,6 +139,10 @@ export function MobileReserveButton({
 
   const target = localeHref(locale, "/reserveren");
   if (pathname === target || pathname.endsWith("/reserveren")) return null;
+  // The guest pass belongs to a party that already has a table. Offering them
+  // a floating "reserve" mark over it is noise at best, and at worst it reads
+  // as though the booking they are looking at did not take.
+  if (pathname.includes("/reservering/")) return null;
 
   // An external booking system owns the whole flow, so there is nothing to
   // put in a sheet: the mark is simply a link out.
@@ -137,6 +150,7 @@ export function MobileReserveButton({
     return (
       <a
         href={reservationUrl}
+        onClick={() => track(EVENTS.reserveButtonClicked, { source: "mobile" })}
         target="_blank"
         rel="noopener noreferrer"
         aria-label={label}
@@ -153,7 +167,10 @@ export function MobileReserveButton({
       <button
         ref={triggerRef}
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          track(EVENTS.reserveButtonClicked, { source: "mobile" });
+          setOpen(true);
+        }}
         aria-label={label}
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -189,6 +206,11 @@ export function MobileReserveButton({
               className="relative flex max-h-[92vh] w-full flex-col rounded-t-[4px] bg-paper outline-none"
             >
               <div className="flex items-start justify-between gap-4 border-b border-hive-700/12 px-6 pb-4 pt-6">
+                {/* Eyebrow and heading sit on consecutive lines with nothing
+                    between them, so they are read as one sentence whether we
+                    meant them that way or not. The eyebrow therefore names the
+                    house rather than opening the heading; see the note in
+                    src/i18n/dict/reserve.ts. */}
                 <div>
                   <p className="label">{t.reserve.eyebrow}</p>
                   <h2
@@ -208,7 +230,10 @@ export function MobileReserveButton({
                 </button>
               </div>
 
-              <div className="overflow-y-auto overscroll-contain px-6 pb-10 pt-7">
+              {/* Same reason as the mark above: the sheet is flush with the
+                  bottom of the screen, so its last field would otherwise end
+                  underneath the home indicator. */}
+              <div className="overflow-y-auto overscroll-contain px-6 pb-[calc(2.5rem+env(safe-area-inset-bottom))] pt-7">
                 {/* No date passed: the form reads the clock itself after
                     mount. Nothing here is server-rendered, so there is no
                     markup for it to disagree with. */}
