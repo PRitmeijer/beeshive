@@ -145,11 +145,16 @@ export function Navigation({
               className="block h-3 w-px bg-hive-700/25"
             />
           )}
+          {/* The accessible name has to contain the visible text, or voice
+              control cannot act on "click NL": the link reads "NL" and "NL" is
+              not a substring of "Nederlands", which is what
+              label-content-name-mismatch is about. Naming both keeps the
+              spoken name a real word and keeps the spoken command working. */}
           <Link
             href={localeHref(code, here)}
             hrefLang={code}
             lang={code}
-            aria-label={localeNames[code]}
+            aria-label={`${localeLabels[code]} \u2014 ${localeNames[code]}`}
             aria-current={code === locale ? "true" : undefined}
             onClick={onNavigate}
             className={`label transition-colors duration-500 ease-settle ${

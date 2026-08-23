@@ -12,13 +12,19 @@
  * It is written to be run against an empty database. Run twice without --wipe
  * and you get every document twice, because there is nothing in a dumped
  * document that reliably identifies it again once the ids have moved.
+ *
+ * Every document is written once per locale, and the second write is the
+ * delicate one: see `spliceRowIds` for what has to happen in between and what
+ * it cost the last time it did not.
  */
 import { getPayload } from "payload";
 import type { Field } from "payload";
 import config from "../src/payload.config";
 import crypto from "crypto";
 import fs from "fs";
+import os from "os";
 import path from "path";
+import { fileURLToPath } from "url";
 
 const args = process.argv.slice(2);
 const wipe = args.includes("--wipe");
@@ -64,8 +70,42 @@ const GENERATED = new Set([
   "sessions",
 ]);
 
-/** Where export-content.ts leaves the files that belong to the media docs. */
-const mediaDir = path.resolve("media");
+/**
+ * Where the old site's uploaded files are, for the media documents to be
+ * re-created from.
+ *
+ * The default is the same ./media the site itself uploads into, which is
+ * convenient and also the one thing that can go wrong here — see
+ * `stageUpload`. MEDIA_IMPORT_DIR points this somewhere else when the old
+ * files arrive in a directory of their own, which is the tidier way to do it.
+ */
+const mediaDir = path.resolve(process.env.MEDIA_IMPORT_DIR || "media");
+
+/**
+ * Payload's own upload directory for a collection, when it is still writing to
+ * disk. With R2 configured the plugin turns local storage off and the files go
+ * to the bucket, so there is no directory to collide with and this is
+ * undefined.
+ */
+function uploadDir(collection: { upload?: unknown }): string | undefined {
+  const upload = collection.upload as
+    | { staticDir?: string; disableLocalStorage?: boolean }
+    | undefined
+    | boolean;
+  if (!upload || typeof upload !== "object") return undefined;
+  if (upload.disableLocalStorage) return undefined;
+  return upload.staticDir ? path.resolve(upload.staticDir) : undefined;
+}
+
+/** Rename, or copy and delete when the two paths are on different filesystems. */
+function moveFile(from: string, to: string) {
+  try {
+    fs.renameSync(from, to);
+  } catch {
+    fs.copyFileSync(from, to);
+    fs.unlinkSync(from);
+  }
+}
 
 type Doc = Record<string, any>;
 
@@ -155,6 +195,65 @@ function inDependencyOrder<T extends { slug: string; fields: Field[] }>(collecti
   }
 
   return ordered;
+}
+
+/**
+ * The shape of an update that empties a global's lists and drops its links:
+ * every array and blocks field set to [], every relationship and upload to
+ * null.
+ *
+ * Two things want this, and both of them are --wipe. The first is that a media
+ * document cannot be deleted while the homepage still names it — the row lives
+ * in the global's own table, Postgres refuses the delete on the foreign key,
+ * and the aborted transaction takes the rest of the wipe down with it. The
+ * second is subtler: the globals are rewritten from the dump at the end of the
+ * run, and an update only touches the fields it is given, so an array the dump
+ * has no key for keeps whatever rows the database already held. Re-run an
+ * import against a schema the dump predates and those rows are still there,
+ * looking exactly like content somebody meant to import.
+ *
+ * Plain fields are left alone. One the dump does not mention keeps its old
+ * value, which is a smaller hazard than clearing a required field out from
+ * under Payload's validation and failing the wipe over it.
+ */
+function globalWipe(fields: Field[]): Doc {
+  const out: Doc = {};
+
+  for (const field of fields) {
+    if (!("name" in field) || !field.name) {
+      if ("fields" in field && Array.isArray(field.fields)) {
+        Object.assign(out, globalWipe(field.fields));
+      }
+      if (field.type === "tabs") {
+        for (const tab of field.tabs) {
+          if ("name" in tab && tab.name) {
+            const nested = globalWipe(tab.fields);
+            if (Object.keys(nested).length) out[tab.name] = nested;
+          } else {
+            Object.assign(out, globalWipe(tab.fields));
+          }
+        }
+      }
+      continue;
+    }
+
+    if (field.type === "relationship" || field.type === "upload") {
+      out[field.name] = null;
+      continue;
+    }
+
+    if (field.type === "array" || field.type === "blocks") {
+      out[field.name] = [];
+      continue;
+    }
+
+    if (field.type === "group") {
+      const nested = globalWipe(field.fields);
+      if (Object.keys(nested).length) out[field.name] = nested;
+    }
+  }
+
+  return out;
 }
 
 /**
@@ -261,6 +360,160 @@ function remapRelations(fields: Field[], data: Doc, unresolved: string[]): Doc {
   return out;
 }
 
+/**
+ * Give the next locale's data the row ids Payload assigned to the first one.
+ *
+ * Array and block rows live in tables of their own, and the row id is the only
+ * thing tying the two locales' values to the same row. The dump's ids came out
+ * of SQLite and mean nothing in a fresh database, so `strip` and
+ * `remapRelations` drop them and the first locale is written without any.
+ *
+ * That leaves the second locale with no way to say "this is the same Monday".
+ * Sent id-less, Payload reads it as an entirely new list: it deletes the rows
+ * it created a moment ago and inserts fresh ones carrying only the second
+ * locale's values, and the first locale's text goes with them. It is silent,
+ * and it took the Dutch opening hours once already — seven rows in
+ * site_settings_opening_hours_locales, every one of them 'en', while the site
+ * quietly served the hard-coded defaults in src/lib/payload.ts and nobody
+ * could work out why editing the hours did nothing.
+ *
+ * So the document is read back between the two writes and the real ids are
+ * spliced in here, by position. Position is the only thing the two locales are
+ * guaranteed to share: a row is not localized, only its fields are, so both
+ * locales are describing one list in one order.
+ *
+ * The walk is driven by the config for the same reason `remapRelations` is —
+ * nothing about a JSON array says whether it came from an array field, a
+ * blocks field or a hasMany select — and it follows that function's shape on
+ * purpose, down to how rows, collapsibles and unnamed tabs hold fields without
+ * nesting the data. `notes` collects the mismatches worth telling the operator
+ * about; none of them stop the import.
+ */
+export function spliceRowIds(
+  fields: Field[],
+  saved: Doc,
+  next: Doc,
+  path: string,
+  notes: string[],
+): void {
+  if (!saved || !next || typeof saved !== "object" || typeof next !== "object") return;
+
+  for (const field of fields) {
+    if (!("name" in field) || !field.name) {
+      if ("fields" in field && Array.isArray(field.fields)) {
+        spliceRowIds(field.fields, saved, next, path, notes);
+      }
+      if (field.type === "tabs") {
+        for (const tab of field.tabs) {
+          if ("name" in tab && tab.name) {
+            spliceRowIds(tab.fields, saved[tab.name], next[tab.name], `${path}${tab.name}.`, notes);
+          } else {
+            spliceRowIds(tab.fields, saved, next, path, notes);
+          }
+        }
+      }
+      continue;
+    }
+
+    const name = field.name;
+
+    // Groups have no id of their own; they are only a level to descend
+    // through on the way to an array that does.
+    if (field.type === "group") {
+      spliceRowIds(field.fields, saved[name], next[name], `${path}${name}.`, notes);
+      continue;
+    }
+
+    if (field.type !== "array" && field.type !== "blocks") continue;
+
+    const savedRows = saved[name];
+    const nextRows = next[name];
+    if (!Array.isArray(savedRows) || !Array.isArray(nextRows)) continue;
+
+    for (let i = 0; i < nextRows.length && i < savedRows.length; i++) {
+      const savedRow = savedRows[i];
+      const nextRow = nextRows[i];
+      if (!savedRow || !nextRow || typeof nextRow !== "object") continue;
+
+      if (field.type === "blocks") {
+        // Two different block types in the same position are not the same row
+        // however much the positions line up, and handing Payload one block's
+        // id with another block's fields corrupts the document rather than
+        // failing. Leave the row without an id: it costs this locale's link to
+        // the row it should have had, which is recoverable by hand, where the
+        // alternative is not.
+        if (savedRow.blockType !== nextRow.blockType) {
+          notes.push(
+            `${path}${name}[${i}]: block type differs between locales `
+              + `(${savedRow.blockType} / ${nextRow.blockType}), left unmatched`,
+          );
+          continue;
+        }
+        nextRow.id = savedRow.id;
+        const block = field.blocks.find((b) => b.slug === nextRow.blockType);
+        if (block) {
+          spliceRowIds(block.fields, savedRow, nextRow, `${path}${name}[${i}].`, notes);
+        }
+        continue;
+      }
+
+      nextRow.id = savedRow.id;
+      spliceRowIds(field.fields, savedRow, nextRow, `${path}${name}[${i}].`, notes);
+    }
+
+    // Rows the next locale does not mention. They cannot simply be left out:
+    // Payload takes the array it is given as the whole array, and the rows are
+    // shared between the locales, so an English list that stops after five
+    // days would take Saturday and Sunday off the Dutch site as well. Each
+    // missing row is appended carrying nothing but its id, which is enough for
+    // Payload to recognise it and keep it.
+    //
+    // What Payload then stores for this locale is its own business: with the
+    // fallback on it copies the first locale's text across, so the English
+    // Saturday reads "Zaterdag" until somebody translates it. Untranslated and
+    // visibly so is the right way to fail here — the alternative was losing
+    // the day.
+    for (let i = nextRows.length; i < savedRows.length; i++) {
+      const savedRow = savedRows[i];
+      if (!savedRow) continue;
+      nextRows.push(
+        field.type === "blocks"
+          ? { id: savedRow.id, blockType: savedRow.blockType }
+          : { id: savedRow.id },
+      );
+    }
+
+    if (nextRows.length !== savedRows.length) {
+      // The other direction: more rows here than the first locale created.
+      // Those arrive without an id and Payload creates them, which is right —
+      // worth a line so that a dump the two locales disagree about is visible
+      // rather than merely absorbed.
+      notes.push(
+        `${path}${name}: ${nextRows.length} rows against ${savedRows.length} in the first locale`,
+      );
+    }
+  }
+}
+
+/**
+ * The document as Payload actually stored it, which is the only place the row
+ * ids exist. `depth: 0` leaves relationships as bare ids: nothing here reads
+ * them and populating them would fetch documents for no reason.
+ */
+async function readBack(
+  payload: Awaited<ReturnType<typeof getPayload>>,
+  collection: string,
+  id: string | number,
+): Promise<Doc> {
+  return (await payload.findByID({
+    collection: collection as never,
+    id,
+    locale: "nl",
+    depth: 0,
+    overrideAccess: true,
+  })) as Doc;
+}
+
 async function main() {
   if (!fs.existsSync(input)) {
     console.error(`No such file: ${input}`);
@@ -282,6 +535,53 @@ async function main() {
         "  !!  dump. Ctrl-C now if that is not what you meant.\n",
     );
   }
+
+  // Emptying happens in one pass of its own, before anything is created, and
+  // it covers every collection rather than only the ones the dump mentions: a
+  // dump taken before a collection existed would otherwise leave that
+  // collection's old rows behind and make a "clean" import anything but.
+  // Reverse dependency order, so that the documents pointing at something go
+  // before the something they point at.
+  if (wipe) {
+    // The globals go first, or rather their lists and their links do: see
+    // `globalWipe`. Then the collections, each delete on its own so that one
+    // that will not go does not take the rest of the pass with it.
+    for (const global of payload.config.globals) {
+      const detach = globalWipe(global.fields);
+      if (!Object.keys(detach).length) continue;
+      try {
+        await payload.updateGlobal({
+          slug: global.slug as never,
+          data: detach as never,
+          overrideAccess: true,
+        });
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        console.warn(`  ${global.slug}: could not be emptied before the wipe: ${reason}`);
+      }
+    }
+
+    for (const collection of inDependencyOrder(payload.config.collections).reverse()) {
+      if (INTERNAL.has(collection.slug)) continue;
+      try {
+        const deleted = await payload.delete({
+          collection: collection.slug as never,
+          where: { id: { exists: true } },
+          overrideAccess: true,
+        });
+        if (deleted.docs.length) {
+          console.log(`  ${collection.slug}: wiped ${deleted.docs.length} documents`);
+        }
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        console.warn(`  ${collection.slug}: could not be wiped: ${reason}`);
+      }
+    }
+  }
+
+  // Somewhere to hold an upload for the moment between taking it out of the
+  // media directory and Payload writing it back, and nothing else.
+  const stagingDir = fs.mkdtempSync(path.join(os.tmpdir(), "beeshive-import-"));
 
   const missingFiles: string[] = [];
   const resetPasswords: string[] = [];
@@ -307,15 +607,6 @@ async function main() {
     }
 
     idMap[slug] = new Map();
-
-    if (wipe) {
-      const deleted = await payload.delete({
-        collection: slug as never,
-        where: { id: { exists: true } },
-        overrideAccess: true,
-      });
-      console.log(`  ${slug}: wiped ${deleted.docs.length} documents`);
-    }
 
     const nlDocs: Doc[] = perLocale.nl || [];
     const enById = new Map<string | number, Doc>(
@@ -348,10 +639,35 @@ async function main() {
       // warning at the end rather than half-imported.
       const filename = source.filename as string | undefined;
       let filePath: string | undefined;
+      let staged: { from: string; to: string } | undefined;
       if (collection.upload && filename) {
         const candidate = path.join(mediaDir, filename);
-        if (fs.existsSync(candidate)) filePath = candidate;
-        else missingFiles.push(`${slug}/${filename}`);
+        if (fs.existsSync(candidate)) {
+          // The old files usually sit in the very directory Payload is about
+          // to write this upload into, because ./media is both where the last
+          // install kept them and where this one will. Handed a file whose
+          // name is already taken in its own upload directory, Payload does
+          // not overwrite: it saves the document as Lm08h01-1.svg and says
+          // nothing. Every media document comes out renamed that way, the
+          // dump and the database stop agreeing about what the file is
+          // called, and a second run renames them again.
+          //
+          // So when the two directories are the same the file is moved aside
+          // first, which frees the name, and Payload puts it back under it.
+          // Nothing is lost if the create then fails — the file goes back
+          // where it was, below.
+          const destination = uploadDir(collection);
+          if (destination && destination === path.resolve(mediaDir)) {
+            const to = path.join(stagingDir, filename);
+            moveFile(candidate, to);
+            staged = { from: candidate, to };
+            filePath = to;
+          } else {
+            filePath = candidate;
+          }
+        } else {
+          missingFiles.push(`${slug}/${filename}`);
+        }
       }
 
       try {
@@ -379,6 +695,10 @@ async function main() {
           en: en ? strip(en) : {},
         });
       } catch (error) {
+        // Put the file back before anything else, so that fixing whatever went
+        // wrong and running the import again finds the media directory as it
+        // was rather than one file short.
+        if (staged && fs.existsSync(staged.to)) moveFile(staged.to, staged.from);
         failed++;
         const reason = error instanceof Error ? error.message : String(error);
         console.warn(`  ${slug}#${source.id}: ${reason}`);
@@ -401,6 +721,7 @@ async function main() {
     if (!collection) continue;
 
     const still: string[] = [];
+    const notes: string[] = [];
     try {
       if (Object.keys(item.nl).length) {
         await payload.update({
@@ -412,11 +733,23 @@ async function main() {
         });
       }
       if (Object.keys(item.en).length) {
+        const en = remapRelations(collection.fields, item.en, still);
+        // Read back after the Dutch update rather than before it. That update
+        // sends the whole document again, so Payload throws its array rows
+        // away and makes new ones; ids read any earlier are already stale by
+        // the time the English write needs them.
+        spliceRowIds(
+          collection.fields,
+          await readBack(payload, item.collection, item.newId),
+          en,
+          "",
+          notes,
+        );
         await payload.update({
           collection: item.collection as never,
           id: item.newId,
           locale: "en",
-          data: remapRelations(collection.fields, item.en, still) as never,
+          data: en as never,
           overrideAccess: true,
         });
         updated++;
@@ -425,6 +758,9 @@ async function main() {
       const reason = error instanceof Error ? error.message : String(error);
       console.warn(`  ${item.collection}#${item.newId}: ${reason}`);
     }
+    for (const note of notes) {
+      console.warn(`  ${item.collection}#${item.newId}: ${note}`);
+    }
     if (still.length) {
       console.warn(
         `  ${item.collection}#${item.newId}: dropped links to documents that are not in the dump (${[...new Set(still)].join(", ")})`,
@@ -432,7 +768,11 @@ async function main() {
     }
   }
 
-  // Globals have no ids to preserve, so they are simply written twice.
+  // A global has no id of its own to preserve, but its array rows do, and
+  // those are what site_settings_opening_hours is made of. So each locale
+  // after the first is handed the ids the write before it created. With two
+  // languages that is one read-back; the loop is shaped for a third rather
+  // than assuming there will never be one.
   console.log("\nGlobals");
   for (const global of payload.config.globals) {
     const perLocale = dump.globals?.[global.slug];
@@ -440,18 +780,37 @@ async function main() {
       console.log(`  ${global.slug}: not in the dump, skipped`);
       continue;
     }
+
+    const still: string[] = [];
+    const notes: string[] = [];
+    let saved: Doc | undefined;
+
     for (const locale of ["nl", "en"] as const) {
       const source = perLocale[locale];
       if (!source) continue;
-      const still: string[] = [];
+      const data = remapRelations(global.fields, strip(source), still);
+      if (saved) spliceRowIds(global.fields, saved, data, "", notes);
       await payload.updateGlobal({
         slug: global.slug as never,
         locale,
-        data: remapRelations(global.fields, strip(source), still) as never,
+        data: data as never,
         overrideAccess: true,
       });
+      saved = (await payload.findGlobal({
+        slug: global.slug as never,
+        locale,
+        depth: 0,
+        overrideAccess: true,
+      })) as Doc;
     }
+
     console.log(`  ${global.slug}: ok`);
+    for (const note of notes) console.warn(`  ${global.slug}: ${note}`);
+    if (still.length) {
+      console.warn(
+        `  ${global.slug}: dropped links to documents that are not in the dump (${[...new Set(still)].join(", ")})`,
+      );
+    }
   }
 
   const width = Math.max(...summary.map((s) => s.collection.length), 12);
@@ -465,6 +824,8 @@ async function main() {
     );
   }
   console.log(`\n${updated} documents given their English values.`);
+
+  fs.rmSync(stagingDir, { recursive: true, force: true });
 
   if (missingFiles.length) {
     console.warn(
@@ -486,7 +847,12 @@ async function main() {
   process.exit(0);
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+// Only when this file is the thing that was run, so that a test can import
+// `spliceRowIds` without starting an import against whatever DATABASE_URI
+// happens to be set to.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}

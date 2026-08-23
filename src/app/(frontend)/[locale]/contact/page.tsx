@@ -1,13 +1,18 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getSiteSettings } from "@/lib/payload";
+import { buildMetadata } from "@/lib/metadata";
 import { todayInAmsterdam } from "@/lib/openingHours";
 import { loadSchedule } from "@/lib/schedule";
 import { getDict } from "@/i18n/dictionaries";
-import { alternatesFor, parseLocale } from "@/i18n/config";
+import { parseLocale } from "@/i18n/config";
 import { ContactClient } from "./ContactClient";
 
-export const dynamic = "force-dynamic";
+/**
+ * A minute rather than five, because this page resolves "today" and marks it in
+ * the table of days ahead. See the note above `revalidate` on the home page.
+ */
+export const revalidate = 60;
 
 /**
  * How far ahead the contact page looks for days that break the pattern. Four
@@ -25,15 +30,16 @@ export async function generateMetadata({
   if (!locale) return {};
   const s = await getSiteSettings(locale);
   const t = getDict(locale);
-  return {
+  return buildMetadata({
+    locale,
+    path: "/contact",
     title: t.contact.metaTitle(s.siteName),
     description: t.contact.metaDescription(
       s.siteName,
       s.address.area,
       s.address.city,
     ),
-    alternates: alternatesFor(locale, "/contact"),
-  };
+  });
 }
 
 export default async function ContactPage({ params }: PageProps) {

@@ -16,6 +16,7 @@
         "generate:importmap": "cross-env PAYLOAD_CONFIG_PATH=src/payload.config.ts NODE_OPTIONS=\"--import tsx\" payload --disable-transpile generate:importmap",
         "db:export": "cross-env PAYLOAD_CONFIG_PATH=src/payload.config.ts tsx scripts/export-content.ts",
         "db:import": "cross-env PAYLOAD_CONFIG_PATH=src/payload.config.ts tsx scripts/import-content.ts",
+        "db:verify": "cross-env PAYLOAD_CONFIG_PATH=src/payload.config.ts tsx scripts/verify-import.ts",
         "seed": "cross-env PAYLOAD_CONFIG_PATH=src/payload.config.ts tsx scripts/seed.ts",
         "seed:en": "cross-env PAYLOAD_CONFIG_PATH=src/payload.config.ts tsx scripts/seed-en.ts",
         "import:subscribers": "cross-env PAYLOAD_CONFIG_PATH=src/payload.config.ts tsx scripts/import-subscribers.ts"

@@ -1,13 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getSiteSettings } from "@/lib/payload";
+import { buildMetadata } from "@/lib/metadata";
 import { getDict } from "@/i18n/dictionaries";
-import {
-  alternatesFor,
-  canonicalUrl,
-  parseLocale,
-  type Locale,
-} from "@/i18n/config";
+import { canonicalUrl, parseLocale, type Locale } from "@/i18n/config";
 import {
   loadEvents,
   recurrenceSentence,
@@ -16,7 +12,12 @@ import {
 import type { AgendaItem } from "@/components/EventCard";
 import { EvenementenClient } from "./EvenementenClient";
 
-export const dynamic = "force-dynamic";
+/**
+ * A minute. The agenda is built from "now" — which evening is next, which ones
+ * have passed — so it cannot be cached the way the quieter pages are. See the
+ * note above `revalidate` on the home page.
+ */
+export const revalidate = 60;
 
 /**
  * The agenda. Follows the pattern documented at the top of
@@ -47,11 +48,12 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   if (!locale) return {};
   const s = await getSiteSettings(locale);
   const t = getDict(locale);
-  return {
+  return buildMetadata({
+    locale,
+    path: "/evenementen",
     title: t.events.metaTitle(s.siteName),
     description: t.events.metaDescription,
-    alternates: alternatesFor(locale, "/evenementen"),
-  };
+  });
 }
 
 /** The picture the CMS holds, at the size a card wants it. */

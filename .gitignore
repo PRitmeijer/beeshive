@@ -43,3 +43,7 @@ media/
 
 # CMS content dumps (contain guest data)
 /content-export*.json
+
+# Chrome profile directories left behind by `npx lighthouse` under WSL:
+# it expands the Windows %LOCALAPPDATA% into a literal "C:\..." path here.
+C:\\*

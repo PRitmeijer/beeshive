@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getPayloadClient, getSiteSettings } from "@/lib/payload";
+import { buildMetadata } from "@/lib/metadata";
 import { getDict } from "@/i18n/dictionaries";
-import { alternatesFor, parseLocale } from "@/i18n/config";
+import { parseLocale } from "@/i18n/config";
 import { KaartClient } from "./KaartClient";
 
 type PageProps = { params: Promise<{ locale: string }> };
@@ -14,14 +15,19 @@ export async function generateMetadata({
   if (!locale) return {};
   const s = await getSiteSettings(locale);
   const t = getDict(locale);
-  return {
+  return buildMetadata({
+    locale,
+    path: "/kaart",
     title: t.menuPage.metaTitle(s.siteName),
     description: t.menuPage.metaDescription,
-    alternates: alternatesFor(locale, "/kaart"),
-  };
+  });
 }
 
-export const dynamic = "force-dynamic";
+/**
+ * Cached for a minute; see the note above `revalidate` on the home page for
+ * why these pages stopped being `force-dynamic` and what the minute costs.
+ */
+export const revalidate = 60;
 
 export default async function KaartPage({ params }: PageProps) {
   const locale = parseLocale((await params).locale);

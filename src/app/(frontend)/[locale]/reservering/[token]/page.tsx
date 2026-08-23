@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AddToCalendar } from "@/components/AddToCalendar";
 import { getSiteSettings } from "@/lib/payload";
+import { buildMetadata } from "@/lib/metadata";
 import { getDict } from "@/i18n/dictionaries";
 import { localeHref, parseLocale, type Locale } from "@/i18n/config";
 import {
@@ -36,6 +37,16 @@ import { GuestPassClient } from "./GuestPassClient";
  * number on it.
  */
 
+/**
+ * The one page in this tree that stays dynamic.
+ *
+ * Everything else now revalidates on a timer (see the note on the home page),
+ * which means Next keeps the rendered HTML and hands the same copy to the next
+ * visitor. This page renders one guest's booking, so a shared copy is the
+ * whole of the harm: the next person to open a guest pass link would be shown
+ * somebody else's table. `force-dynamic` also suppresses the `Cache-Control`
+ * a CDN would act on, which is the same argument one layer out.
+ */
 export const dynamic = "force-dynamic";
 
 type PageProps = { params: Promise<{ locale: string; token: string }> };
@@ -44,11 +55,15 @@ type PageProps = { params: Promise<{ locale: string; token: string }> };
  * Never indexed, in either half of the instruction.
  *
  * The meta tag is set here; the matching `X-Robots-Tag` header is set by
- * /api/guest-pass on the calendar file, and belongs in next.config.ts for the
- * page itself — a Next page cannot set a response header, and next.config.ts
- * is not this file's to edit. Note also the missing `alternates`: a canonical
- * or an hreflang would be publishing the token, which is the one thing that
- * must not end up anywhere a crawler can read it.
+ * /api/guest-pass on the calendar file, and by next.config.mjs for the page
+ * itself — a Next page cannot set a response header.
+ *
+ * `path: null` is the other half of the same care. It tells buildMetadata to
+ * write no canonical, no hreflang and no `og:url`, because every one of those
+ * is the token spelled out in a tag, and the token is the one thing that must
+ * not end up anywhere a crawler can read it. The card itself is the site's
+ * generic one, which is right: a guest forwarding the link in a group chat
+ * should get a picture of the café, and the picture gives nothing away.
  */
 export async function generateMetadata({
   params,
@@ -57,15 +72,18 @@ export async function generateMetadata({
   if (!locale) return {};
   const s = await getSiteSettings(locale);
   const t = getDict(locale);
-  return {
+  return buildMetadata({
+    locale,
+    path: null,
     title: t.guestPass.metaTitle(s.siteName),
+    description: s.description,
     robots: {
       index: false,
       follow: false,
       nocache: true,
       googleBot: { index: false, follow: false },
     },
-  };
+  });
 }
 
 /** The sheet a mangled or expired link lands on. Still the site, still paper. */

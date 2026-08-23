@@ -25,6 +25,7 @@ import {
   reservationFormNl,
 } from "@/i18n/dict/reservationForm";
 import { reserveEn, reserveNl } from "@/i18n/dict/reserve";
+import { shareEn, shareNl } from "@/i18n/dict/share";
 
 /**
  * Every visible string that is written in the code rather than typed into the
@@ -76,6 +77,7 @@ const nl = {
   guestPass: guestPassNl,
   newsletter: newsletterNl,
   notifications: notificationsNl,
+  share: shareNl,
 } satisfies Record<string, unknown>;
 
 export type Dict = typeof nl;
@@ -99,6 +101,7 @@ const en: Dict = {
   guestPass: guestPassEn,
   newsletter: newsletterEn,
   notifications: notificationsEn,
+  share: shareEn,
 };
 
 const dictionaries: Record<Locale, Dict> = { nl, en };

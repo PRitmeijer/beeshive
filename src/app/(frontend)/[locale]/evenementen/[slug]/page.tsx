@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getSiteSettings, type SiteSettingsData } from "@/lib/payload";
+import { asUpload, buildMetadata } from "@/lib/metadata";
 import { getDict } from "@/i18n/dictionaries";
 import {
   alternatesFor,
@@ -19,7 +20,13 @@ import {
 import { googleCalendarUrl, outlookCalendarUrl } from "@/lib/ics";
 import { EventClient } from "./EventClient";
 
-export const dynamic = "force-dynamic";
+/**
+ * A minute. The page resolves the series to its next occurrence against the
+ * clock, so everything on it — the date, the calendar links, the list of
+ * following evenings — is an answer to "when is the next one". See the note
+ * above `revalidate` on the home page.
+ */
+export const revalidate = 60;
 
 /**
  * One evening.
@@ -103,11 +110,27 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const t = getDict(locale);
   if (!resolved) return { alternates: alternatesFor(locale, `/evenementen/${slug}`) };
 
-  return {
-    title: t.events.eventMetaTitle(resolved.event.title, s.siteName),
-    description: resolved.event.excerpt || t.events.metaDescription,
-    alternates: alternatesFor(locale, `/evenementen/${slug}`),
+  /**
+   * The SEO tab first, as on the blog post; see the longer note there. The
+   * cast is because `EventDoc` in src/lib/events.ts describes the fields that
+   * file needs and the plugin's `meta` group is not one of them — the read is
+   * a plain payload.find at depth 1, so the group is there at runtime whether
+   * or not the type mentions it.
+   */
+  const doc = resolved.event as typeof resolved.event & {
+    meta?: { title?: string | null; description?: string | null; image?: unknown } | null;
   };
+
+  return buildMetadata({
+    locale,
+    path: `/evenementen/${slug}`,
+    title:
+      doc.meta?.title?.trim() ||
+      t.events.eventMetaTitle(doc.title, s.siteName),
+    description:
+      doc.meta?.description?.trim() || doc.excerpt || t.events.metaDescription,
+    image: asUpload(doc.meta?.image) ?? asUpload(doc.image),
+  });
 }
 
 /** The café's own address, for an evening that names no location of its own. */

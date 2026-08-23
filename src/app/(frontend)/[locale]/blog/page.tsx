@@ -1,11 +1,16 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getPayloadClient, getSiteSettings } from "@/lib/payload";
+import { buildMetadata } from "@/lib/metadata";
 import { getDict } from "@/i18n/dictionaries";
-import { alternatesFor, parseLocale } from "@/i18n/config";
+import { parseLocale } from "@/i18n/config";
 import { BlogClient } from "./BlogClient";
 
-export const dynamic = "force-dynamic";
+/**
+ * Cached for a minute; see the note above `revalidate` on the home page for
+ * why these pages stopped being `force-dynamic` and what the minute costs.
+ */
+export const revalidate = 60;
 
 type PageProps = { params: Promise<{ locale: string }> };
 
@@ -16,11 +21,12 @@ export async function generateMetadata({
   if (!locale) return {};
   const s = await getSiteSettings(locale);
   const t = getDict(locale);
-  return {
+  return buildMetadata({
+    locale,
+    path: "/blog",
     title: t.blog.metaTitle(s.siteName),
     description: t.blog.metaDescription,
-    alternates: alternatesFor(locale, "/blog"),
-  };
+  });
 }
 
 export default async function BlogPage({ params }: PageProps) {

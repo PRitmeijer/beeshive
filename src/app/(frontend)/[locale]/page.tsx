@@ -10,16 +10,34 @@ import {
   todayInAmsterdam,
   type Week,
 } from "@/lib/openingHours";
+import { buildMetadata } from "@/lib/metadata";
 import { getDict } from "@/i18n/dictionaries";
-import {
-  alternatesFor,
-  canonicalUrl,
-  parseLocale,
-  type Locale,
-} from "@/i18n/config";
+import { canonicalUrl, parseLocale, type Locale } from "@/i18n/config";
 import { HomeClient } from "./HomeClient";
 
-export const dynamic = "force-dynamic";
+/**
+ * Cached for a minute, then rebuilt on the next request.
+ *
+ * The pages in this tree used to be `force-dynamic`, which makes Next answer
+ * `Cache-Control: private, no-cache, no-store`. `no-store` is the part that
+ * hurts: it takes the page out of the browser's back/forward cache, so tapping
+ * back re-runs the whole render instead of restoring the page as it was — a
+ * failing Lighthouse audit, and a visible half-second on a phone. It also puts
+ * every visit through a cold read of the CMS and leaves nothing for a CDN to
+ * hold.
+ *
+ * The price is that an edit in the admin takes up to a minute to appear. The
+ * owners will notice, so it is worth saying plainly: sixty seconds is the
+ * trade, and it is deliberate. Long enough that a burst of traffic is one
+ * database read, short enough that somebody fixing a typo can refresh, wait,
+ * and see it.
+ *
+ * Sixty rather than the five minutes the quieter pages get, because this page
+ * reads the clock. The line under the hero says "Vandaag 11:00 – 21:00", and
+ * an hour of caching would carry yesterday's answer past midnight into
+ * somebody's breakfast. A minute cannot.
+ */
+export const revalidate = 60;
 
 /**
  * The pattern every page in this tree follows.
@@ -29,7 +47,9 @@ export const dynamic = "force-dynamic";
  *  2. Ask the CMS for that locale: getSiteSettings(locale), or pass
  *     `locale` to payload.find({ ... }) for a collection.
  *  3. Take the hard-coded strings from getDict(locale).
- *  4. Build metadata alternates with alternatesFor(locale, "<dutch path>").
+ *  4. Return buildMetadata({ locale, path: "<dutch path>", ... }) from
+ *     generateMetadata. It writes the canonical, the hreflang block and the
+ *     share card, so that every page is shared the same way.
  *  5. Hand the client component `locale`, never the dictionary: some entries
  *     are functions and would not survive the server/client boundary.
  */
@@ -42,11 +62,12 @@ export async function generateMetadata({
   if (!locale) return {};
   const s = await getSiteSettings(locale);
   const t = getDict(locale);
-  return {
+  return buildMetadata({
+    locale,
+    path: "/",
     title: t.home.metaTitle(s.siteName, s.address.area),
     description: s.description,
-    alternates: alternatesFor(locale, "/"),
-  };
+  });
 }
 
 /**

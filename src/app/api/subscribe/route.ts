@@ -7,6 +7,34 @@ import { EMAIL, rateLimit, readJsonBody, str } from "@/lib/apiGuard";
 // are subscribed, and the endpoint is unauthenticated.
 const DONE = { message: "Bedankt, je aanmelding is verwerkt" };
 
+
+/**
+ * PostgreSQL's `unique_violation`. Payload wraps the driver's error, so the
+ * code can arrive either on the error itself or one level down in `cause`;
+ * both are checked rather than guessing which layer threw. SQLite reports the
+ * same condition through a message rather than a code, which is why the text
+ * is matched too.
+ */
+function isUniqueViolation(error: unknown): boolean {
+  const seen = new Set<unknown>();
+  let node: unknown = error;
+  while (node && typeof node === "object" && !seen.has(node)) {
+    seen.add(node);
+    const e = node as { code?: unknown; message?: unknown; cause?: unknown };
+    if (e.code === "23505") return true;
+    if (
+      typeof e.message === "string" &&
+      /unique constraint|UNIQUE constraint failed|duplicate key value/i.test(
+        e.message,
+      )
+    ) {
+      return true;
+    }
+    node = e.cause;
+  }
+  return false;
+}
+
 export async function POST(request: Request) {
   if (!rateLimit(request, "subscribe")) {
     return NextResponse.json(
@@ -45,15 +73,27 @@ export async function POST(request: Request) {
     });
     if (existing.docs.length > 0) return NextResponse.json(DONE);
 
-    await payload.create({
-      collection: "mailing-list",
-      data: {
-        email,
-        name: name || undefined,
-        subscribedAt: new Date().toISOString(),
-        active: true,
-      },
-    });
+    // The read above and the write below are two statements, not one
+    // transaction. Someone who double-taps the button — or the same address
+    // submitted from a phone and a laptop a moment apart — clears the `find`
+    // twice, and the second `create` hits the unique index on `email`. That is
+    // not a failure from the subscriber's point of view: they are on the list.
+    // So only the create is wrapped, a unique violation is answered with the
+    // same DONE as a first-time signup, and anything else is re-thrown to the
+    // outer catch, which is still the one that logs and returns a 500.
+    try {
+      await payload.create({
+        collection: "mailing-list",
+        data: {
+          email,
+          name: name || undefined,
+          subscribedAt: new Date().toISOString(),
+          active: true,
+        },
+      });
+    } catch (error) {
+      if (!isUniqueViolation(error)) throw error;
+    }
 
     return NextResponse.json(DONE);
   } catch (error) {

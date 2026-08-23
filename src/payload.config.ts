@@ -1,5 +1,5 @@
 import { buildConfig } from "payload";
-import type { CollectionSlug } from "payload";
+import type { CollectionSlug, Field } from "payload";
 import { postgresAdapter } from "@payloadcms/db-postgres";
 import { s3Storage } from "@payloadcms/storage-s3";
 import { seoPlugin } from "@payloadcms/plugin-seo";
@@ -151,6 +151,84 @@ function trimTo(value: string, max: number) {
   return `${clean.slice(0, max - 1).replace(/\s\S*$/, "")}…`;
 }
 
+/**
+ * The SEO plugin's own fields, in Dutch, and with one of them un-localised.
+ *
+ * Two things about what the plugin ships are wrong for this site.
+ *
+ * The first is the language. Everything else in this admin is written for two
+ * people who run a restaurant, in their language; "Meta Image / Maximum upload
+ * file size: 12MB" is neither. The labels and descriptions below say the same
+ * things in Dutch, and say them in terms of what the owners will actually see:
+ * the line under a link when somebody shares the page.
+ *
+ * The second is `meta.image`, and it is the more important of the two. The
+ * plugin declares it `localized: true` — see MetaImageField in
+ * node_modules/@payloadcms/plugin-seo — which is defensible for a title and a
+ * description, and simply wrong for an upload. A localised field stores one
+ * value per language, so choosing a photograph means choosing it on the Dutch
+ * tab, saving, switching to English, choosing the same photograph again and
+ * saving again. That is the complaint that started this: "I add media, need to
+ * save it, then go to english tab, click it again, and save it again." A share
+ * image is a photograph, not a sentence; one serves both languages.
+ *
+ * Doing this costs nothing right now and would cost a data migration later.
+ * Un-localising a field moves its values from a `_locales` side table into a
+ * column on the parent, and Drizzle will drop the side-table column it can no
+ * longer account for — so on a database that already holds SEO images, the
+ * Dutch values have to be copied across first. This repository has not
+ * generated its initial PostgreSQL migration yet, and the production content
+ * arrives through scripts/import-content.ts rather than through the old
+ * schema, so at this exact moment there is nothing to migrate. Anyone changing
+ * this again after the first migration ships does owe that copy step.
+ */
+function dutchify(field: Field): Field {
+  // Narrowed on `type` rather than on `name` alone. `Field` is a discriminated
+  // union, and spreading a value still typed as the whole union loses the
+  // discriminant — TypeScript then has to prove the rebuilt `admin` object is
+  // valid for an array field and a blocks field too, which it is not. Matching
+  // the type first collapses the union to one member and the spread is exact.
+  if (field.type === "text" && field.name === "title") {
+    return {
+      ...field,
+      label: "Titel in Google",
+      admin: {
+        ...field.admin,
+        description:
+          "De blauwe regel in de zoekresultaten. Rond de 60 tekens; langer wordt afgekapt. Laat leeg om de titel van de pagina zelf te gebruiken.",
+      },
+    };
+  }
+
+  if (field.type === "textarea" && field.name === "description") {
+    return {
+      ...field,
+      label: "Omschrijving in Google",
+      admin: {
+        ...field.admin,
+        description:
+          "De twee regels onder de titel, in Google en in een gedeelde link. Rond de 160 tekens.",
+      },
+    };
+  }
+
+  if (field.type === "upload" && field.name === "image") {
+    return {
+      ...field,
+      label: "Afbeelding bij delen",
+      // The whole point of this override; see the note above.
+      localized: false,
+      admin: {
+        ...field.admin,
+        description:
+          "De foto die verschijnt als iemand deze pagina deelt op WhatsApp, Facebook of LinkedIn. Eén foto voor beide talen — je hoeft hem niet apart in het Engels te kiezen. Liefst liggend; hij wordt automatisch bijgesneden naar 1200 bij 630 pixels.",
+      },
+    };
+  }
+
+  return field;
+}
+
 export default buildConfig({
   admin: {
     user: Users.slug,
@@ -263,6 +341,7 @@ export default buildConfig({
       collections: ["blog-posts", "events"] as CollectionSlug[],
       uploadsCollection: "media",
       tabbedUI: true,
+      fields: ({ defaultFields }) => defaultFields.map(dutchify),
       generateTitle: ({ doc }) => {
         const title = (doc as { title?: string })?.title || "";
         if (!title) return "De Bee's Hive";

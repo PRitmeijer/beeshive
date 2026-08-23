@@ -2,10 +2,9 @@
  * The blog index and a single article. The articles themselves live in Payload
  * per locale; these are the words around them.
  *
- * `cmsNotice*` is split into three pieces because a link sits in the middle of
- * the sentence, and the two languages put it in different places. The three
- * sample posts are placeholders for an empty blog, in the same spirit as the
- * sample menu.
+ * The three sample posts are placeholders for an empty blog, in the same spirit
+ * as the sample menu. They are also the only reason the sample slugs exist: a
+ * real post's words all come out of the CMS.
  */
 export const blogNl = {
   metaTitle: (name: string) => `Blog | ${name}`,
@@ -19,9 +18,6 @@ export const blogNl = {
   empty: "Binnenkort verschijnen hier onze verhalen.",
   back: "Terug naar blog",
   by: (name: string) => `Door ${name}`,
-  cmsNoticeBefore: "De volledige inhoud van dit artikel wordt geladen vanuit het CMS. Beheer je content via het ",
-  cmsNoticeLink: "admin paneel",
-  cmsNoticeAfter: ".",
   samplePosts: {
     welcome: {
       title: "Welkom bij De Bee's Hive",
@@ -55,9 +51,6 @@ export const blogEn: BlogDict = {
   empty: "Our stories will appear here soon.",
   back: "Back to the blog",
   by: (name: string) => `By ${name}`,
-  cmsNoticeBefore: "The full text of this article is loaded from the CMS. Manage your content in the ",
-  cmsNoticeLink: "admin panel",
-  cmsNoticeAfter: ".",
   samplePosts: {
     welcome: {
       title: "Welcome to De Bee's Hive",

@@ -1,11 +1,18 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getSiteSettings } from "@/lib/payload";
+import { buildMetadata } from "@/lib/metadata";
 import { getDict } from "@/i18n/dictionaries";
-import { alternatesFor, parseLocale } from "@/i18n/config";
+import { parseLocale } from "@/i18n/config";
 import { OverOnsClient } from "./OverOnsClient";
 
-export const dynamic = "force-dynamic";
+/**
+ * Five minutes rather than the home page's one: the story of the place, the
+ * photograph and the paragraph under it change a few times a year, and nothing
+ * on the page reads the clock. See the note above `revalidate` there for what
+ * the caching is for and what the delay costs.
+ */
+export const revalidate = 300;
 
 type PageProps = { params: Promise<{ locale: string }> };
 
@@ -16,11 +23,12 @@ export async function generateMetadata({
   if (!locale) return {};
   const s = await getSiteSettings(locale);
   const t = getDict(locale);
-  return {
+  return buildMetadata({
+    locale,
+    path: "/over-ons",
     title: t.about.metaTitle(s.siteName),
     description: t.about.metaDescription(s.siteName, s.aboutIntro),
-    alternates: alternatesFor(locale, "/over-ons"),
-  };
+  });
 }
 
 export default async function OverOnsPage({ params }: PageProps) {

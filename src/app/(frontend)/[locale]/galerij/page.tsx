@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getPayloadClient, getSiteSettings } from "@/lib/payload";
+import { buildMetadata } from "@/lib/metadata";
 import { getDict } from "@/i18n/dictionaries";
-import { alternatesFor, parseLocale } from "@/i18n/config";
+import { parseLocale } from "@/i18n/config";
 import { GalerijClient } from "./GalerijClient";
 
 type PageProps = { params: Promise<{ locale: string }> };
@@ -14,14 +15,21 @@ export async function generateMetadata({
   if (!locale) return {};
   const s = await getSiteSettings(locale);
   const t = getDict(locale);
-  return {
+  return buildMetadata({
+    locale,
+    path: "/galerij",
     title: t.gallery.metaTitle(s.siteName),
     description: t.gallery.metaDescription,
-    alternates: alternatesFor(locale, "/galerij"),
-  };
+  });
 }
 
-export const dynamic = "force-dynamic";
+/**
+ * Five minutes rather than the home page's one: a photograph added to the
+ * gallery is not news, and the page reads nothing but the collection. See the
+ * note above `revalidate` there for what the caching is for and what the delay
+ * costs.
+ */
+export const revalidate = 300;
 
 export default async function GalerijPage({ params }: PageProps) {
   const locale = parseLocale((await params).locale);

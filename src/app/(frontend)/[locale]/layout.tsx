@@ -97,21 +97,24 @@ export default async function FrontendLayout({
   return (
     <html lang={locale}>
       <head>
+        {/* Matches the printed menu: one geometric sans doing all the
+            structural work, and a brush script held back for card titles.
+            Both are served from this origin — see the @font-face block at the
+            top of globals.css — so there is no stylesheet from a third party
+            standing between the reader and the first paint, and no preconnect
+            to warm a connection nothing opens any more.
+
+            Only the upright latin cut is preloaded. It is the face that
+            paints the first word of every page; the italic and the brush
+            script are wanted further down, if at all, and asking for them
+            here would spend the same early bandwidth on glyphs nobody is
+            looking at yet. */}
         <link
-          rel="preconnect"
-          href="https://fonts.googleapis.com"
+          rel="preload"
+          as="font"
+          type="font/woff2"
+          href="/fonts/jost-latin.woff2"
           crossOrigin="anonymous"
-        />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin="anonymous"
-        />
-        {/* Matches the printed menu: one geometric sans doing all the structural
-            work, and a brush script held back for card titles. */}
-        <link
-          href="https://fonts.googleapis.com/css2?family=Jost:ital,wght@0,300..700;1,300..700&family=Kaushan+Script&display=swap"
-          rel="stylesheet"
         />
       </head>
       {/* The page starts below whichever of the two is taller: the
@@ -120,10 +123,18 @@ export default async function FrontendLayout({
           its own published height — so this is a max, not a sum. */}
       <body
         className="min-h-screen flex flex-col antialiased"
-        style={{
-          paddingTop:
-            "max(var(--notice-h, 0px), env(safe-area-inset-top, 0px))",
-        }}
+        style={
+          {
+            paddingTop:
+              "max(var(--notice-h, 0px), env(safe-area-inset-top, 0px))",
+            // The two faces, published as custom properties so anything that
+            // would rather name a variable than a family — a Tailwind stack,
+            // a one-off rule — has a handle on them. The family names in the
+            // fallback are real: globals.css declares them.
+            "--font-display": '"Jost", system-ui, sans-serif',
+            "--font-hand": '"Kaushan Script", "Segoe Script", cursive',
+          } as React.CSSProperties
+        }
       >
         <PaperDefs />
         <NotificationBanner locale={locale} />

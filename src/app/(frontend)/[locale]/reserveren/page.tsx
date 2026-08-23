@@ -1,13 +1,22 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getSiteSettings } from "@/lib/payload";
+import { buildMetadata } from "@/lib/metadata";
 import { nowMinutesInAmsterdam, todayInAmsterdam } from "@/lib/openingHours";
 import { loadSchedule } from "@/lib/schedule";
 import { getDict } from "@/i18n/dictionaries";
-import { alternatesFor, parseLocale } from "@/i18n/config";
+import { parseLocale } from "@/i18n/config";
 import { ReserverenClient } from "./ReserverenClient";
 
-export const dynamic = "force-dynamic";
+/**
+ * A minute rather than five: the form is handed today's date and the current
+ * time in Amsterdam, and uses them to decide whether tonight is still bookable.
+ * Nothing on this page is live availability — the seats are counted by
+ * /api/reserve when the request is actually made — so a minute-old clock is
+ * only ever a minute of a slot offered slightly too long, never a double
+ * booking. See the note above `revalidate` on the home page.
+ */
+export const revalidate = 60;
 
 type PageProps = { params: Promise<{ locale: string }> };
 
@@ -18,15 +27,16 @@ export async function generateMetadata({
   if (!locale) return {};
   const s = await getSiteSettings(locale);
   const t = getDict(locale);
-  return {
+  return buildMetadata({
+    locale,
+    path: "/reserveren",
     title: t.reserve.metaTitle(s.siteName),
     description: t.reserve.metaDescription(
       s.siteName,
       s.address.area,
       s.address.city,
     ),
-    alternates: alternatesFor(locale, "/reserveren"),
-  };
+  });
 }
 
 export default async function ReserverenPage({ params }: PageProps) {

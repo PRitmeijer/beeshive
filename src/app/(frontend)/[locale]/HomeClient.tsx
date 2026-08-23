@@ -282,14 +282,17 @@ export function HomeClient({ locale, settings: s, today }: Props) {
                 </Link>
               </motion.p>
 
-              <motion.p
-                initial={{ opacity: 0, y: 18 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: reduce ? 0 : 1, delay: 0.35, ease: SETTLE }}
-                className="max-w-xl text-lg leading-relaxed text-hive-400 md:text-2xl"
-              >
+              {/* Deliberately not a motion.p, unlike everything around it.
+                  This sentence is the page's Largest Contentful Paint element,
+                  and as a framer-motion element it was sent to the browser at
+                  opacity 0 and could not paint until the animation library had
+                  downloaded, parsed and hydrated — seconds of a phone's first
+                  impression spent on a fade. The same fade is now .hero-rise
+                  in globals.css: identical travel, easing and 0.35s stagger,
+                  no JavaScript in front of it. */}
+              <p className="hero-rise max-w-xl text-lg leading-relaxed text-hive-400 md:text-2xl">
                 {s.heroSubtitle}
-              </motion.p>
+              </p>
             </div>
 
             {/* One strip torn from a sheet, rather than three loose stamps:
