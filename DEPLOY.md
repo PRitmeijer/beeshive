@@ -20,6 +20,9 @@ repeated here:
 - `docs/media-hosting.md` — the three addresses the photographs can be served
   from, which one needs the domain's DNS at Cloudflare, and why the choice does
   not affect search.
+- `docs/portainer.md` — read this one alongside the steps below if the stack is
+  deployed from Portainer rather than from a shell. It covers which of these
+  steps Portainer cannot do, and the one way of adding the stack that works.
 
 Read the two paragraphs under **Before you touch anything** now rather than
 later. The rest can be followed in order.
