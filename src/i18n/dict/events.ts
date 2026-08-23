@@ -25,7 +25,7 @@ export const eventsNl = {
   eyebrow: "Wat er speelt",
   title: "Evenementen",
   intro:
-    "Van live muziek tot een avond koken met de buurt: er is bijna altijd iets te doen.",
+    "Live muziek, workshops, proeverijen: er is bijna altijd iets te doen.",
   empty: "Binnenkort staat hier weer iets op de agenda.",
   upcoming: "Binnenkort",
   recurring: "Elke week",
@@ -96,7 +96,7 @@ export const eventsEn: EventsDict = {
   eyebrow: "What's on",
   title: "Events",
   intro:
-    "From live music to an evening of cooking with the neighbourhood: there is nearly always something on.",
+    "Live music, workshops, tastings: there is nearly always something on.",
   empty: "Something new will appear on the agenda soon.",
   upcoming: "Coming up",
   recurring: "Every week",
