@@ -2,7 +2,7 @@
 #
 #     docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
 #
-# Two differences from the production stack, and nothing else. This file is
+# Three differences from the production stack, and nothing else. This file is
 # never used on the server: it has to be named on the command line, so an
 # ordinary `docker compose up -d` on the host cannot pick it up by accident.
 # (Calling it docker-compose.override.yml would have been shorter and would
@@ -36,3 +36,17 @@ services:
   pgbackrest:
     profiles:
       - backups-need-a-bucket
+
+  # No analytics locally.
+  #
+  # A laptop has no visitors to count, and Umami is one more container to wait
+  # for on every `up` plus a second Next.js server holding memory beside the one
+  # you are actually working on. The same trick as the backups above: a profile
+  # nothing activates keeps it out of `up` rather than starting it to sit idle.
+  #
+  # To look at Umami locally anyway, start it by name: `docker compose up -d
+  # umami`, and it is on http://localhost:3101. Naming a service starts it
+  # whatever profile it carries.
+  umami:
+    profiles:
+      - analytics-are-for-the-server

@@ -9,9 +9,17 @@ import type { Tab } from "payload";
  * de bedoeling.
  *
  * Er zijn twee losse verbindingen in het spel. Het script hieronder draait bij
- * de bezoeker in de browser en stuurt bezoeken naar Umami toe. De host-URL en de
- * API-sleutel gaan de andere kant op: die gebruikt dit paneel om de cijfers weer
- * op te halen. Het één kan prima aan staan zonder het ander.
+ * de bezoeker in de browser en stuurt bezoeken naar Umami toe. Het adres van
+ * Umami gaat de andere kant op: daarmee haalt dit paneel de cijfers weer op.
+ * Het één kan prima aan staan zonder het ander.
+ *
+ * Voor dat ophalen zijn ook inloggegevens nodig, en die staan bewust niet in dit
+ * scherm. Draait Umami op deze server, dan meldt de site zich zelf aan met
+ * UMAMI_USERNAME en UMAMI_PASSWORD uit de omgeving; een wachtwoord hoort daar
+ * thuis, naast dat van de database, en niet in een veld dat vanuit de admin te
+ * openen is. Het veld API-sleutel hieronder blijft bestaan voor Umami Cloud en
+ * voor de zeldzame keer dat iemand met de hand een sleutel aanreikt.
+ * src/lib/umamiServer.ts legt de volgorde uit waarin die drie meetellen.
  */
 export const analyticsTab: Tab = {
   label: "Statistieken",
@@ -54,8 +62,11 @@ export const analyticsTab: Tab = {
       type: "text",
       admin: {
         description:
-          "Waar Umami draait, bijvoorbeeld https://cloud.umami.is. Nodig om de "
-          + "cijfers in dit paneel te tonen.",
+          "Waar Umami draait. Nodig om de cijfers in dit paneel te tonen. "
+          + "Umami draait bij ons op dezelfde server als de website: vul dan "
+          + "http://umami:3000 in, dan blijven de cijfers binnen de server en "
+          + "hoeven ze niet eerst naar buiten en weer terug. Gebruiken jullie "
+          + "Umami Cloud, dan is het https://cloud.umami.is.",
       },
     },
     {
@@ -64,10 +75,13 @@ export const analyticsTab: Tab = {
       type: "text",
       admin: {
         description:
-          "Let op: dit is een sleutel, behandel hem als een wachtwoord en deel "
-          + "hem met niemand. Hij kan ook buiten dit scherm om worden ingesteld "
-          + "als de omgevingsvariabele UMAMI_API_KEY; staat die ingevuld, dan "
-          + "wint die en wordt wat hier staat genegeerd.",
+          "Meestal leeg laten. Draait Umami op deze server, dan meldt de site "
+          + "zich hier zelf aan met de gebruikersnaam en het wachtwoord die op "
+          + "de server staan, en is dit veld niet nodig. Vul het alleen bij "
+          + "Umami Cloud, of als iemand met de hand een sleutel voor jullie "
+          + "heeft opgehaald. Let op: zo'n sleutel is als een wachtwoord, deel "
+          + "hem met niemand. Staat de omgevingsvariabele UMAMI_API_KEY "
+          + "ingevuld, dan wint die en wordt wat hier staat genegeerd.",
       },
     },
     {

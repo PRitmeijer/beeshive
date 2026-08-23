@@ -266,6 +266,102 @@ bookings, which is a far worse thing to hand back after a restore than a
 container that will not start. `DEPLOY.md` has the section on it, including
 when deleting the row is *not* safe.
 
+## 6. Umami, the visitor statistics
+
+`beeshive-umami` is one more container on this stack, from
+`docker.umami.is/umami-software/umami:postgresql-latest`. It counts visits to
+the public site and shows them on a dashboard of its own; the owners never open
+that dashboard, they read the figures in **Instellingen → Statistieken** in the
+Payload admin, which fetches them from here.
+
+It is on its own subdomain, **stats.debeeshive.nl**, and that is forced rather
+than chosen. `docker-compose.yml` has the paragraph, and `docs/analytics.md` has
+the whole walk-through including the two things to paste into the admin. What
+belongs in *this* file is the database and the proxy.
+
+### Its database is inside the cluster you are already backing up
+
+Umami keeps its tables in a database called `umami`, in the same PostgreSQL
+cluster as the website, under the same role. That is deliberate: one cluster is
+one thing to run and one thing to back up, and pgBackRest copies the whole
+cluster rather than a database at a time, so the visitor figures ride along in
+the backups that already exist and in the restores that already work. A second
+PostgreSQL would have meant a second stanza, a second schedule and a second
+thing to notice had stopped.
+
+There is nothing to do about it on a **fresh** cluster.
+`ops/postgres/initdb/10-umami-database.sh` is mounted into the image's
+`/docker-entrypoint-initdb.d`, and the official entrypoint runs it once, between
+`initdb` and the first real start.
+
+On an **existing** cluster, which is what production is and has been since the
+site went live, initdb scripts are never looked at again. Create it by hand,
+once:
+
+```bash
+docker compose exec postgres psql -U beeshive -d beeshive -c 'CREATE DATABASE umami'
+```
+
+Then `docker compose up -d umami`. Umami creates its own tables the first time
+it starts, so an empty database is the whole requirement. If you skip this step
+the container restart-loops with `database "umami" does not exist`, which is at
+least an honest failure.
+
+### Putting it on stats.debeeshive.nl
+
+Two steps, neither of them in this repository.
+
+1. **DNS.** An `A` record for `stats` in the `debeeshive.nl` zone, pointing at
+   the same address as `www`. `AAAA` as well if the host has an IPv6 address.
+2. **Nginx Proxy Manager** → *Proxy Hosts* → *Add Proxy Host*:
+
+   | | |
+   |---|---|
+   | Domain Names | `stats.debeeshive.nl` |
+   | Scheme | `http` |
+   | Forward Hostname | `beeshive-umami` |
+   | Forward Port | `3000` |
+   | Websockets Support | **on** |
+   | Block Common Exploits | on |
+
+   Then the **SSL** tab: *Request a new SSL Certificate* with Let's Encrypt,
+   *Force SSL* on, *HTTP/2* on.
+
+   Forwarding to `beeshive-umami:3000` works because NPM and this container are
+   both on the `reverse-proxy` network. If your NPM is not, forward to the host
+   instead: hostname `beeshive`, port `3101`. That is `UMAMI_PORT`, and it is
+   published for exactly this reason. Do not use both, pick the one your proxy
+   can actually reach.
+
+Websockets on is not optional decoration. The dashboard is a Next.js
+application and its live updates go over a websocket; with the setting off the
+pages load and then quietly stop refreshing.
+
+### First sign-in
+
+Umami ships with **`admin` / `umami`**, published, identical on every
+installation in the world. Change it before you do anything else, including
+before you point DNS at it if you can manage the order:
+
+1. Open `https://stats.debeeshive.nl` and sign in as `admin` / `umami`.
+2. Top right, the user icon → **Profile** → **Change password**.
+3. Put the new password in `.env` as `UMAMI_PASSWORD` (and `UMAMI_USERNAME=admin`),
+   then `docker compose up -d beeshive` so the admin panel can read the figures
+   back. A `$` in the password has to be doubled, same as everywhere else in
+   that file.
+
+Also set `UMAMI_APP_SECRET` in `.env` before the first start,
+`openssl rand -hex 32`. Left unset Umami derives its cookie signing key from the
+database URL, which is written down in several places this password is not.
+
+### Creating the website entry
+
+**Settings → Websites → Add website**. Name it anything, `De Bee's Hive`; the
+domain is `debeeshive.nl`. Save, then open it and copy the **Website ID**, the
+long string with dashes. `docs/analytics.md` says where the owners paste it.
+
+---
+
 ## Warnings, collected
 
 - **`docker compose down -v` deletes the `pg-data` volume**, which is the
@@ -284,6 +380,11 @@ when deleting the row is *not* safe.
   pgBackRest copies the PostgreSQL data directory and nothing else. The
   photographs have their own nightly restic snapshot in the same bucket, and
   their own restore command. Two halves, two tools, one passphrase.
+- **Restoring onto an empty install brings the visitor figures back with
+  everything else**, because they are in the same cluster, so do *not* run the
+  `CREATE DATABASE umami` line above on a host you are about to restore onto.
+  The restore replaces the whole data directory and a database you created
+  first is thrown away with it.
 - **A media snapshot is not point-in-time recovery.** The database can be put
   back to any minute; the photographs can be put back to a night.
   `docs/backups.md` says why that is a property of files rather than a

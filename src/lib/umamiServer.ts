@@ -1,4 +1,4 @@
-import { getSiteSettings } from "@/lib/payload";
+import { getSiteSettings, type SiteSettingsData } from "@/lib/payload";
 
 /**
  * Reading the figures back out of Umami, for the panel in the Payload admin.
@@ -6,9 +6,9 @@ import { getSiteSettings } from "@/lib/payload";
  * There are two entirely separate connections in play and they are easy to
  * confuse. The script in src/components/Analytics.tsx runs in the visitor's
  * browser and pushes visits *to* Umami. This module pulls them *back*, from a
- * Node process, using an API key. Either half can be working while the other is
- * not, and the reasons they fail are different, which is why every refusal in
- * here carries a sentence saying which half is missing.
+ * Node process, with a credential of its own. Either half can be working while
+ * the other is not, and the reasons they fail are different, which is why every
+ * refusal in here carries a sentence saying which half is missing.
  *
  * Those sentences are in Dutch on purpose. The only thing that renders them is
  * the dashboard in the admin, and the admin is written for two restaurant
@@ -26,17 +26,37 @@ import { getSiteSettings } from "@/lib/payload";
  * expects a token from `POST {host}/api/auth/login` with the admin username
  * and password, sent the same way.
  *
- * We do not log in from here. Storing the owners' Umami password so a server
- * can re-authenticate itself is a worse trade than the key already is. So a
- * self-hosted setup works by fetching that token once, by hand, and pasting it
- * in as the key, with one honest caveat: a login token expires, so when the
- * panel starts saying the figures are unavailable on a self-hosted instance,
- * a stale token is the first thing to check.
+ * This module used to refuse to perform that login, and at the time the
+ * refusal was right. Umami was going to be somebody else's cloud service, so
+ * the password would have been the owners' own account at a third party, and
+ * parking that on the web server so it could re-authenticate itself was a
+ * worse trade than a read-only key already was. Self-hosting flipped the
+ * trade. Umami is a container on this same stack now, its admin account exists
+ * for nothing but this site, and its password sits in the environment beside
+ * the database password and the mail password, which are secrets this process
+ * already holds. Refusing to log in protects nothing any more; it only
+ * guaranteed that the panel would go dark every time a hand-pasted token aged
+ * out, in a way the owners could not fix for themselves.
+ *
+ * So the login lives here now, in `tokenFor` below. The password is read from
+ * the environment, goes into a request body and nowhere else: no failure path
+ * in here puts it in a message, and the messages this module produces are the
+ * only thing that ever leaves it.
+ *
+ * Three credentials, tried in this order:
+ *
+ *   1. UMAMI_API_KEY, used exactly as given. A cloud API key, or a token
+ *      somebody fetched by hand. It needs no login, so it goes first.
+ *   2. UMAMI_USERNAME with UMAMI_PASSWORD, which sign in for themselves. These
+ *      beat the field below because they renew themselves and it cannot.
+ *   3. The API-sleutel field in Instellingen, Statistieken: the escape hatch
+ *      for an owner who has been handed a key and has no developer to hand.
+ *      Last, because it is the only one of the three an editor can open.
  *
  * None of this is needed to COUNT visitors, which is the part that matters.
  * Counting is the script in the page and the website id, and neither is a
- * secret. The key exists only so the numbers can also be read back inside this
- * admin. docs/analytics.md walks a developer through it.
+ * secret. The credential exists only so the numbers can also be read back
+ * inside this admin. docs/analytics.md walks a developer through it.
  */
 
 const TIMEOUT_MS = 8_000;
@@ -220,6 +240,143 @@ function apiBase(host: string): string {
   return `${clean}/api`;
 }
 
+/* ------------------------------------------------------------ credentials -- */
+
+/**
+ * What this module proves itself with. A key is handed over as it stands; a
+ * login has to be exchanged for a token first, and that token expires, which
+ * is the whole reason the rest of this section exists.
+ */
+type Credential =
+  | { kind: "key"; value: string }
+  | { kind: "login"; username: string; password: string };
+
+/**
+ * The marker on the one failure that is about signing in rather than about a
+ * request. It carries no status code and no response body on purpose: the
+ * request that failed had the password in it, and error strings end up in
+ * logs.
+ */
+const LOGIN_REFUSED = "umami-login-refused";
+
+/**
+ * The other side of that coin: Umami accepted the login and then turned down
+ * the request anyway, which is an account that may not read this website
+ * rather than a password that is wrong. Different sentence, different fix.
+ */
+const LOGIN_UNWELCOME = "umami-login-unwelcome";
+
+/**
+ * Which of the three credentials is doing the work, given whatever is in the
+ * CMS field.
+ *
+ * The environment wins over the database, always, and for the same reason it
+ * always did: the field is a compromise the owners asked for, because they
+ * wanted to be able to paste a key without calling anyone, but a secret in a
+ * table is a secret in every backup, every restore and every copy on a
+ * developer's laptop. What is new is the middle rung. A username and password
+ * in the environment can log in again whenever the token they got last time
+ * stops being accepted, so they are worth more than a pasted key that cannot,
+ * and they come ahead of it. An explicit UMAMI_API_KEY still beats both: it is
+ * what Umami Cloud requires, it costs no round trip, and somebody who set it
+ * meant it.
+ */
+function credentialFrom(fieldValue: string | null | undefined): Credential | null {
+  const envKey = (process.env.UMAMI_API_KEY || "").trim();
+  if (envKey) return { kind: "key", value: envKey };
+
+  const username = (process.env.UMAMI_USERNAME || "").trim();
+  // The password is taken exactly as set. Trimming it would quietly turn a
+  // password that legitimately ends in a space into one that does not, and the
+  // resulting failure would look like a wrong password rather than our doing.
+  const password = process.env.UMAMI_PASSWORD || "";
+  if (username && password) return { kind: "login", username, password };
+
+  const stored = (fieldValue || "").trim();
+  if (stored) return { kind: "key", value: stored };
+
+  return null;
+}
+
+/**
+ * The token from the last successful login, for as long as this process lives.
+ * No expiry is stored alongside it on purpose: Umami does not say how long it
+ * is good for, and a guess would mean either logging in more often than needed
+ * or trusting a token past its end. A rejected request is the only honest
+ * signal, and `load` below knows how to read one.
+ */
+let session: { key: string; token: string } | null = null;
+
+/**
+ * A login already on its way. The panel polls every minute and the owners
+ * leave tabs open, so a token that expires overnight is noticed by several
+ * tabs within the same second. Whoever arrives while a login is in flight
+ * waits for its answer instead of starting another one.
+ */
+let pendingLogin: { key: string; promise: Promise<string> } | null = null;
+
+/** Which instance and which account a stored token belongs to. */
+function sessionKey(api: string, username: string): string {
+  return `${api}\n${username}`;
+}
+
+/**
+ * A usable token, from the cache whenever there is one. `refresh` is for the
+ * single case where the cache is known to be wrong: Umami has just turned down
+ * the token we were holding, so dropping it and asking for another is the only
+ * way forward.
+ */
+async function tokenFor(
+  api: string,
+  username: string,
+  password: string,
+  refresh = false,
+): Promise<string> {
+  const key = sessionKey(api, username);
+  if (session?.key === key) {
+    if (!refresh) return session.token;
+    session = null;
+  }
+  // A login already running was started no earlier than ours would have been,
+  // so its token is as fresh as anything we could ask for, refresh or not.
+  if (pendingLogin?.key === key) return pendingLogin.promise;
+
+  const promise = (async () => {
+    const res = await fetch(`${api}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ username, password }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    if (!res.ok) throw new Error(LOGIN_REFUSED);
+    const body = (await res.json().catch(() => null)) as { token?: unknown } | null;
+    const token = typeof body?.token === "string" ? body.token.trim() : "";
+    // An answer with no token in it is something other than an Umami login,
+    // but from here it is indistinguishable from being turned away, and the
+    // sentence the owners get is the same either way.
+    if (!token) throw new Error(LOGIN_REFUSED);
+    session = { key, token };
+    return token;
+  })();
+
+  pendingLogin = { key, promise };
+  // Cleared on either outcome, and only while this is still the login in
+  // flight, so one failed attempt does not pin every later caller to it.
+  const settle = () => {
+    if (pendingLogin?.promise === promise) pendingLogin = null;
+  };
+  promise.then(settle, settle);
+
+  return promise;
+}
+
+/** A token or key Umami has turned down, as opposed to any other failure. */
+function isUnauthorized(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : "";
+  return message.includes("401") || message.includes("403");
+}
+
 /**
  * Both headers, every time, because the answer has moved.
  *
@@ -317,27 +474,19 @@ export async function getUmamiStats(
   range: UmamiRange,
   report: UmamiReport = "all",
 ): Promise<UmamiResult> {
-  let host = "";
-  let websiteId = "";
-  let key = "";
-
+  let settings: SiteSettingsData;
   try {
-    const settings = await getSiteSettings();
-    host = (settings.umamiHostUrl || "").trim();
-    websiteId = (settings.umamiWebsiteId || "").trim();
-    // The environment wins over the database, always. Keeping the key in the
-    // CMS is a compromise the owners asked for — they wanted to be able to
-    // paste it themselves without a developer — but a secret in a table that
-    // gets dumped, restored and copied to a laptop is still a secret in the
-    // wrong place. Anyone running this properly sets UMAMI_API_KEY, and that
-    // setting must not be silently overridable from a text field in the admin.
-    key = (process.env.UMAMI_API_KEY || settings.umamiApiKey || "").trim();
+    settings = await getSiteSettings();
   } catch {
     return {
       configured: false,
       reason: "De instellingen konden niet worden gelezen. Probeer het later opnieuw.",
     };
   }
+
+  const host = (settings.umamiHostUrl || "").trim();
+  const websiteId = (settings.umamiWebsiteId || "").trim();
+  const credential = credentialFrom(settings.umamiApiKey);
 
   if (!websiteId) {
     return {
@@ -355,51 +504,105 @@ export async function getUmamiStats(
         + "(bijvoorbeeld https://cloud.umami.is) om de cijfers hier te tonen.",
     };
   }
-  if (!key) {
+  if (!credential) {
     return {
       configured: false,
       reason:
-        "Er is nog geen API-sleutel ingesteld. Zonder sleutel mag deze site de "
-        + "cijfers niet bij Umami opvragen.",
+        "Er zijn nog geen inloggegevens voor Umami ingesteld. Zonder die "
+        + "gegevens mag deze site de cijfers niet bij Umami opvragen.",
     };
   }
 
   return cached(`${host}|${websiteId}|${range}|${report}`, () =>
-    load(host, websiteId, key, range, report),
+    load(host, websiteId, credential, range, report),
   );
 }
 
 async function load(
   host: string,
   websiteId: string,
-  key: string,
+  credential: Credential,
   range: UmamiRange,
   report: UmamiReport,
 ): Promise<UmamiResult> {
   const { startAt, endAt, unit } = windowFor(range);
-  const base = `${apiBase(host)}/websites/${encodeURIComponent(websiteId)}`;
+  const api = apiBase(host);
+  const base = `${api}/websites/${encodeURIComponent(websiteId)}`;
   const period = `startAt=${startAt}&endAt=${endAt}`;
 
   const wants = (name: UmamiReport) => report === "all" || report === name;
 
-  try {
-    // The totals come along with every report: they are one cheap request and
-    // the panel puts them above whichever graph is on screen.
-    const [stats, series, pages, events] = await Promise.all([
+  /**
+   * The totals are the report. Everything else is a garnish on it.
+   *
+   * These four used to be one `Promise.all`, which made them all-or-nothing:
+   * any one of them failing threw, and the panel said Umami was unreachable
+   * while Umami sat there perfectly reachable. That is exactly what happened.
+   * `type=url` on the metrics endpoint became `type=path` in a later Umami, so
+   * a request for the top pages started answering 400 and took the visitor
+   * count, the graph and the events down with it, none of which had anything
+   * wrong with them.
+   *
+   * So only `stats` is allowed to fail the batch, because without it there is
+   * genuinely nothing to show. The other three resolve to null on their own
+   * account and the panel simply leaves that section empty. Umami's API has
+   * moved once and will move again, and when it does it should cost one graph
+   * rather than the page.
+   *
+   * The one thing that must NOT be swallowed here is a 401, or the retry
+   * below never fires and an expired token quietly becomes three empty
+   * sections. `optional` re-throws those and eats everything else.
+   */
+  const optional = (promise: Promise<unknown>) =>
+    promise.catch((error) => {
+      if (isUnauthorized(error)) throw error;
+      return null;
+    });
+
+  const batch = (key: string) =>
+    Promise.all([
       getJson(`${base}/stats?${period}`, key),
       wants("series")
-        ? getJson(
-            `${base}/pageviews?${period}&unit=${unit}&timezone=${encodeURIComponent(TZ)}`,
-            key,
+        ? optional(
+            getJson(
+              `${base}/pageviews?${period}&unit=${unit}&timezone=${encodeURIComponent(TZ)}`,
+              key,
+            ),
           )
         : null,
+      // `type=path`, not `type=url`. Verified against a running Umami: url is
+      // refused with a 400 and path returns the same `[{ x, y }]` shape the
+      // parser below already reads.
       wants("pages")
-        ? getJson(`${base}/metrics?${period}&type=url&limit=10`, key)
+        ? optional(getJson(`${base}/metrics?${period}&type=path&limit=10`, key))
         : null,
       wants("events")
-        ? getJson(`${base}/metrics?${period}&type=event&limit=20`, key)
+        ? optional(getJson(`${base}/metrics?${period}&type=event&limit=20`, key))
         : null,
     ]);
+
+  try {
+    const [stats, series, pages, events] = await (async () => {
+      if (credential.kind === "key") return batch(credential.value);
+
+      const { username, password } = credential;
+      try {
+        return await batch(await tokenFor(api, username, password));
+      } catch (error) {
+        // The cached token has aged out. One more go with a fresh one, and if
+        // that is refused too the credentials themselves are the problem and
+        // trying again would only be a slower way to say so.
+        if (!isUnauthorized(error)) throw error;
+        try {
+          return await batch(await tokenFor(api, username, password, true));
+        } catch (again) {
+          // Signed in with a token minted seconds ago and still refused, so
+          // the credentials are not the thing to look at; the account is.
+          if (isUnauthorized(again)) throw new Error(LOGIN_UNWELCOME);
+          throw again;
+        }
+      }
+    })();
 
     const visits = value(stats, "visits");
     const bounces = value(stats, "bounces");
@@ -435,10 +638,29 @@ async function load(
         : [],
     };
   } catch (error) {
-    // The upstream status is the one thing worth separating out, because a 401
-    // is a key the owners can fix themselves and everything else is not.
+    // Which of these the owners get is the whole point of the exercise. Every
+    // one of them is a different thing to go and do, and a panel that said
+    // only "geen cijfers" would leave them with no idea which.
     const message = error instanceof Error ? error.message : "";
-    if (message.includes("401") || message.includes("403")) {
+    if (message.includes(LOGIN_REFUSED)) {
+      return {
+        configured: false,
+        reason:
+          "Umami laat deze site niet binnen: de gebruikersnaam of het "
+          + "wachtwoord waarmee de site zich aanmeldt, klopt niet meer. Dat "
+          + "staat op de server ingesteld, dus vraag dit even na.",
+      };
+    }
+    if (message.includes(LOGIN_UNWELCOME)) {
+      return {
+        configured: false,
+        reason:
+          "Umami laat deze site wel binnen, maar geeft geen toegang tot deze "
+          + "website. Controleer in Umami of het account waarmee de site zich "
+          + "aanmeldt bij deze website mag.",
+      };
+    }
+    if (isUnauthorized(error)) {
       return {
         configured: false,
         reason:

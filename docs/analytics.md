@@ -29,35 +29,133 @@ limitation:
   how many people.
 - No third-party script other than the Umami one; nothing is shared onward.
 
-## Cloud or self-hosted
+## Where it runs
 
-Both work. The difference is only what goes in the settings fields.
+Self-hosted, on this stack, at **https://stats.debeeshive.nl**. The container is
+`beeshive-umami` in `docker-compose.yml` and its tables live in a database
+called `umami` inside the same PostgreSQL cluster the website uses, which is how
+the visitor figures end up inside pgBackRest's nightly backup without a second
+line of configuration. `ops/README.md` section 6 is the operator's version of
+everything below.
 
-**Umami Cloud** (cloud.umami.is) is the quicker route. The script comes from
-`https://cloud.umami.is/script.js`, and the API — a different host, which is the
-usual trip-up — lives at `https://api.umami.is/v1`. Create a key under **Settings
-→ API keys** and authenticate with the `x-umami-api-key` header.
+Umami Cloud (cloud.umami.is) would also work and nothing in the code cares which
+one it is talking to. The difference is only what goes in the settings fields:
+the script would come from `https://cloud.umami.is/script.js`, the API from the
+*different* host `https://api.umami.is/v1` (which is the usual trip-up), and
+authentication would be an API key created under **Settings → API keys**. We do
+not use it, and the section below is about the one we do.
 
-**Self-hosted** is a Docker container plus a Postgres or MySQL database, run
-wherever the site runs. Script and API share one origin: the script is at
-`https://umami.example.com/script.js` and the API at
-`https://umami.example.com/api`.
+### Why a subdomain and not debeeshive.nl/stats
 
-Self-hosted Umami has no API keys. It authenticates with a bearer token, which
-you obtain once by hand:
+Because Umami's `BASE_PATH` is read while the image is being **built**, not when
+the container starts. The published image is compiled for the root of a host and
+there is no runtime switch that moves it, so serving Umami under a path would
+mean building it from source here and building it again on every upgrade.
+Without `BASE_PATH` the dashboard asks for root-absolute `/_next/` and `/api/`
+URLs, which are precisely the two prefixes this site already answers on, so
+under one hostname the proxy would have to guess which application a request
+belonged to. One extra DNS record is cheaper than a fork of somebody else's
+project.
+
+### Putting it on the internet
+
+1. **DNS.** An `A` record for `stats` in the `debeeshive.nl` zone, pointing at
+   the same address as `www`, plus `AAAA` if the host has IPv6.
+2. **Nginx Proxy Manager** → *Proxy Hosts* → *Add Proxy Host*:
+
+   | | |
+   |---|---|
+   | Domain Names | `stats.debeeshive.nl` |
+   | Scheme | `http` |
+   | Forward Hostname | `beeshive-umami` |
+   | Forward Port | `3000` |
+   | Websockets Support | **on** |
+   | Block Common Exploits | on |
+
+   On the **SSL** tab: *Request a new SSL Certificate*, Let's Encrypt, with
+   *Force SSL* and *HTTP/2* on.
+
+   That forwards over the shared `reverse-proxy` network. If your NPM is not on
+   it, forward to the host instead, hostname `beeshive` and port `3101`
+   (`UMAMI_PORT`), which is published for exactly this case. One route or the
+   other, not both.
+
+   Websockets on matters: the dashboard is a Next.js application whose live
+   updates ride a websocket, and with the setting off the pages load and then
+   silently stop refreshing, which reads as "the statistics are broken".
+
+3. **First sign-in.** Umami ships with **`admin` / `umami`**, published and
+   identical on every installation in the world. Change it immediately: sign in,
+   then the user icon at the top right → **Profile** → **Change password**. Put
+   the new password in `.env` as `UMAMI_PASSWORD` alongside
+   `UMAMI_USERNAME=admin`, then `docker compose up -d beeshive`. Double any `$`
+   in it, as everywhere in that file.
+
+   Set `UMAMI_APP_SECRET` too, `openssl rand -hex 32`. Unset, Umami derives its
+   cookie signing key from the database URL instead.
+
+4. **The website entry.** **Settings → Websites → Add website**. Name it
+   `De Bee's Hive`, domain `debeeshive.nl`. Save, open it, and copy the
+   **Website ID**, the long string with dashes.
+
+### What the owners paste in
+
+Two values, in **Instellingen → Statistieken** in the Payload admin:
+
+| Field | Value |
+|---|---|
+| Bezoekcijfers bijhouden | on |
+| Script-adres | `https://stats.debeeshive.nl/script.js` |
+| Website-ID | the Website ID copied above |
+| Adres van Umami | `https://stats.debeeshive.nl` |
+
+Say plainly, when they ask, that **none of that is a secret**. The tracking
+script is fetched by every visitor's browser and the website id is sitting in
+the page source of every page on the site; that is how measuring works, and
+knowing the id lets nobody read anything. Pasting them into the admin is safe
+and undoing it is one checkbox.
+
+The Umami **login** is a different thing entirely, and it is only ever used to
+read the figures *back* into that panel. It counts nothing, it makes nothing
+work on the public site, and it is the one part worth guarding, because whoever
+has it can delete the history.
+
+### Authenticating to read the figures back
+
+Self-hosted Umami has no API keys at all. It hands out a bearer token in
+exchange for the admin username and password:
 
 ```sh
-curl -X POST https://umami.example.com/api/auth/login \
+curl -X POST https://stats.debeeshive.nl/api/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"username":"admin","password":"…"}'
 ```
 
-The `token` in the response goes in as the API key. `src/lib/umamiServer.ts`
-recognises a JWT by its three dot-separated segments and sends it as
-`Authorization: Bearer …` instead of as a cloud key, so the same field serves
-both. Deliberately, there is no automated login: keeping the owners' Umami
-password on the web server so it can re-authenticate itself is a worse trade
-than the stored key already is. If the token expires, fetch a new one.
+The `token` in the response is what goes on the wire as
+`Authorization: Bearer …`. `src/lib/umamiServer.ts` sends every credential that
+way, and adds `x-umami-api-key` alongside it, because Umami Cloud used to want
+its own header and now documents the bearer one; sending both removes a guess
+that was getting the cloud case wrong. Credentials are taken in this order:
+`UMAMI_API_KEY` from the environment, then `UMAMI_USERNAME` with
+`UMAMI_PASSWORD`, then the API-sleutel field in the CMS, which comes last
+because it is the only one an editor can open.
+
+The token **expires**, which is why `UMAMI_USERNAME` and
+`UMAMI_PASSWORD` in the deployment environment are the arrangement to prefer: a
+token pasted in by hand works until the day it quietly does not, and the first
+symptom is a panel saying the figures are unavailable.
+
+### When only part of the panel is empty
+
+The totals are one request and the graph, the top pages and the events are
+three more. Only the totals can fail the whole panel; the other three are
+allowed to come back empty on their own, so a section that is blank while the
+visitor count is fine means Umami refused that one request and nothing else.
+
+That is not hypothetical. Umami renamed the top-pages report from `type=url` to
+`type=path`, and while all four requests were tied together a 400 on that one
+made the panel announce that Umami was unreachable while Umami was sitting there
+answering everything else perfectly. Their API will move again.
 
 ## Settings to fill in
 
@@ -66,10 +164,10 @@ than the stored key already is. If the token expires, fetch a new one.
 | Field | What it is |
 | --- | --- |
 | Bezoekcijfers bijhouden | Renders the measuring script. Off means nothing is measured at all. |
-| Script-adres | `https://cloud.umami.is/script.js`, or `https://<your-host>/script.js` when self-hosted. |
+| Script-adres | `https://stats.debeeshive.nl/script.js` here. `https://cloud.umami.is/script.js` on Umami Cloud. |
 | Website-ID | The UUID Umami shows under **Settings → Websites**. Without it nothing is measured, whatever the switch says. |
-| Adres van Umami | Only needed for reading figures back: `https://cloud.umami.is` (which is mapped to `api.umami.is/v1` automatically) or your own host. |
-| API-sleutel | Cloud API key or self-hosted bearer token. See below. |
+| Adres van Umami | Only needed for reading figures back: `https://stats.debeeshive.nl` here, or `https://cloud.umami.is` (which is mapped to `api.umami.is/v1` automatically). |
+| API-sleutel | A cloud API key, or a self-hosted bearer token. Empty on this install: `UMAMI_USERNAME` and `UMAMI_PASSWORD` in the environment are what gets used. See below. |
 | Eigen bezoeken niet meetellen | Emits `data-do-not-track="true"`, so visitors whose browser sends the Do Not Track signal are skipped. The owners can switch that on in their own browsers to stay out of their own figures; the admin at `/admin` is excluded regardless. |
 
 ### The API key and the environment
