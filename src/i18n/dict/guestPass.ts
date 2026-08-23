@@ -29,14 +29,12 @@
  * is one, which is why it takes three arguments and lays them out over
  * paragraphs rather than running them into one sentence.
  *
- * There are two notes on this page and they run in opposite directions, so the
- * keys keep them well apart. `houseNoteLabel` heads the line the owners wrote
- * to the whole party, and sits with the date and the address because that is
- * what it is: part of the booking. Everything under `yourNote` belongs to the
- * box a companion types into, and its hint says out loud who ends up reading
- * the answer — the field is on a page that gets forwarded through a WhatsApp
- * group, and somebody about to write down their phone number deserves to know
- * that before they do rather than after.
+ * `houseNoteLabel` heads the one piece of free text on the page: the line the
+ * owners wrote to the whole party in the admin. It sits with the date and the
+ * address because that is what it is, part of the booking. Nothing runs the
+ * other way — a companion answers with a name and a few ticked boxes and that
+ * is all, which is why the only words on this page that were typed by a person
+ * are the house's own.
  */
 export const guestPassNl = {
   metaTitle: (name: string) => `Je tafel bij ${name}`,
@@ -58,6 +56,7 @@ export const guestPassNl = {
     geannuleerd: "Geannuleerd",
   },
   guestsValue: (n: number) => (n === 1 ? "1 persoon" : `${n} personen`),
+  guestsUnknown: "niet doorgegeven",
   houseNoteLabel: "Nog even dit",
   pastNotice: "Deze avond is geweest. Leuk dat jullie er waren.",
   cancelledNotice:
@@ -93,11 +92,6 @@ export const guestPassNl = {
   dietaryHint: "Allergie, vegetarisch, iets anders: we houden er rekening mee.",
   drinksHeading: "Alvast wat te drinken?",
   drinksHint: "Niet verplicht, maar het scheelt wachten bij binnenkomst.",
-  yourNote: "Nog iets kwijt?",
-  yourNoteOptional: "niet verplicht",
-  yourNoteHint:
-    "Iedereen met de link leest dit mee, dus hou het bij wat het gezelschap mag weten.",
-  yourNotePlaceholder: "Ik kom een half uur later",
   submit: "Doorgeven",
   submitting: "Bezig...",
   update: "Wijziging doorgeven",
@@ -109,8 +103,6 @@ export const guestPassNl = {
   alreadyJoined: "Je staat al op de lijst.",
   error: "Er ging iets mis. Probeer het opnieuw.",
   full: "De lijst zit vol. Bel ons even, dan schrijven we je erbij.",
-  noteNoContact:
-    "Zet er geen telefoonnummer of mailadres in; iedereen met de link leest mee. Bel ons even als het dringend is.",
   attending: "Wie er komen",
   noneYet: "Nog niemand heeft zich aangemeld.",
   nothingPicked: "geen wensen doorgegeven",
@@ -140,6 +132,7 @@ export const guestPassEn: GuestPassDict = {
     geannuleerd: "Cancelled",
   },
   guestsValue: (n: number) => (n === 1 ? "1 guest" : `${n} guests`),
+  guestsUnknown: "not given",
   houseNoteLabel: "One more thing",
   pastNotice: "This evening has been and gone. Lovely to have had you.",
   cancelledNotice:
@@ -177,11 +170,6 @@ export const guestPassEn: GuestPassDict = {
     "An allergy, vegetarian, anything else: we will take it into account.",
   drinksHeading: "Something to drink already?",
   drinksHint: "Not required, but it saves waiting when you arrive.",
-  yourNote: "Anything else?",
-  yourNoteOptional: "optional",
-  yourNoteHint:
-    "Everyone with the link reads this, so keep it to what the party may know.",
-  yourNotePlaceholder: "I will be half an hour late",
   submit: "Send it through",
   submitting: "Sending...",
   update: "Send the change through",
@@ -192,8 +180,6 @@ export const guestPassEn: GuestPassDict = {
   alreadyJoined: "You are already on the list.",
   error: "Something went wrong. Please try again.",
   full: "The list is full. Give us a ring and we will add you ourselves.",
-  noteNoContact:
-    "Please leave phone numbers and e-mail addresses out; everyone with the link reads this. Give us a ring if it is urgent.",
   attending: "Who is coming",
   noneYet: "Nobody has signed up yet.",
   nothingPicked: "no wishes passed on",

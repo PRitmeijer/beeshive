@@ -168,10 +168,10 @@ export const BackupPanel: React.FC = () => {
     <div style={{ maxWidth: "60rem" }}>
       <h1 style={{ marginBottom: "0.25rem" }}>Backups</h1>
       <p style={{ color: muted, marginTop: 0 }}>
-        Een kopie van alles wat in dit beheerpaneel staat — de kaart, de blog, de
-        agenda, de reserveringen — wordt elke nacht naar de beveiligde opslag bij
-        Cloudflare gestuurd. De foto&apos;s staan daar sowieso al en horen daar
-        niet bij.
+        Elke nacht gaat er een kopie van alles wat in dit beheerpaneel staat naar
+        de beveiligde opslag bij Cloudflare: de kaart, de blog, de agenda, de
+        reserveringen. De foto&apos;s staan daar sowieso al en horen daar niet
+        bij.
       </p>
 
       {install.empty ? <EmptyInstallBlock commands={commands} /> : null}
@@ -202,7 +202,7 @@ export const BackupPanel: React.FC = () => {
                   De doorlopende meeschrijving naar de cloud werkt op dit moment
                   niet. Zolang dat zo is kan er alleen worden teruggezet naar het
                   moment van de laatste nachtelijke backup, en niet naar
-                  vanmiddag. Dit lost zichzelf niet op — kijk in de log van
+                  vanmiddag. Dit lost zichzelf niet op. Kijk in de log van
                   &lsquo;beeshive-pgbackrest&rsquo;.
                 </Banner>
               </div>
@@ -277,9 +277,9 @@ export const BackupPanel: React.FC = () => {
         </Banner>
 
         <p>
-          Dit scherm zet niets terug. Het maakt de opdracht voor je klaar, en die
-          moet iemand op de server zelf uitvoeren — bewust, met de kans om eerst
-          te lezen wat er gaat gebeuren. Dat is met opzet zo: een knop op een
+          Dit scherm zet niets terug. Het maakt de opdracht voor je klaar. Iemand
+          moet die op de server zelf uitvoeren, bewust, met de kans om eerst te
+          lezen wat er gaat gebeuren. Dat is met opzet zo: een knop op een
           website die de hele database kan wissen, is een knop die de hele
           database kan wissen.
         </p>
@@ -370,7 +370,7 @@ const EmptyInstallBlock: React.FC<{ commands: BackupsResponse["commands"] }> = (
 }) => (
   <div style={{ marginTop: "var(--base)" }}>
     <Banner type="error">
-      <strong>Er staat een backup in de cloud.</strong> Deze installatie is leeg —
+      <strong>Er staat een backup in de cloud.</strong> Deze installatie is leeg:
       er staat nog geen inhoud in. Als dit een nieuwe of opnieuw opgebouwde
       server is, hoef je niets opnieuw in te typen: alles staat nog in de
       beveiligde opslag bij Cloudflare en kan worden teruggezet.
@@ -378,7 +378,7 @@ const EmptyInstallBlock: React.FC<{ commands: BackupsResponse["commands"] }> = (
     <p style={{ color: muted }}>
       Laat iemand met toegang tot de server het volgende doen, in de map waar
       docker-compose.yml staat. Doe dit vóórdat er iemand in dit paneel begint te
-      typen — wat er nu wordt ingevoerd, wordt door het terugzetten weer
+      typen. Wat er nu wordt ingevoerd, wordt door het terugzetten weer
       weggegooid.
     </p>
     <CommandBlock command={commands.ontoEmptyInstall.join("\n")} />
@@ -647,7 +647,7 @@ function formatMoment(iso: string): string {
 }
 
 function bytes(value: number): string {
-  if (!value) return "—";
+  if (!value) return "onbekend";
   const units = ["B", "kB", "MB", "GB", "TB"];
   let size = value;
   let unit = 0;

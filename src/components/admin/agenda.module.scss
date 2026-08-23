@@ -261,14 +261,14 @@
 
 /* ------------------------------------------------------ have we met? -- */
 
-/* Whether the guest has eaten here before is two states, and they are told
+/* Whether the guest has booked here before is two states, and they are told
    apart three times over: by the word or the number in them, by fill against
    outline, and only lastly by colour. That is on purpose. This gets read on a
    phone held at arm's length in a sunny doorway, where an amber wash and a grey
-   one are the same wash — but "Eerste bezoek" in a solid pill still jumps out
-   of a list of hairlines.
+   one are the same wash — but "Eerste reservering" in a solid pill still jumps
+   out of a list of hairlines.
 
-   The first-timer wears Payload's warning ramp, which is the same amber the
+   A first booking wears Payload's warning ramp, which is the same amber the
    calendar already uses for "this day is not the ordinary week": both mean
    look here, something needs doing. The 150/800 pairing is lifted from
    Payload's own toasts, so it stays legible when the panel is flipped to dark —
@@ -298,8 +298,9 @@
   color: var(--theme-elevation-500);
 }
 
-/* The instruction under a first-timer in the day view. It is indented under the
-   booking like a note is, because that is what it is: something to remember
+/* The line under a first reservation in the day view, spelling out in a
+   sentence what the pill beside the name says in two words. It is indented
+   under the booking like a note is, because that is what it is: something known
    about this table, written by the calendar instead of by the guest. */
 .resHint {
   margin: 0.125rem 0 0.375rem 0.5rem;
@@ -310,8 +311,8 @@
 }
 
 /* The same fact, one number, in a month cell: a count rather than a badge per
-   booking. It borrows the first-timer's colour but not its pill, so a column of
-   forty cells does not read as forty buttons. */
+   booking. It borrows the first booking's colour but not its pill, so a column
+   of forty cells does not read as forty buttons. */
 .monthFirst {
   margin: 0 0 0.25rem;
   overflow: hidden;
@@ -455,7 +456,7 @@
   color: var(--theme-elevation-500);
 }
 
-/* "2 tafels voor het eerst hier", beside the covers. It only appears when the
+/* "2 eerste reserveringen", beside the covers. It only appears when the
    number is not nought, so it is never a zero to be scanned past. */
 .panelFirst {
   padding: 0.0625rem 0.375rem;

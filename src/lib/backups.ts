@@ -210,7 +210,7 @@ export async function readBackupStatus(): Promise<BackupStatus> {
         reason:
           "Dit scherm kan de backups niet uitlezen: het programma pgBackRest is "
           + "niet beschikbaar op de server waar de website draait. De backups "
-          + "zelf lopen gewoon door — die worden door een aparte container "
+          + "zelf lopen gewoon door. Die worden door een aparte container "
           + "gemaakt. Zie ops/pgbackrest-api.md om dit scherm er wél bij te "
           + "kunnen laten.",
         detail,

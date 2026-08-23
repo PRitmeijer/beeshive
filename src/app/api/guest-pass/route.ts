@@ -29,8 +29,9 @@ import { buildIcs, icsFilename } from "@/lib/ics";
  * POST records one companion's answer. Everything about it is deliberately
  * narrow: it appends a row to `guestResponses` and touches nothing else on the
  * document, ever. Not the name, not the date, not the status, not the e-mail
- * bookkeeping. A guest can say who they are, what they do not eat, and one
- * short remark in their own words; that is the entire vocabulary.
+ * bookkeeping. A guest can say who they are, what they do not eat and what
+ * they would like to drink; that is the entire vocabulary, and every word of
+ * it but the name is picked off a list the owners wrote.
  *
  * Both of them are authorised by the token and nothing else, which is why both
  * of them go through `findByToken` in src/lib/guestPass.ts rather than reading
@@ -51,7 +52,6 @@ type Failure =
   | "closed"
   | "full"
   | "nameRequired"
-  | "noteNoContact"
   | "server";
 
 /**
@@ -113,45 +113,6 @@ function keepPicks(value: unknown, allowed: Set<string>): string[] {
     if (kept.length >= GUEST_RESPONSE_LIMITS.picks) break;
   }
   return kept;
-}
-
-/**
- * The one thing a companion may not write in their remark.
- *
- * The remark is the first free text on this page that goes straight back out
- * to the whole party — see the note on `guestResponses[].note` in
- * redactForGuests — and the party is a WhatsApp group, a forwarded link and,
- * by Friday, a screenshot. Almost anything somebody types into it is their own
- * business, and the field's hint tells them plainly who reads it. A telephone
- * number is the exception, because it is not really a sentence: it is a
- * durable handle on a person that outlives the evening, is often somebody
- * else's ("Jan zijn nummer is..."), and is worth something to anyone who ends
- * up holding the link who was never at the table.
- *
- * So it is refused rather than quietly scrubbed. Mangling the words on the way
- * to the page would leave the guest reading a sentence they did not write and
- * no idea why, while the number sat in the admin anyway; a refusal costs one
- * retyped line, says what the rule is, and points at the telephone, which is
- * the right channel for the thing they were trying to do.
- *
- * The test is deliberately blunt at both ends. An e-mail address is unmistakable.
- * A number counts only when it carries at least nine digits AND starts the way
- * a dialled number starts — a leading `+`, `00`, or `0` — so "we zijn met 10
- * man, tot 20.30" passes and "06 12 34 56 78" does not. Something exotic will
- * slip through; the field's hint is the part that does the real work, and this
- * is the floor under it.
- */
-const EMAIL_ANYWHERE = /[^\s@]+@[^\s@]+\.[a-z]{2,}/i;
-const DIALLED_RUN = /[+(]?\d[\d\s.\-()/]{7,}\d/g;
-
-function looksLikeContactDetails(note: string): boolean {
-  if (EMAIL_ANYWHERE.test(note)) return true;
-  for (const run of note.match(DIALLED_RUN) ?? []) {
-    const digits = run.replace(/\D/g, "");
-    if (digits.length < 9) continue;
-    if (run.trim().startsWith("+") || digits.startsWith("0")) return true;
-  }
-  return false;
 }
 
 export async function GET(request: Request) {
@@ -217,23 +178,17 @@ export async function POST(request: Request) {
       return fail("closed", 403);
     }
 
+    /**
+     * The name, and the only genuinely free text this endpoint accepts.
+     *
+     * Trimmed and capped by `str`: over the cap it comes back null rather than
+     * truncated, and the input on the page carries the same maxLength, so the
+     * only way to reach that is by hand. Everything else below is picked off a
+     * list the owners configured, which is why nothing a guest types can reach
+     * the admin except the name they are putting on the list themselves.
+     */
     const name = str(input.name, GUEST_RESPONSE_LIMITS.name);
     if (!name) return fail("nameRequired", 400);
-
-    /**
-     * The remark, which is the one field here that is genuinely free text.
-     *
-     * Trimmed and capped by `str`, exactly as the name is: over the cap it
-     * comes back null rather than truncated, and the textarea on the page
-     * carries the same maxLength, so the only way to reach that is by hand.
-     * Null is also what an empty box produces, and null is what gets stored —
-     * an empty string would show up in the admin as a row that answered the
-     * question with nothing, which is not the same as not answering it.
-     */
-    const note = str(input.note, GUEST_RESPONSE_LIMITS.note);
-    if (note && looksLikeContactDetails(note)) {
-      return fail("noteNoContact", 400);
-    }
 
     const allowed = await allowedLabels();
     const dietary = keepPicks(input.dietary, allowed.dietary);
@@ -286,10 +241,6 @@ export async function POST(request: Request) {
       name,
       dietary: dietary.join(", "),
       drinks: drinks.join(", "),
-      // Spread over the existing row on an edit, so `null` is what clears a
-      // remark somebody has thought better of. Leaving the key out instead
-      // would make the old text impossible to remove from this side.
-      note,
       addedAt: new Date().toISOString(),
     };
 

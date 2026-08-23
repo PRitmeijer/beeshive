@@ -154,7 +154,7 @@ export function Navigation({
             href={localeHref(code, here)}
             hrefLang={code}
             lang={code}
-            aria-label={`${localeLabels[code]} \u2014 ${localeNames[code]}`}
+            aria-label={`${localeLabels[code]}, ${localeNames[code]}`}
             aria-current={code === locale ? "true" : undefined}
             onClick={onNavigate}
             className={`label transition-colors duration-500 ease-settle ${

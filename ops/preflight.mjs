@@ -128,7 +128,7 @@ for (;;) {
 
 if (lastError) {
   say(`database niet bereikbaar: ${lastError.message}`);
-  say("Controle overgeslagen — dit is op zichzelf geen reden om niet te");
+  say("Controle overgeslagen. Dit is op zichzelf geen reden om niet te");
   say("starten. De applicatie probeert zelf opnieuw te verbinden en compose");
   say("wacht al op de healthcheck van Postgres.");
   process.exit(0);
@@ -147,7 +147,7 @@ if (markers.length === 0) {
 const named = markers.map((name) => `'${name ?? "(zonder naam)"}'`).join(", ");
 
 say("");
-say(`STOP — deze database draagt een dev-push-markering (${named}).`);
+say(`STOP. Deze database draagt een dev-push-markering (${named}).`);
 say("");
 say("Wat het is. In payload_migrations staat een rij met batch -1. Payload zet");
 say("die neer zodra het schema rechtstreeks vanuit de collecties gepusht is,");
@@ -160,9 +160,9 @@ say("vraagt op de terminal of het de migraties alsnog mag draaien. In een");
 say("container is er geen terminal, dus antwoordt niemand en komt Payload");
 say("nooit voorbij die vraag. Next heeft de poort dan al open: elke");
 say("voorgerenderde pagina blijft 200 antwoorden met de HTML uit het image,");
-say("docker compose ps zegt healthy, en alles wat de CMS echt nodig heeft —");
-say("reserveringen, het contactformulier, de meldingsbalk, de admin — blijft");
-say("hangen. De site lijkt te draaien en neemt geen enkele boeking aan.");
+say("docker compose ps zegt healthy, en alles wat de CMS echt nodig heeft");
+say("blijft hangen: reserveringen, het contactformulier, de meldingsbalk, de");
+say("admin. De site lijkt te draaien en neemt geen enkele boeking aan.");
 say("");
 say("Er zijn twee uitwegen.");
 say("");

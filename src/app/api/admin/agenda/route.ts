@@ -9,7 +9,7 @@ import { describe, todayInAmsterdam } from "@/lib/openingHours";
 import { expandOccurrences, type EventDoc } from "@/lib/events";
 import {
   historyForMany,
-  type GuestVisitHistory,
+  type GuestReservationHistory,
   type HistorySubject,
 } from "@/lib/guestHistory";
 import { getUmamiStats } from "@/lib/umamiServer";
@@ -163,7 +163,7 @@ interface ReservationRow {
  * Rows with neither an e-mail address nor a telephone number are left out
  * rather than sent along, because "we found nothing" and "there was nothing to
  * look for" are different answers and only the first one may be shown to an
- * owner as "eerste bezoek". Both fields are required on the form, so in
+ * owner as "eerste reservering". Both fields are required on the form, so in
  * practice this only skips the odd row typed in by hand.
  *
  * And the whole thing is allowed to fail quietly. The history is the pleasant
@@ -175,7 +175,7 @@ interface ReservationRow {
 async function guestHistory(
   payload: Awaited<ReturnType<typeof getPayloadClient>>,
   rows: ReservationRow[],
-): Promise<Map<string | number, GuestVisitHistory>> {
+): Promise<Map<string | number, GuestReservationHistory>> {
   const subjects: HistorySubject[] = rows
     .filter((row) => row.email || row.phone)
     .map((row) => ({

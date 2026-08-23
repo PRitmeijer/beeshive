@@ -233,7 +233,7 @@ export interface BlogPost {
      */
     description?: string | null;
     /**
-     * De foto die verschijnt als iemand deze pagina deelt op WhatsApp, Facebook of LinkedIn. Eén foto voor beide talen — je hoeft hem niet apart in het Engels te kiezen. Liefst liggend; hij wordt automatisch bijgesneden naar 1200 bij 630 pixels.
+     * De foto die verschijnt als iemand deze pagina deelt op WhatsApp, Facebook of LinkedIn. Eén foto voor beide talen. Je hoeft hem niet apart in het Engels te kiezen. Liefst liggend; hij wordt automatisch bijgesneden naar 1200 bij 630 pixels.
      */
     image?: (number | null) | Media;
   };
@@ -357,7 +357,7 @@ export interface Event {
      */
     description?: string | null;
     /**
-     * De foto die verschijnt als iemand deze pagina deelt op WhatsApp, Facebook of LinkedIn. Eén foto voor beide talen — je hoeft hem niet apart in het Engels te kiezen. Liefst liggend; hij wordt automatisch bijgesneden naar 1200 bij 630 pixels.
+     * De foto die verschijnt als iemand deze pagina deelt op WhatsApp, Facebook of LinkedIn. Eén foto voor beide talen. Je hoeft hem niet apart in het Engels te kiezen. Liefst liggend; hij wordt automatisch bijgesneden naar 1200 bij 630 pixels.
      */
     image?: (number | null) | Media;
   };
@@ -610,10 +610,6 @@ export interface Reservation {
          */
         dietary?: string | null;
         drinks?: string | null;
-        /**
-         * Wat deze persoon zelf nog kwijt wilde. Wordt door de gast ingevuld op de gastenpagina, net als de rest van deze regel.
-         */
-        note?: string | null;
         id?: string | null;
       }[]
     | null;
@@ -1075,7 +1071,6 @@ export interface ReservationsSelect<T extends boolean = true> {
         addedAt?: T;
         dietary?: T;
         drinks?: T;
-        note?: T;
         id?: T;
       };
   status?: T;
@@ -1159,7 +1154,7 @@ export interface SiteSetting {
   siteName: string;
   description?: string | null;
   /**
-   * Komma-gescheiden, bijvoorbeeld: eetcafé Utrecht, lunch Zuilen, borrel. Google negeert deze tag sinds 2009 en gebruikt hem niet voor de ranking — de Beschrijving hierboven en de tekst op de pagina's doen dat werk wel.
+   * Komma-gescheiden, bijvoorbeeld: eetcafé Utrecht, lunch Zuilen, borrel. Google negeert deze tag sinds 2009 en gebruikt hem niet voor de ranking. Dat werk doen de Beschrijving hierboven en de tekst op de pagina's wel.
    */
   keywords?: string | null;
   /**

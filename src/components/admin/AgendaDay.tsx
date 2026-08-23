@@ -45,24 +45,24 @@ export interface AgendaOpening {
 }
 
 /**
- * Whether the guest behind a booking has eaten here before.
+ * Whether the guest behind a booking has reserved here before.
  *
- * A copy of GuestVisitHistory in src/lib/guestHistory.ts rather than an import
- * of it, for the same reason the rest of this section exists: everything below
- * runs in the browser, and that module is server code that talks to Payload.
- * The shapes are structurally identical, so the route assigns one to the other
- * and the compiler holds the two honest.
+ * A copy of GuestReservationHistory in src/lib/guestHistory.ts rather than an
+ * import of it, for the same reason the rest of this section exists: everything
+ * below runs in the browser, and that module is server code that talks to
+ * Payload. The shapes are structurally identical, so the route assigns one to
+ * the other and the compiler holds the two honest.
  *
  * `null` means the question could not be asked — a row with no e-mail address
  * and no telephone number to recognise anyone by. That is not the same as a
- * first visit and must never be drawn as one.
+ * first reservation and must never be drawn as one.
  */
 export interface AgendaGuestHistory {
-  /** Visits before this one, so 0 is a guest walking in for the first time. */
-  priorVisits: number;
-  isFirstTime: boolean;
-  firstVisit: string | null;
-  lastVisit: string | null;
+  /** Bookings before this one, so 0 is a guest reserving here for the first time. */
+  priorReservations: number;
+  isFirstReservation: boolean;
+  firstReservation: string | null;
+  lastReservation: string | null;
   /** How they were recognised; a telephone number is the weaker of the two. */
   matchedOn: "email" | "phone" | null;
 }
@@ -290,26 +290,32 @@ export function coversOf(rows: AgendaReservation[]): number {
 /* ------------------------------------------------------- have we met? -- */
 
 /**
- * How the agenda says "these people have never been here".
+ * How the agenda says "these people have not booked here before".
  *
  * The owners asked for one thing above all others: to know, before they walk
  * to a table, whether that table needs the story — what De Bee's Hive is, how
  * the evening works, that the kitchen closes at nine — or whether these are the
  * neighbours from the Amsterdamsestraatweg who have been coming since 2023 and
- * would rather be greeted than briefed. Both are worth knowing; only the first
- * is worth *doing* something about, which is why the first-timer is drawn loud
- * and the regular is drawn as a warm aside.
+ * would rather be greeted than briefed.
+ *
+ * What the mark reports is the reservation and only the reservation, in those
+ * words. Walking in without ringing first is how half of Zuilen eats here, and
+ * none of it reaches the database, so "eerste bezoek" would be a claim about
+ * the evening while "eerste reservering" is a claim about the row. It is also
+ * a statement rather than an errand: the count is put on the screen, and what
+ * to say at the table stays the owners' judgement.
  *
  * Every view shows the same fact in the same words, at the length it has room
- * for: "Eerste bezoek" and "4e bezoek" where there is a line, "1e" and "4e"
- * where there is only a column, and the whole sentence in the title everywhere.
- * The mark is never colour alone — an owner reading this on a phone at the
- * kitchen door in July gets the number and the word first, the amber second.
+ * for: "Eerste reservering" and "4e reservering" where there is a line, "1e"
+ * and "4e" where there is only a column, and the whole sentence in the title
+ * everywhere. The mark is never colour alone — an owner reading this on a
+ * phone at the kitchen door in July gets the number and the word first, the
+ * amber second.
  *
  * A booking with no history attached (nothing to recognise the guest by) shows
  * nothing at all. Silence is the only honest mark for a question we could not
- * ask; drawing such a row as a first visit would send someone off to explain
- * the concept to a regular.
+ * ask; drawing such a row as a first reservation would send someone off to
+ * explain the concept to a regular.
  */
 
 const NL_DATE = new Intl.DateTimeFormat("nl-NL", {
@@ -322,19 +328,19 @@ const NL_DATE = new Intl.DateTimeFormat("nl-NL", {
 const isIsoDate = (value: string | null): value is string =>
   typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
 
-/** 1e, 2e, 3e…: which visit this booking is, counted from the guest's first. */
-export function visitOrdinal(history: AgendaGuestHistory): string {
-  return `${Math.max(0, history.priorVisits) + 1}e`;
+/** 1e, 2e, 3e…: which booking this is, counted from the guest's first. */
+export function reservationOrdinal(history: AgendaGuestHistory): string {
+  return `${Math.max(0, history.priorReservations) + 1}e`;
 }
 
 /** The whole thing in words, for the title of a mark that has no room for it. */
-export function visitSentence(history: AgendaGuestHistory): string {
-  if (history.isFirstTime) {
-    return "Eerste bezoek — leg het concept even uit.";
+export function reservationSentence(history: AgendaGuestHistory): string {
+  if (history.isFirstReservation) {
+    return "Eerste reservering.";
   }
-  const parts = [`${visitOrdinal(history)} bezoek`];
-  if (isIsoDate(history.lastVisit)) {
-    parts.push(`laatst hier op ${NL_DATE.format(at(history.lastVisit))}`);
+  const parts = [`${reservationOrdinal(history)} reservering`];
+  if (isIsoDate(history.lastReservation)) {
+    parts.push(`vorige was op ${NL_DATE.format(at(history.lastReservation))}`);
   }
   // Two people can share a telephone number and a household often does, so a
   // match on the number is worth flagging as the softer kind of certainty.
@@ -344,10 +350,10 @@ export function visitSentence(history: AgendaGuestHistory): string {
   return `${parts.join(" · ")}.`;
 }
 
-/** First-timers among these tables, cancellations left out. */
-export function firstTimersOf(rows: AgendaReservation[]): number {
+/** Tables booking here for the first time, cancellations left out. */
+export function firstReservationsOf(rows: AgendaReservation[]): number {
   return rows.filter(
-    (r) => r.status !== "geannuleerd" && r.history?.isFirstTime,
+    (r) => r.status !== "geannuleerd" && r.history?.isFirstReservation,
   ).length;
 }
 
@@ -369,18 +375,18 @@ export function GuestMark({
   // The compact form is deliberately the same "1e/4e" for both states: the
   // number *is* the answer, and a week column has room for nothing else.
   const label = compact
-    ? visitOrdinal(history)
-    : history.isFirstTime
-      ? "Eerste bezoek"
-      : `${visitOrdinal(history)} bezoek`;
+    ? reservationOrdinal(history)
+    : history.isFirstReservation
+      ? "Eerste reservering"
+      : `${reservationOrdinal(history)} reservering`;
 
   return (
     <span
       className={[
         styles.guest,
-        history.isFirstTime ? styles.guestFirst : styles.guestReturning,
+        history.isFirstReservation ? styles.guestFirst : styles.guestReturning,
       ].join(" ")}
-      title={visitSentence(history)}
+      title={reservationSentence(history)}
     >
       {label}
     </span>
@@ -441,7 +447,7 @@ export function DayBand({
       <a
         className={className}
         href={`${admin}/collections/opening-exceptions/${day.exceptionId}`}
-        title={day.note ? `${day.note} — afwijkende dag openen` : "Afwijkende dag openen"}
+        title={day.note ? `${day.note} · afwijkende dag openen` : "Afwijkende dag openen"}
       >
         <span className={styles.bandLabel}>{label}</span>
         {day.note && !compact ? (
@@ -533,7 +539,7 @@ export function ReservationLine({
         .join(" ")}
       href={`${admin}/collections/reservations/${reservation.id}`}
     >
-      <span className={styles.resTime}>{reservation.time || "—"}</span>
+      <span className={styles.resTime}>{reservation.time || "?"}</span>
       {/* Name and mark are wrapped together so the mark stays *against* the
           name however long it is — a badge that floats off at the right edge
           of a wide panel stops being something about this guest — while the
@@ -597,7 +603,7 @@ export function AgendaDay({ date, from, to, today }: AgendaModeProps) {
   const events = byTime(data.events.filter((e) => e.date === date));
   const covers = coversOf(reservations);
   const booked = reservations.filter((r) => r.status !== "geannuleerd");
-  const firstTimers = firstTimersOf(reservations);
+  const firstReservations = firstReservationsOf(reservations);
 
   return (
     <div className={styles.day}>
@@ -619,11 +625,11 @@ export function AgendaDay({ date, from, to, today }: AgendaModeProps) {
               {booked.length} {booked.length === 1 ? "tafel" : "tafels"} · {covers}{" "}
               {covers === 1 ? "gast" : "gasten"}
             </span>
-            {firstTimers > 0 ? (
+            {firstReservations > 0 ? (
               <span className={styles.panelFirst}>
-                {firstTimers === 1
-                  ? "1 tafel voor het eerst hier"
-                  : `${firstTimers} tafels voor het eerst hier`}
+                {firstReservations === 1
+                  ? "1 eerste reservering"
+                  : `${firstReservations} eerste reserveringen`}
               </span>
             ) : null}
           </h3>
@@ -634,13 +640,14 @@ export function AgendaDay({ date, from, to, today }: AgendaModeProps) {
               {reservations.map((r) => (
                 <li key={r.id}>
                   <ReservationLine reservation={r} />
-                  {/* The one line that turns the mark into an instruction. It
-                      is spelled out here and nowhere else, because the day view
-                      is the one they read standing up, ten minutes before the
-                      first table sits down. */}
-                  {r.history?.isFirstTime && r.status !== "geannuleerd" ? (
+                  {/* The mark beside the name is two words wide; this is the
+                      same fact with room to be read, because the day view is
+                      the one they read standing up, ten minutes before the
+                      first table sits down. It says what the calendar knows and
+                      nothing about what to do with it. */}
+                  {r.history?.isFirstReservation && r.status !== "geannuleerd" ? (
                     <p className={styles.resHint}>
-                      Voor het eerst hier — leg het concept even uit.
+                      Heeft niet eerder gereserveerd.
                     </p>
                   ) : null}
                   {r.notes ? <p className={styles.resNotes}>{r.notes}</p> : null}

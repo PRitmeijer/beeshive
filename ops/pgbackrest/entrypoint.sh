@@ -28,7 +28,7 @@ for var in PGBACKREST_REPO1_S3_BUCKET PGBACKREST_REPO1_S3_ENDPOINT \
            PGBACKREST_REPO1_CIPHER_PASS; do
   eval "value=\${$var:-}"
   if [ -z "$value" ]; then
-    log "$var is not set — refusing to start. No backups are being taken."
+    log "$var is not set. Refusing to start. No backups are being taken."
     exit 1
   fi
 done
@@ -48,7 +48,7 @@ pgbackrest --stanza="$STANZA" stanza-create
 if pgbackrest --stanza="$STANZA" check; then
   log "check passed"
 else
-  log "check FAILED — see /var/log/pgbackrest, backups will still be attempted"
+  log "check FAILED: see /var/log/pgbackrest, backups will still be attempted"
 fi
 
 log "scheduled for ${BACKUP_HOUR}:${BACKUP_MINUTE} daily, full backup on day ${FULL_BACKUP_DOW}"

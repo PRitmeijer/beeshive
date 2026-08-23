@@ -48,8 +48,6 @@ export interface GuestResponseRow {
   name?: string | null;
   dietary?: string | null;
   drinks?: string | null;
-  /** Whatever this companion wanted to add in their own words. */
-  note?: string | null;
   addedAt?: string | null;
 }
 
@@ -93,8 +91,6 @@ export interface GuestResponseView {
   name: string;
   dietary: string[];
   drinks: string[];
-  /** Their own remark, trimmed and capped, or "" when they wrote none. */
-  note: string;
 }
 
 /** A whole reservation, as the browser is allowed to see it. */
@@ -135,8 +131,6 @@ export const GUEST_RESPONSE_LIMITS = {
   /** Per picked label, and how many labels one person may pick. */
   label: 60,
   picks: 12,
-  /** The remark. Matches `guestResponses[].note`'s own maxLength. */
-  note: 300,
 } as const;
 
 /**
@@ -279,22 +273,6 @@ function asStatus(value: unknown): GuestPassStatus {
  *   createdAt, updatedAt — of no interest to a guest, and updatedAt would leak
  *                  when the owners last touched the row.
  *   guestResponses[].addedAt — nobody needs to know who answered last.
- *   guestResponses[].note    — LET THROUGH, and worth saying why, because it
- *                  is the first free text on this list that is not dropped.
- *                  A companion's remark is written into a box that sits on
- *                  this very page, directly above the list it appears in, and
- *                  showing it back to the party is the entire point of asking
- *                  for it: "ik kom een half uur later" is of no use to anyone
- *                  if only the kitchen reads it. The obvious danger — someone
- *                  typing a phone number into a page that lives in a group
- *                  chat — is handled where the words are written rather than
- *                  here: /api/guest-pass refuses a remark containing a
- *                  telephone number or an e-mail address and says so, so the
- *                  guest keeps their own words instead of watching them come
- *                  back quietly mangled. Text the owners type into the row by
- *                  hand in the admin does not pass that door, and does not
- *                  need to: they are the house, correcting a typo on their own
- *                  guest list.
  *   guestResponses[].id      — Payload's row key, and no kind of secret: it is
  *                  a BSON ObjectID whose trailing counter simply increments,
  *                  so three answers to the same table are three consecutive
@@ -320,7 +298,6 @@ export function redactForGuests(doc: ReservationDoc): GuestPassView {
         name: firstNameOf(row.name),
         dietary: splitList(row.dietary),
         drinks: splitList(row.drinks),
-        note: noteText(row.note, GUEST_RESPONSE_LIMITS.note),
       }))
       // A row with no name left after redaction is a row the owners emptied
       // by hand in the admin. Showing a blank line would only look broken.

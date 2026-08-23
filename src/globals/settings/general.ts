@@ -31,8 +31,8 @@ export const generalTab: Tab = {
         description:
           "Komma-gescheiden, bijvoorbeeld: eetcafé Utrecht, lunch Zuilen, borrel. " +
           "Google negeert deze tag sinds 2009 en gebruikt hem niet voor de " +
-          "ranking — de Beschrijving hierboven en de tekst op de pagina's " +
-          "doen dat werk wel.",
+          "ranking. Dat werk doen de Beschrijving hierboven en de tekst op " +
+          "de pagina's wel.",
       },
     },
     {

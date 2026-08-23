@@ -61,17 +61,27 @@ const dayOf = (value?: string | null) => (value ? String(value).slice(0, 10) : "
 /**
  * The one sentence the notification mail carries about the guest themselves.
  *
- * Every failure mode gets its own wording rather than being folded into "eerste
- * bezoek", because that sentence is acted on: somebody walks to the table and
- * starts explaining the place. "We could not look it up" and "there is nothing
- * to look up" both have to survive the trip to the inbox as themselves, or the
- * mail quietly turns a doubt into an instruction.
+ * It counts reservations and says so, which is narrower than it looks and
+ * deliberately so. What the guest book can prove is that this address or this
+ * number booked a table before; whether anybody sat at it, and whether these
+ * same people walked in on a Tuesday without booking at all, it has no idea.
+ * So the line no longer claims a first visit — plenty of first-time bookers
+ * have been at the bar for years — and leaves the owners to draw their own
+ * conclusion from a number that is actually true.
+ *
+ * Every failure mode still gets its own wording rather than being folded into
+ * "nee", because this sentence is acted on. "We could not look it up" and
+ * "there is nothing to look up" both have to survive the trip to the inbox as
+ * themselves, or the mail quietly turns a doubt into a fact.
  *
  * The date is left as a plain YYYY-MM-DD to match the `Datum:` line three rows
  * above it; the sidebar badge in the admin is where it is spelled out in Dutch,
  * because that is read rather than scanned.
  */
-async function visitLine(doc: Reservation, payload: Payload): Promise<string> {
+async function reservationLine(
+  doc: Reservation,
+  payload: Payload,
+): Promise<string> {
   if (!doc.email?.trim() && !doc.phone?.trim()) {
     return "niet na te gaan, er staat geen e-mailadres en geen telefoonnummer bij";
   }
@@ -80,13 +90,19 @@ async function visitLine(doc: Reservation, payload: Payload): Promise<string> {
       { id: doc.id, email: doc.email, phone: doc.phone, date: doc.date },
       payload,
     );
-    if (history.isFirstTime) {
-      return "nee, dit is de eerste keer - leg het concept even uit";
+    if (history.isFirstReservation) {
+      return "nee";
     }
-    const before = history.lastVisit ? `, de vorige keer was ${history.lastVisit}` : "";
+    const count =
+      history.priorReservations === 1
+        ? "1 eerdere reservering"
+        : `${history.priorReservations} eerdere reserveringen`;
+    const before = history.lastReservation
+      ? `, de laatste op ${history.lastReservation}`
+      : "";
     const how =
       history.matchedOn === "phone" ? " (herkend aan het telefoonnummer)" : "";
-    return `ja, dit wordt bezoek ${history.priorVisits + 1}${before}${how}`;
+    return `ja, ${count}${before}${how}`;
   } catch (error) {
     // Never worth losing the whole notification over. The booking is the point
     // of this mail; the greeting is a courtesy on top of it.
@@ -157,7 +173,7 @@ export const Reservations: CollectionConfig = {
             // The owners read this mail long before they open the admin, and
             // on a busy evening they may never open it at all — so the one
             // thing the sidebar badge exists to tell them is said here too.
-            `Eerder hier: ${await visitLine(doc, payload)}`,
+            `Eerder gereserveerd: ${await reservationLine(doc, payload)}`,
             "",
             "Opmerkingen:",
             doc.notes || "-",
@@ -366,21 +382,15 @@ export const Reservations: CollectionConfig = {
           label: "Drinken",
           type: "text",
         },
-        {
-          name: "note",
-          label: "Opmerking",
-          type: "textarea",
-          maxLength: 300,
-          admin: {
-            description:
-              "Wat deze persoon zelf nog kwijt wilde. Wordt door de gast ingevuld op de gastenpagina, net als de rest van deze regel.",
-          },
-        },
       ],
     },
     {
       /**
-       * "Eerste bezoek" or "Welkom terug", at the top of the sidebar.
+       * "Eerste reservering" or "4e reservering", at the top of the sidebar.
+       *
+       * Reservering rather than bezoek because that is all the database can
+       * honestly claim: somebody who walked in on a Tuesday without ringing has
+       * been here and no row records it.
        *
        * A `ui` field stores nothing and adds no column: it is a place to hang a
        * component, and everything it shows is worked out at render time from

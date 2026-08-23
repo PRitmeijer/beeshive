@@ -233,9 +233,10 @@ export function AgendaView({ initPageResult, params, searchParams }: AdminViewPr
         <p className={styles.legend}>
           Klik op de openingstijden van een dag om die dag te sluiten of aan te
           passen, op een reservering om de aanvraag te openen, en op een
-          evenement om het te bewerken. Achter een naam staat het hoeveelste
-          bezoek het is: <strong>Eerste bezoek</strong> (in de week alleen{" "}
-          <strong>1e</strong>) betekent dat deze gast hier nog nooit is geweest.
+          evenement om het te bewerken. Achter een naam staat de hoeveelste
+          reservering het is: <strong>Eerste reservering</strong> (in de week
+          alleen <strong>1e</strong>) betekent dat deze gast niet eerder heeft
+          gereserveerd. Zonder reservering langsgeweest zijn zien we niet.
         </p>
       </Gutter>
     </DefaultTemplate>

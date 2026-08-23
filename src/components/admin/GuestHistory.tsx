@@ -1,14 +1,26 @@
 import React from "react";
 import type { Payload, UIFieldServerProps } from "payload";
-import { historyFor, type GuestVisitHistory, type HistorySubject } from "@/lib/guestHistory";
+import {
+  historyFor,
+  type GuestReservationHistory,
+  type HistorySubject,
+} from "@/lib/guestHistory";
 
 /**
- * "Eerste bezoek" or "Welkom terug", in the sidebar of a reservation.
+ * "Eerste reservering" or "4e reservering", in the sidebar of a reservation.
  *
  * This is the one line the owners read before they walk to the door. Its whole
  * job is to be true at a glance: colour and shape carry the answer, the words
  * underneath carry the detail, and nowhere does it round a doubt off into a
  * confident sentence.
+ *
+ * Which is why it counts reserveringen and says so. The database knows about
+ * bookings and about nothing else, so a guest who walked in on a Tuesday
+ * without ringing first is a stranger to it; "eerste bezoek" would be a claim
+ * about the evening rather than about the row, and it is the claim that gets
+ * said out loud to somebody who was here last month. The panel states the
+ * count and stops there — what to do with it is the owners' trade, not the
+ * calendar's.
  *
  * It is a **server** component, which is the important decision in this file.
  * Payload 3.10 renders `admin.components.Field` on the server while it builds
@@ -56,14 +68,14 @@ type GuestHistoryProps = Pick<UIFieldServerProps, "data" | "id" | "payload">;
 /** The four things this can be looking at, which are four different statements. */
 type Verdict =
   | { kind: "first" }
-  | { kind: "returning"; history: GuestVisitHistory }
+  | { kind: "returning"; history: GuestReservationHistory }
   | { kind: "nothingToMatch" }
   | { kind: "unavailable" };
 
 export const GuestHistory = async ({ data, id, payload }: GuestHistoryProps) => {
   /**
    * A document that has not been saved yet has no history to have, and no id
-   * to exclude itself by. Rendering "eerste bezoek" here would be a guess
+   * to exclude itself by. Rendering "eerste reservering" here would be a guess
    * dressed as a fact — the owners are usually halfway through typing the
    * e-mail address at that point — so the sidebar simply stays quiet until
    * there is something to answer about.
@@ -86,8 +98,8 @@ export const GuestHistory = async ({ data, id, payload }: GuestHistoryProps) => 
         <Heading dot="var(--theme-elevation-400)">Niets om op te zoeken</Heading>
         <Line>
           Bij deze aanvraag staat geen e-mailadres en geen telefoonnummer, dus we
-          kunnen niet nagaan of deze gast hier eerder is geweest. Dat is iets
-          anders dan een eerste bezoek.
+          kunnen niet nagaan of deze gast eerder heeft gereserveerd. Dat is iets
+          anders dan een eerste reservering.
         </Line>
       </Panel>
     );
@@ -108,8 +120,15 @@ export const GuestHistory = async ({ data, id, payload }: GuestHistoryProps) => 
   if (verdict.kind === "first") {
     return (
       <Panel accent="var(--theme-warning-400)" tint="var(--theme-warning-50)">
-        <Heading dot="var(--theme-warning-400)">Eerste bezoek</Heading>
-        <Line>Leg het concept even uit.</Line>
+        <Heading dot="var(--theme-warning-400)">Eerste reservering</Heading>
+        {/*
+         * The caveat under it, because it is a fact about the lookup and not
+         * advice about the guest: we count bookings, and somebody can have sat
+         * here twice without ever making one.
+         */}
+        <Line muted>
+          Zonder reservering langsgeweest zijn kunnen we niet zien.
+        </Line>
       </Panel>
     );
   }
@@ -117,16 +136,22 @@ export const GuestHistory = async ({ data, id, payload }: GuestHistoryProps) => 
   const { history } = verdict;
 
   return (
+    /*
+     * "Welkom terug" used to head this box and has been dropped. It was warm
+     * and it was not an instruction, but the counter one line lower said the
+     * same thing in the same breath, and a heading that only repeats the line
+     * under it costs a line of a sidebar the owners read at a glance. The
+     * green wash carries the welcome now; the words carry the count.
+     */
     <Panel accent="var(--theme-success-500)" tint="var(--theme-success-50)">
-      <Heading dot="var(--theme-success-500)">Welkom terug</Heading>
-      <Line>
-        <strong>{history.priorVisits + 1}e bezoek.</strong>{" "}
-        {history.lastVisit
-          ? `De vorige keer was ${inDutch(history.lastVisit)}.`
-          : null}
-      </Line>
-      {history.firstVisit && history.priorVisits > 1 ? (
-        <Line muted>Komt hier sinds {inDutch(history.firstVisit)}.</Line>
+      <Heading dot="var(--theme-success-500)">
+        {history.priorReservations + 1}e reservering
+      </Heading>
+      {history.lastReservation ? (
+        <Line>De vorige was {inDutch(history.lastReservation)}.</Line>
+      ) : null}
+      {history.firstReservation && history.priorReservations > 1 ? (
+        <Line muted>Komt hier sinds {inDutch(history.firstReservation)}.</Line>
       ) : null}
       {history.matchedOn === "phone" ? (
         /*
@@ -163,9 +188,11 @@ async function decide(subject: HistorySubject, payload: Payload): Promise<Verdic
 
   try {
     const history = await historyFor(subject, payload);
-    return history.isFirstTime ? { kind: "first" } : { kind: "returning", history };
+    return history.isFirstReservation
+      ? { kind: "first" }
+      : { kind: "returning", history };
   } catch (error) {
-    // guestHistory throws rather than answering "eerste bezoek" out of an
+    // guestHistory throws rather than answering "eerste reservering" out of an
     // empty result set, precisely so this branch exists and can say that it
     // does not know.
     console.error("guest history lookup failed", error);
@@ -178,9 +205,9 @@ async function decide(subject: HistorySubject, payload: Payload): Promise<Verdic
 /**
  * The box. A tinted background and a thick edge down one side, so which of the
  * three states this is can be read from across the room and without reading:
- * amber and demanding attention for a guest who needs the introduction, blue
- * and settled for one who does not, grey for the two cases where the honest
- * answer is that we do not know.
+ * amber for a guest booking here for the first time, green and settled for one
+ * who has booked before, grey for the two cases where the honest answer is that
+ * we do not know.
  */
 const Panel: React.FC<{
   accent: string;

@@ -221,7 +221,7 @@ function dutchify(field: Field): Field {
       admin: {
         ...field.admin,
         description:
-          "De foto die verschijnt als iemand deze pagina deelt op WhatsApp, Facebook of LinkedIn. Eén foto voor beide talen — je hoeft hem niet apart in het Engels te kiezen. Liefst liggend; hij wordt automatisch bijgesneden naar 1200 bij 630 pixels.",
+          "De foto die verschijnt als iemand deze pagina deelt op WhatsApp, Facebook of LinkedIn. Eén foto voor beide talen. Je hoeft hem niet apart in het Engels te kiezen. Liefst liggend; hij wordt automatisch bijgesneden naar 1200 bij 630 pixels.",
       },
     };
   }

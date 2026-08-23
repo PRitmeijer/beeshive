@@ -113,7 +113,7 @@ export const CopyToLocale: React.FC = () => {
         const filled = data.filled?.length ?? 0;
         if (filled === 0) {
           toast.info(
-            "Er was niets over te nemen — alle velden waren hier al ingevuld.",
+            "Er was niets over te nemen: alle velden waren hier al ingevuld.",
           );
           setBusy(false);
           return;
@@ -154,7 +154,7 @@ export const CopyToLocale: React.FC = () => {
       <h4 style={{ margin: "0 0 0.25rem" }}>Vertalingen</h4>
       <p style={{ margin: "0 0 0.75rem", color: "var(--theme-elevation-600)" }}>
         Je bewerkt nu de <strong>{targetLabel}</strong> versie. Teksten worden per
-        taal apart bewaard — foto&apos;s, datums en vinkjes niet, die gelden voor
+        taal apart bewaard. Foto&apos;s, datums en vinkjes niet, die gelden voor
         allebei. Sla je eigen wijzigingen eerst op: hieronder klikken laadt de
         pagina opnieuw.
       </p>

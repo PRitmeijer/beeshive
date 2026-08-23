@@ -144,8 +144,8 @@ canary_code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 25 "${ORIGIN}${
 if [ "$canary_code" = "000" ]; then
   canary_ok=no
   log "ALARM: ${CANARY} did not answer within 25s."
-  log "The pages below will still say 200 — they are prerendered — but Payload"
-  log "is not reaching the database. The usual cause is a 'dev' row in"
+  log "The pages below will still say 200 because they are prerendered, but"
+  log "Payload is not reaching the database. The usual cause is a 'dev' row in"
   log "payload_migrations left behind by a script run outside production, which"
   log "makes Payload stop on an interactive prompt that nothing can answer."
   log "ops/preflight.mjs refuses to start the server when that row is there, so"

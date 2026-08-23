@@ -4,14 +4,22 @@ import { todayInAmsterdam } from "@/lib/openingHours";
 /**
  * "Hebben wij elkaar al eens gezien?"
  *
- * A first-timer walks in not knowing that the kitchen is small, that the menu
- * changes, that you order at the bar — the whole concept has to be explained
- * once, warmly, at the door. A regular who gets that same explanation for the
- * fourth time is being told, politely, that nobody remembered them. Both of
- * those are decided in the two seconds between the door opening and the first
- * sentence, so the answer has to already be on the screen the owners are
- * looking at. That is all this module does: it takes a booking and says how
- * many times this person has been here before.
+ * A guest who has never sat down here does not know that the kitchen is small,
+ * that the menu changes, that you order at the bar — the whole concept has to
+ * be explained once, warmly, at the door. A regular who gets that same
+ * explanation for the fourth time is being told, politely, that nobody
+ * remembered them. Both of those are decided in the two seconds between the
+ * door opening and the first sentence, so the answer has to already be on the
+ * screen the owners are looking at.
+ *
+ * What this module can answer is narrower than the question, and the whole
+ * feature rests on that difference: it counts bookings, and a booking is the
+ * only thing it can see. Somebody who walked in on a quiet Tuesday and took
+ * the corner table without ringing first has been here and this database has
+ * never heard of them, so every number below is a floor and never a total.
+ * Which is why nothing built on it may say "bezoek": "reservering" is the word
+ * that is exactly true, and the names in here are chosen so that the wrong one
+ * cannot drift back into the interface a year from now.
  *
  * The uncomfortable part, stated plainly. To answer that question at all, this
  * reads across every reservation anybody has ever made and compares e-mail
@@ -42,14 +50,14 @@ import { todayInAmsterdam } from "@/lib/openingHours";
  * that same function with a list of one.
  */
 
-export interface GuestVisitHistory {
+export interface GuestReservationHistory {
   /** How many earlier bookings this person has, not counting this one or any cancelled. */
-  priorVisits: number;
-  /** True when priorVisits is 0 — spelled out so no caller has to remember the convention. */
-  isFirstTime: boolean;
-  /** YYYY-MM-DD of the earliest and the most recent earlier visit, or null. */
-  firstVisit: string | null;
-  lastVisit: string | null;
+  priorReservations: number;
+  /** True when priorReservations is 0 — spelled out so no caller has to remember the convention. */
+  isFirstReservation: boolean;
+  /** YYYY-MM-DD of the earliest and the most recent earlier booking, or null. */
+  firstReservation: string | null;
+  lastReservation: string | null;
   /** What the match was made on, for the admin to show: "e-mailadres" | "telefoonnummer" | null. */
   matchedOn: "email" | "phone" | null;
 }
@@ -68,8 +76,8 @@ export interface HistorySubject {
  * The rows are tiny — four columns, no relations — and this café will not see
  * five thousand bookings for years, so in practice the cap never bites. When
  * it does, the query is sorted newest first, so what falls off the end is the
- * oldest history: the count comes out too low and `firstVisit` reads later
- * than the truth. A guest whose every visit is older than the cap will be
+ * oldest history: the count comes out too low and `firstReservation` reads later
+ * than the truth. A guest whose every booking is older than the cap will be
  * greeted as new, which is the one wrong answer this whole module exists to
  * prevent — and it is still the right trade. An admin page that takes six
  * seconds to open is a page the owners stop opening, and a badge nobody looks
@@ -148,11 +156,11 @@ function phoneKey(value?: string | null): string | null {
 }
 
 /** The answer for somebody we have never seen, and for somebody we cannot look up. */
-const NEVER_SEEN: GuestVisitHistory = {
-  priorVisits: 0,
-  isFirstTime: true,
-  firstVisit: null,
-  lastVisit: null,
+const NEVER_SEEN: GuestReservationHistory = {
+  priorReservations: 0,
+  isFirstReservation: true,
+  firstReservation: null,
+  lastReservation: null,
   matchedOn: null,
 };
 
@@ -172,7 +180,7 @@ interface HistoryRow {
 export async function historyFor(
   subject: HistorySubject,
   payload: Payload,
-): Promise<GuestVisitHistory> {
+): Promise<GuestReservationHistory> {
   const all = await historyForMany([subject], payload);
   return all.get(subject.id) ?? NEVER_SEEN;
 }
@@ -195,8 +203,9 @@ export async function historyFor(
  *
  * A database that will not answer throws, and that is on purpose. Every other
  * field in this result would be a plausible lie: an empty result set and a
- * failed query produce the same `priorVisits: 0`, and "eerste bezoek" is a
- * sentence somebody then says out loud to a guest of four years. capacity.ts
+ * failed query produce the same `priorReservations: 0`, and "eerste
+ * reservering" is a sentence somebody then says out loud to a guest of four
+ * years. capacity.ts
  * swallows its errors because an uncountable day reading as an empty one costs
  * a phone call; here the cheap failure is the caller catching this and saying
  * "niet op te zoeken", so let it.
@@ -204,8 +213,8 @@ export async function historyFor(
 export async function historyForMany(
   subjects: HistorySubject[],
   payload: Payload,
-): Promise<Map<string | number, GuestVisitHistory>> {
-  const answers = new Map<string | number, GuestVisitHistory>();
+): Promise<Map<string | number, GuestReservationHistory>> {
+  const answers = new Map<string | number, GuestReservationHistory>();
 
   /**
    * A booking with neither an address nor a number matches nothing, and must
@@ -248,14 +257,14 @@ export async function historyForMany(
     pagination: false,
     limit: MAX_ROWS,
     // Newest first, so the cap sheds the oldest history rather than the most
-    // recent — the visits a guest standing at the door is most likely to be
-    // remembered by.
+    // recent — the evenings a guest standing at the door is most likely to
+    // be remembered by.
     sort: "-date",
     where: {
       and: [
         { date: { less_than_equal: `${newestDay}T23:59:59.999Z` } },
         /**
-         * A cancelled table is not a visit; those are the seats given back,
+         * A cancelled table was never sat at; those are the seats given back,
          * and the same reasoning as in capacity.ts applies.
          *
          * The three that remain — "nieuw", "gebeld", "bevestigd" — are all
@@ -297,9 +306,9 @@ export async function historyForMany(
      * to find out what to say when these people walk in, and on that evening
      * only the evenings before it exist.
      *
-     * Strictly earlier, so a second table on the same day is the same visit
-     * and not a second one. And a row can never be its own history, which
-     * matters as soon as two subjects on the same screen are the same guest.
+     * Strictly earlier, so two tables booked for the same day count once and
+     * not twice. And a row can never be its own history, which matters as soon
+     * as two subjects on the same screen are the same guest.
      */
     const earlier = (row: HistoryRow) => {
       const day = dayOf(row.date);
@@ -322,26 +331,30 @@ export async function historyForMany(
      * that is plainly wrong, and the first thing they need is what the admin
      * thought made these two rows one person.
      */
-    let visits = entry.email ? (byEmail.get(entry.email) ?? []).filter(earlier) : [];
-    let matchedOn: GuestVisitHistory["matchedOn"] = visits.length ? "email" : null;
+    let earlierBookings = entry.email
+      ? (byEmail.get(entry.email) ?? []).filter(earlier)
+      : [];
+    let matchedOn: GuestReservationHistory["matchedOn"] = earlierBookings.length
+      ? "email"
+      : null;
 
-    if (!visits.length && entry.phone) {
-      visits = (byPhone.get(entry.phone) ?? []).filter(earlier);
-      matchedOn = visits.length ? "phone" : null;
+    if (!earlierBookings.length && entry.phone) {
+      earlierBookings = (byPhone.get(entry.phone) ?? []).filter(earlier);
+      matchedOn = earlierBookings.length ? "phone" : null;
     }
 
-    if (!visits.length) continue;
+    if (!earlierBookings.length) continue;
 
-    const days = visits
+    const days = earlierBookings
       .map((row) => dayOf(row.date))
       .filter((day): day is string => day !== null)
       .sort();
 
     answers.set(entry.subject.id, {
-      priorVisits: visits.length,
-      isFirstTime: false,
-      firstVisit: days[0] ?? null,
-      lastVisit: days[days.length - 1] ?? null,
+      priorReservations: earlierBookings.length,
+      isFirstReservation: false,
+      firstReservation: days[0] ?? null,
+      lastReservation: days[days.length - 1] ?? null,
       matchedOn,
     });
   }
