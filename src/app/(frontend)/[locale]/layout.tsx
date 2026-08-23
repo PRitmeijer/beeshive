@@ -6,6 +6,7 @@ import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
 import { MobileReserveButton } from "@/components/MobileReserveButton";
 import { NotificationBanner } from "@/components/NotificationBanner";
+import { MotionProvider } from "@/components/motion";
 import { PaperDefs } from "@/components/Sheet";
 import { getSiteSettings } from "@/lib/payload";
 import { locales, parseLocale } from "@/i18n/config";
@@ -136,30 +137,38 @@ export default async function FrontendLayout({
           } as React.CSSProperties
         }
       >
-        <PaperDefs />
-        <NotificationBanner locale={locale} />
-        <Navigation
-          locale={locale}
-          reservationUrl={s.reservationUrl || undefined}
-          siteName={s.siteName}
-        />
-        <main className="flex-1">{children}</main>
-        <Footer locale={locale} />
-        <MobileReserveButton
-          locale={locale}
-          reservationUrl={s.reservationUrl || undefined}
-          openingHours={s.openingHours}
-        />
-        <div className="paper-ground" aria-hidden="true" />
-        {/* Owned by another agent; everything it needs is decided here, in
-            Site Instellingen, and it renders nothing at all until the owners
-            have switched measuring on and pasted a website id. */}
-        <Analytics
-          enabled={s.umamiEnabled}
-          scriptUrl={s.umamiScriptUrl}
-          websiteId={s.umamiWebsiteId}
-          doNotTrack={s.umamiDoNotTrackAdmin}
-        />
+        {/* Every animated element on the site is an `m.*`, which is the
+            framer-motion renderer without any of its features attached; this
+            is where the features it is allowed to have are decided, once, for
+            all of them. See src/components/motion.tsx for what that buys and
+            what it costs to get wrong. It renders no markup, so the flex
+            column below begins at <PaperDefs> exactly as it did. */}
+        <MotionProvider>
+          <PaperDefs />
+          <NotificationBanner locale={locale} />
+          <Navigation
+            locale={locale}
+            reservationUrl={s.reservationUrl || undefined}
+            siteName={s.siteName}
+          />
+          <main className="flex-1">{children}</main>
+          <Footer locale={locale} />
+          <MobileReserveButton
+            locale={locale}
+            reservationUrl={s.reservationUrl || undefined}
+            openingHours={s.openingHours}
+          />
+          <div className="paper-ground" aria-hidden="true" />
+          {/* Owned by another agent; everything it needs is decided here, in
+              Site Instellingen, and it renders nothing at all until the owners
+              have switched measuring on and pasted a website id. */}
+          <Analytics
+            enabled={s.umamiEnabled}
+            scriptUrl={s.umamiScriptUrl}
+            websiteId={s.umamiWebsiteId}
+            doNotTrack={s.umamiDoNotTrackAdmin}
+          />
+        </MotionProvider>
       </body>
     </html>
   );

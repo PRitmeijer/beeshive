@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
+import { m, useReducedMotion, useScroll, useTransform } from "@/components/motion";
 import { BeeGlyph } from "@/components/BeeGlyph";
 import { localeHref, type Locale } from "@/i18n/config";
 
@@ -107,7 +107,7 @@ export function Masthead({
     // to know its width is to measure it, which would mean a first paint with
     // the wrong number in it. The steps are chosen so that "De Bee's Hive" at
     // that size still clears the edges of the narrowest phone in each band.
-    <motion.div
+    <m.div
       style={hero ? ({ "--mh-s": s } as React.CSSProperties) : undefined}
       className={`masthead-lockup relative z-50 [--mh-pad:1.5rem] transition-opacity duration-300 ease-settle md:[--mh-pad:3rem] ${
         away ? "pointer-events-none opacity-0" : "opacity-100"
@@ -126,6 +126,6 @@ export function Masthead({
           {siteName}
         </span>
       </Link>
-    </motion.div>
+    </m.div>
   );
 }

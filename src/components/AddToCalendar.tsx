@@ -1,3 +1,4 @@
+import { AddToCalendarTracker } from "@/components/AddToCalendarTracker";
 import { getDict } from "@/i18n/dictionaries";
 import { defaultLocale, type Locale } from "@/i18n/config";
 import { googleCalendarUrl, outlookCalendarUrl, type IcsEvent } from "@/lib/ics";
@@ -26,6 +27,11 @@ import { googleCalendarUrl, outlookCalendarUrl, type IcsEvent } from "@/lib/ics"
  * them hand to the calendar app — which is also why there is no `download`
  * attribute here: the header does that job, and on the phones that matter the
  * attribute is ignored anyway.
+ *
+ * Having no handlers does not mean having no measurement. <AddToCalendarTracker>
+ * is a few lines of client component wrapped around these links that hears
+ * their clicks as they bubble past, so `add_to_calendar` is reported from here
+ * too without @/lib/ics following it into the browser.
  */
 
 interface AddToCalendarProps {
@@ -72,15 +78,22 @@ export function AddToCalendar({
 }: AddToCalendarProps) {
   const t = getDict(locale).guestPass;
 
+  // The keys are also what the click is reported as, which is why the fourth
+  // is `ics` and not `download`: the event page has been sending those five
+  // words to Umami since before this control existed, and one vocabulary read
+  // across two pages is worth more than a key that matches its own label.
   const options = [
     { key: "apple", label: t.calendar.apple, href: icsHref },
     { key: "google", label: t.calendar.google, href: googleCalendarUrl(event) },
     { key: "outlook", label: t.calendar.outlook, href: outlookCalendarUrl(event) },
-    { key: "download", label: t.calendar.download, href: icsHref },
+    { key: "ics", label: t.calendar.download, href: icsHref },
   ];
 
   return (
-    <div className={className}>
+    // The guest pass is the only page that offers this control, so it names
+    // itself here rather than through a prop nobody would ever pass twice;
+    // when a second page wants one, that is the moment to lift it.
+    <AddToCalendarTracker source="guest-pass" className={className}>
       <h2 className="label flex items-center gap-2">
         <CalendarMark />
         {t.addToCalendar}
@@ -91,6 +104,7 @@ export function AddToCalendar({
           <li key={option.key}>
             <a
               href={option.href}
+              data-calendar-target={option.key}
               // The two external ones open a booking screen on someone else's
               // site; a new tab keeps this page where the guest left it.
               target={option.href === icsHref ? undefined : "_blank"}
@@ -105,6 +119,6 @@ export function AddToCalendar({
           </li>
         ))}
       </ul>
-    </div>
+    </AddToCalendarTracker>
   );
 }

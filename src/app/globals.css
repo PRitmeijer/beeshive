@@ -553,32 +553,62 @@
   transform: none;
 }
 
-/* The hero subtitle, which is the front page's Largest Contentful Paint
-   element: the biggest block of text above the fold, and the thing Chrome
-   times the page by.
+/* The hero's opening fade, for everything on the sheet that only fades in.
 
-   It was a framer-motion element starting at `opacity: 0`, so the server sent
-   the sentence invisible and it could not paint until 114 KB of animation
-   library had downloaded, parsed and hydrated. The paint of the page's main
-   sentence was gated on JavaScript that has nothing to say about it.
+   Every line of it used to be a framer-motion element starting at
+   `opacity: 0`, which means the server sent the whole hero invisible and none
+   of it could paint until 114 KB of animation library had downloaded, parsed
+   and hydrated. Chrome timed the page by the last thing to arrive that way —
+   first the subtitle, then, once that was moved here, the captions on the
+   stamp strip, which is the largest thing above the fold on a phone and was
+   sitting behind a deliberate half-second delay on top of the wait.
 
-   Same 18px of travel, same settle, same 0.35s stagger behind the rule and
-   the opening-hours line — declared here instead, so the browser runs it off
-   the stylesheet it already has and the sentence lands roughly two seconds
-   earlier on a phone. `both` holds the from-state before the delay elapses
-   and the to-state after, which is what `initial`/`animate` did. */
+   Nothing in the hero needs JavaScript to fade: the travel is a fixed
+   distance, the timing is a fixed stagger, and neither depends on anything
+   the browser only learns at runtime. Declared here, the browser runs it off
+   the stylesheet it already has and the sheet is legible in the first paint.
+   `both` holds the from-state before the delay elapses and the to-state
+   after, which is what `initial`/`animate` did.
+
+   The travel and the stagger arrive as custom properties, as `.reveal`'s do
+   above, because they are the only part that varies from line to line — the
+   rule and the opening-hours line have nowhere to travel from and set the
+   distance to zero, the strip and the buttons come up from below. */
 .hero-rise {
-  animation: hero-rise 1s var(--ease-settle) 0.35s both;
+  animation: hero-rise var(--rise-duration, 1s) var(--ease-settle)
+    var(--rise-delay, 0.35s) both;
 }
 
 @keyframes hero-rise {
   from {
     opacity: 0;
-    transform: translate3d(0, 18px, 0);
+    transform: translate3d(0, var(--rise-travel, 18px), 0);
   }
   to {
     opacity: 1;
     transform: none;
+  }
+}
+
+/* The scroll cue at the foot of the hero, breathing.
+
+   The only animation on the site that never ends, which is exactly why it
+   does not belong in JavaScript: as a motion value it was a callback on
+   every animation frame for the whole time the landing page was open, to
+   move one glyph eight pixels. Off the stylesheet it is a compositor
+   animation and the main thread is not involved at all. The reduced-motion
+   block below collapses it along with everything else. */
+.scroll-nudge {
+  animation: scroll-nudge 3.4s ease-in-out infinite;
+}
+
+@keyframes scroll-nudge {
+  0%,
+  100% {
+    transform: none;
+  }
+  50% {
+    transform: translate3d(0, 8px, 0);
   }
 }
 
@@ -623,8 +653,8 @@
   }
 
   /* The reduced-motion block above collapses animation-duration but not
-     animation-delay, and a 0.35s delay on a zero-length animation is 0.35s of
-     an invisible headline. Named explicitly so it simply starts there. */
+     animation-delay, and a delay on a zero-length animation is that much of
+     an invisible hero. Named explicitly so it simply starts there. */
   .hero-rise {
     animation: none;
     opacity: 1;

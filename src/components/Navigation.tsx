@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Fragment, useState, useEffect } from "react";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { m, AnimatePresence, useReducedMotion } from "@/components/motion";
 import { TornEdge } from "@/components/TornEdge";
 import { Masthead, type MastheadVariant } from "@/components/Masthead";
 import { getDict } from "@/i18n/dictionaries";
@@ -265,17 +265,17 @@ export function Navigation({
           aria-label={t.nav.menuToggle}
           aria-expanded={isOpen}
         >
-          <motion.span
+          <m.span
             animate={isOpen ? { rotate: 45, y: 6 } : { rotate: 0, y: 0 }}
             transition={{ duration: 0.6, ease: SETTLE }}
             className="w-6 h-0.5 block bg-hive-700"
           />
-          <motion.span
+          <m.span
             animate={isOpen ? { opacity: 0 } : { opacity: 1 }}
             transition={{ duration: 0.6, ease: SETTLE }}
             className="w-6 h-0.5 block bg-hive-700"
           />
-          <motion.span
+          <m.span
             animate={isOpen ? { rotate: -45, y: -6 } : { rotate: 0, y: 0 }}
             transition={{ duration: 0.6, ease: SETTLE }}
             className="w-6 h-0.5 block bg-hive-700"
@@ -289,7 +289,7 @@ export function Navigation({
             the tear underneath the notification bar on a phone with a notch. */}
         <AnimatePresence>
           {isOpen && (
-            <motion.div
+            <m.div
               initial={reduce ? { opacity: 0 } : { opacity: 0, x: "100%" }}
               animate={{ opacity: 1, x: 0 }}
               exit={reduce ? { opacity: 0 } : { opacity: 0, x: "100%" }}
@@ -316,7 +316,7 @@ export function Navigation({
                       setIsOpen(false);
                     };
                     return (
-                      <motion.li
+                      <m.li
                         key={link.href}
                         initial={reduce ? false : { opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -361,12 +361,12 @@ export function Navigation({
                         <div
                           className={`rule-ink ${active ? "" : "opacity-45"}`}
                         />
-                      </motion.li>
+                      </m.li>
                     );
                   })}
                 </ul>
 
-                <motion.div
+                <m.div
                   initial={reduce ? false : { opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{
@@ -377,9 +377,9 @@ export function Navigation({
                   className="px-6 pb-24 pt-8"
                 >
                   <LanguageSwitch onNavigate={() => setIsOpen(false)} />
-                </motion.div>
+                </m.div>
               </div>
-            </motion.div>
+            </m.div>
           )}
         </AnimatePresence>
       </nav>

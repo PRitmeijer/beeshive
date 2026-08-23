@@ -2,6 +2,13 @@
 
 Eetcafé website built with **Next.js 15** and **Payload CMS 3** (self-hosted, PostgreSQL, media on Cloudflare R2).
 
+**Deploying, or moving the live site onto this stack? Read
+[`DEPLOY.md`](DEPLOY.md).** It is the runbook for the cutover from the old
+SQLite production, in the order the steps have to happen, and it covers the two
+things that are easy to get wrong and expensive to discover afterwards: the
+backup encryption passphrase, and the migration marker that makes a container
+come up healthy while serving nothing from the CMS.
+
 ## Features
 
 - **CMS Admin Panel** at `/admin`: manage blog posts, gallery, menu, notifications, and mailing list
@@ -18,9 +25,18 @@ Eetcafé website built with **Next.js 15** and **Payload CMS 3** (self-hosted, P
 ```bash
 cp .env.example .env
 npm install
-docker compose up -d postgres     # or any PostgreSQL you like
+docker run -d --name beeshive-pg -p 5433:5432 \
+  -e POSTGRES_USER=beeshive -e POSTGRES_PASSWORD=beeshive -e POSTGRES_DB=beeshive \
+  postgres:16-alpine
 npm run dev
 ```
+
+A plain container rather than `docker compose up -d postgres`, and the
+difference matters: the Postgres in `docker-compose.yml` belongs to the
+deployed stack, publishes no port at all, and is only reachable from inside
+that stack's own network. That is deliberate — see the comments there — and it
+means it cannot serve a `npm run dev` running on the host. Any PostgreSQL 16 on
+5433 will do; `DATABASE_URI` in `.env.example` already points at this one.
 
 Visit `http://localhost:3000` for the site, `http://localhost:3000/admin` for the CMS.
 
@@ -125,6 +141,27 @@ order, so an unused category never shows up as an empty button.
 A fresh install starts with none. Make a few before uploading photographs, or
 the category field has nothing to choose from.
 
+## Linting
+
+```bash
+npm run lint          # eslint .
+npm run lint:fix
+```
+
+`eslint.config.mjs` is flat config for ESLint 9, extending `next/core-web-vitals`
+through `FlatCompat` because `eslint-config-next` at 15.1 is still written in
+the old shareable shape. Before it existed, `next lint` dropped into its
+interactive *Strict / Base / Cancel* setup prompt — which hangs forever in a
+pipeline with no terminal — and `next build` printed "No ESLint configuration
+detected" and linted nothing at all.
+
+One rule is turned off, `@next/next/no-img-element`, with the reasoning written
+out in the config beside it: this site uses `next/image` nowhere on purpose,
+and every remaining `<img>` renders a photograph Payload has already re-encoded
+and Cloudflare is already serving. The generated files —
+`src/payload-types.ts` and `src/app/(payload)/admin/importMap.js` — are
+ignored, since a complaint about either is a complaint about a generator.
+
 ## Database schema and migrations
 
 The schema lives in `src/migrations/`, generated from the collections and the
@@ -143,6 +180,28 @@ In production the adapter is given `prodMigrations`, so Payload applies anything
 outstanding itself when it connects. Nothing has to be run by hand on deploy,
 and the container logs which migration it applied. That matters here because the
 image is a standalone Next build with no Payload CLI inside it.
+
+### The `dev` row, and the container that comes up healthy and serves nothing
+
+A push leaves a row named `dev`, batch `-1`, in `payload_migrations`, and
+**every one of the `npm run db:*` scripts pushes**, because none of them sets
+`NODE_ENV=production`. A production container that then connects to that
+database sees the row, decides it is being asked to migrate over a dev-pushed
+schema, and stops on an interactive prompt. There is no terminal in a
+container, so nothing answers it — and because Next has already bound the port
+by then, every prerendered page goes on answering `200` from the HTML built
+into the image while everything that needs the CMS hangs. `docker compose ps`
+says healthy throughout.
+
+```bash
+docker compose exec postgres psql -U beeshive -d beeshive -c \
+  "SELECT id, name, batch FROM payload_migrations ORDER BY id;"
+```
+
+If there is a `dev` row on a database whose schema came from `npm run migrate`,
+delete it. `DEPLOY.md` has the command and, more usefully, the reasoning about
+when deleting it is *not* safe. `ops/warm-up.sh` checks for the symptom on
+every container start and says so in the log.
 
 **Run `npm run dev` in a real terminal.** The dev push asks for confirmation
 whenever it spots a change it considers risky, and `prompts` treats a missing
@@ -178,23 +237,27 @@ volume, simply runs it.
 
 ## Moving from SQLite
 
-The site was on SQLite until this release. The move is two commands, both of
-which go through the Local API and therefore care about the collections rather
-than about the tables:
+The site was on SQLite until this release. The content crosses over through the
+Local API, so it follows the collections rather than the tables:
 
 ```bash
 npm run db:export -- content-export.json   # against the old database
 npm run db:import -- content-export.json   # against the new one
+npm run db:verify -- content-export.json   # prove it landed
 ```
 
 `scripts/README.md` has the details, including what happens to ids (they are
-remapped), to files (re-uploaded from `./media`) and to passwords (they cannot
-be imported; every account is listed at the end and has to be reset once).
+remapped), to files (re-uploaded from `MEDIA_IMPORT_DIR`) and to passwords
+(they cannot be imported; every account is listed at the end and has to be
+reset once).
 
-One leftover: `next.config.mjs` still carries an `outputFileTracingIncludes`
-entry for libsql, which was there so the SQLite driver's native binary reached
-the standalone build. Nothing loads it any more and it can be deleted once the
-`@payloadcms/db-sqlite` dependency goes with it.
+**[`DEPLOY.md`](DEPLOY.md) is the version of this with the order, the
+timings and the traps in it**, and is what to follow when you are actually
+doing it rather than reading about it. In particular, this branch can no longer
+read SQLite at all — `@payloadcms/db-sqlite` has been removed along with the
+eighteen megabytes of libsql it dragged into every image — so the export has to
+be run from the last commit that could. DEPLOY.md says which one and what to
+copy into it.
 
 ## Search-engine metadata
 
@@ -297,6 +360,38 @@ matter: `COPY . .` drops a dev-server build tree into the image and the
 production `next build` then runs on top of manifests that describe a different
 router. `npm run build` also clears `.next` first (the `prebuild` script), for
 the same reason.
+
+### The image can be built with no database, and that is the problem
+
+Every frontend page declares `export const revalidate`, so `next build`
+prerenders all of them and reads the CMS while it does — and every one of those
+reads falls back to the defaults in `src/lib/payload.ts` if it cannot connect.
+A build with no `DATABASE_URI` therefore does not fail. It succeeds, with stock
+opening hours compiled into the image, and after a deploy the first visitor to
+each URL is served that HTML while Next regenerates the page behind them.
+
+Two things answer that, and `DEPLOY.md` says which one this deployment relies
+on and what to check after each `up`.
+
+- **`BUILD_DATABASE_URI` in `.env`** is passed to the builder stage as the
+  `DATABASE_URI` build argument, so a build that *can* reach a database
+  prerenders the real content. Empty by default, and safe to point at
+  production: Payload turns both the dev push and `prodMigrations` off during
+  `next build`, so the build only reads.
+- **`ops/warm-up.sh`** runs in the background from the container's `CMD`. As
+  soon as the server answers it requests all seventeen public URLs twice, so
+  the stale first request is made by the container rather than by a customer,
+  and it reads `x-nextjs-cache` on the way past so that it can tell a page that
+  was just rendered from one that is still the copy built into the image. It
+  exits 0 whatever happens and cannot fail the container.
+
+```bash
+docker compose logs beeshive | grep warm-up     # after every deploy
+docker compose exec beeshive /app/ops/warm-up.sh   # by hand, e.g. after an import
+```
+
+`WARMUP=off` in `.env` turns it off, which is only ever right while you are
+deliberately looking at the prerendered output.
 
 ## Deploy to Vercel
 

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { motion, useReducedMotion } from "framer-motion";
 import { CraftIcon } from "@/components/CraftIcon";
 import { getDict } from "@/i18n/dictionaries";
 import { defaultLocale, type Locale } from "@/i18n/config";
@@ -45,7 +44,6 @@ export function MailingListForm({
   const [status, setStatus] = useState<
     "idle" | "loading" | "success" | "error"
   >("idle");
-  const reduce = useReducedMotion();
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -71,12 +69,14 @@ export function MailingListForm({
 
   if (status === "success") {
     return (
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: reduce ? 0 : 0.8, ease: [0.16, 0.84, 0.28, 1] }}
+      // A fade with nothing to react to and no way back: it plays once,
+      // when the panel replaces the form, and then it is over. That is a
+      // keyframe, and .hero-rise is already exactly this one — the travel
+      // and the timing are its own custom properties, so the numbers below
+      // are the numbers the animated element used.
+      <div
         role="status"
-        className="max-w-md mx-auto py-6 text-left"
+        className="hero-rise max-w-md mx-auto py-6 text-left [--rise-delay:0s] [--rise-duration:0.8s] [--rise-travel:12px]"
       >
         <CraftIcon
           name="bee"
@@ -89,7 +89,7 @@ export function MailingListForm({
           {t.successTitle}
         </p>
         <p className="text-hive-400 mt-2 text-sm">{t.successText}</p>
-      </motion.div>
+      </div>
     );
   }
 

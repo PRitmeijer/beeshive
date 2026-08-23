@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { motion, useReducedMotion } from "framer-motion";
 import { CraftIcon } from "@/components/CraftIcon";
 import { getDict } from "@/i18n/dictionaries";
 import { defaultLocale, type Locale } from "@/i18n/config";
@@ -33,6 +32,12 @@ const fieldClass =
   "px-0 py-3 font-body text-hive-700 placeholder:text-hive-300/70 outline-none " +
   "transition-colors duration-300 ease-settle " +
   "focus:border-honey-400 focus:shadow-[inset_0_-2px_0_0_#B4735E]";
+
+/**
+ * One shared empty set for "we have not been told of a single taken sitting",
+ * so clearing the list does not hand every render a new object to compare.
+ */
+const NO_FULL_SLOTS: ReadonlySet<string> = new Set();
 
 const EMPTY = {
   name: "",
@@ -162,13 +167,76 @@ export function ReservationForm({
       ? nowMinutes + LEAD_MINUTES
       : -1;
   const slots = dayRanges ? slotsFor(dayRanges, notBefore) : [];
+
+  /**
+   * Which of that day's sittings are already given away.
+   *
+   * The opening hours the form was handed are enough to know that half past
+   * seven exists on a Saturday and nowhere near enough to know that half past
+   * seven has been given to a party of twelve: only the server can see the
+   * other reservations. So the moment a date is chosen we ask /api/availability
+   * for that one day, and the guest learns a time is gone while the rest of the
+   * form is still empty — rather than after filling in eight fields and
+   * pressing the button, which is a miserable way to be told.
+   *
+   * Courtesy, never a gate. /api/reserve counts the seats again on the way in
+   * and answers `slotFull` or `dayFull` whatever this list happens to say, so
+   * every failure here is swallowed: an endpoint that does not answer leaves
+   * the times exactly as the form drew them before any of this existed.
+   *
+   * Only the chosen day, never the whole window. The endpoint's `?from=&to=`
+   * branch would let the date list grey out days that are entirely booked, but
+   * that request would have to go out on mount, for every visitor who so much
+   * as opens the sheet, and it walks the reservations for up to three months to
+   * find something that is rare in a café this size. A per-day question asked
+   * once somebody has committed to a day is the cheap half of the same idea.
+   */
+  const [fullSlots, setFullSlots] = useState<ReadonlySet<string>>(NO_FULL_SLOTS);
+  /**
+   * Bumped when the server refuses a booking for want of seats, so the list is
+   * asked again instead of going on offering the time it was just refused.
+   */
+  const [availabilityNonce, setAvailabilityNonce] = useState(0);
+  useEffect(() => {
+    // Nothing is known about a day until the endpoint has spoken, so the
+    // previous day's taken sittings go first. Carrying them over would grey
+    // out times on a day nobody has asked about — and a request that never
+    // answers would leave them greyed out for good, which is the one failure
+    // here that could cost a table rather than merely fail to save one.
+    setFullSlots(NO_FULL_SLOTS);
+    if (!form.date) return;
+    const ac = new AbortController();
+    fetch(`/api/availability?date=${form.date}&locale=${locale}`, {
+      signal: ac.signal,
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { slots?: { time: string; full: boolean }[] } | null) => {
+        if (!data || !Array.isArray(data.slots)) return;
+        const taken = new Set(
+          data.slots.filter((slot) => slot.full).map((slot) => slot.time),
+        );
+        setFullSlots(taken);
+        // A time that was still free when it was picked, or carried over from
+        // a day where it was, is dropped rather than left selected under a
+        // greyed-out label for the endpoint to refuse later.
+        setForm((prev) => (taken.has(prev.time) ? { ...prev, time: "" } : prev));
+      })
+      .catch(() => {});
+    return () => ac.abort();
+  }, [form.date, locale, availabilityNonce]);
+
+  // Nothing left that day at all: a different time is not the answer, so the
+  // hint under the list says so rather than leaving a column of greyed-out
+  // times to be puzzled over.
+  const dayIsFull =
+    slots.length > 0 && slots.every((slot) => fullSlots.has(slot));
+
   // Honeypot. Kept out of `form` so it can never be confused for real input.
   const [website, setWebsite] = useState("");
   const [status, setStatus] = useState<
     "idle" | "loading" | "success" | "error"
   >("idle");
   const [error, setError] = useState(t.error);
-  const reduce = useReducedMotion();
 
   /**
    * "Somebody began filling this in", once per mounted form. The ref rather
@@ -222,10 +290,8 @@ export function ReservationForm({
         : undefined;
     return isReservationError(code) ? code : "unknown";
   };
-  const messageFrom = (data: unknown): string => {
-    const code = codeFrom(data);
-    return isReservationError(code) ? t.errors[code] : t.error;
-  };
+  const messageFor = (code: string): string =>
+    isReservationError(code) ? t.errors[code] : t.error;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -254,8 +320,14 @@ export function ReservationForm({
         return;
       }
       const data = await res.json().catch(() => null);
-      track(EVENTS.reservationFailed, { reason: codeFrom(data) });
-      setError(messageFrom(data));
+      const code = codeFrom(data);
+      track(EVENTS.reservationFailed, { reason: code });
+      // The seats moved while this form was being filled in. Ask again, so the
+      // list stops offering what was just declined.
+      if (code === "slotFull" || code === "dayFull") {
+        setAvailabilityNonce((n) => n + 1);
+      }
+      setError(messageFor(code));
       setStatus("error");
     } catch {
       track(EVENTS.reservationFailed, { reason: "network" });
@@ -266,12 +338,13 @@ export function ReservationForm({
 
   if (status === "success") {
     return (
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: reduce ? 0 : 0.8, ease: [0.16, 0.84, 0.28, 1] }}
+      // Plays once, when the confirmation replaces the form, and never
+      // again — so it is a keyframe rather than an animated element, and
+      // .hero-rise is that keyframe already. Its travel and duration are
+      // custom properties, so these are the same numbers as before.
+      <div
         role="status"
-        className="py-2"
+        className="hero-rise py-2 [--rise-delay:0s] [--rise-duration:0.8s] [--rise-travel:12px]"
       >
         <CraftIcon name="bee" size={48} weight={1} className="text-sage-500" />
         <div className="rule-ink mt-6 w-16" aria-hidden="true" />
@@ -288,7 +361,7 @@ export function ReservationForm({
         >
           {t.successAgain}
         </button>
-      </motion.div>
+      </div>
     );
   }
 
@@ -425,16 +498,21 @@ export function ReservationForm({
                   ? t.timeNoneThatDay
                   : t.timePlaceholder}
             </option>
-            {slots.map((slot) => (
-              <option key={slot} value={slot}>
-                {t.timeOption(slot)}
-              </option>
-            ))}
+            {slots.map((slot) => {
+              const full = fullSlots.has(slot);
+              return (
+                <option key={slot} value={slot} disabled={full}>
+                  {full ? t.timeOptionFull(slot) : t.timeOption(slot)}
+                </option>
+              );
+            })}
           </select>
           <p id="reserve-time-hint" className="mt-2 text-sm text-hive-400">
-            {dayRanges && dayRanges.length > 0
-              ? t.timeHintForDay(describe(dayRanges), slots[slots.length - 1])
-              : t.timeHint}
+            {dayIsFull
+              ? t.timeDayFull
+              : dayRanges && dayRanges.length > 0
+                ? t.timeHintForDay(describe(dayRanges), slots[slots.length - 1])
+                : t.timeHint}
           </p>
         </div>
       </div>

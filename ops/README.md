@@ -1,7 +1,15 @@
 # Operations: PostgreSQL, Cloudflare R2 and backups
 
-Everything in this directory is about the two things the website cannot
-regenerate if they are lost: the database and the uploaded photographs.
+Most of this directory is about the two things the website cannot regenerate if
+they are lost: the database and the uploaded photographs. `warm-up.sh` is the
+exception and belongs to the application container rather than to the database
+— it is described in `DEPLOY.md`, and the short version is that it asks the
+site for every public page once after a start so that Next renders them against
+this database instead of serving the content the image was built with.
+
+**Doing the cutover from the old SQLite site, rather than reading about the
+machinery? [`DEPLOY.md`](../DEPLOY.md) is the runbook.** This file is the
+reference it points back at.
 
 | | Where it lives | How it survives a dead server |
 |---|---|---|
@@ -171,6 +179,13 @@ because the repository in R2 is self-contained.
 
 Do a dry run of this on a spare machine once, before you need it. A backup
 that has never been restored is a hypothesis.
+
+One step that is easy to miss on a rebuild: after the restore, look at
+`payload_migrations` for a row named `dev`. A database that was ever touched by
+one of the `npm run db:*` scripts has one, and it stops the application
+container on an interactive prompt that nothing in a container can answer —
+while every prerendered page goes on answering 200. `DEPLOY.md` has the section
+on it.
 
 ## Warnings, collected
 

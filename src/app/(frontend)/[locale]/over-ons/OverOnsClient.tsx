@@ -86,7 +86,6 @@ export function OverOnsClient({ locale, settings: s }: Props) {
                       ) : (
                         // Plain <img>, as the gallery does: these come off the
                         // Payload media store, already resized.
-                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={imageSrc}
                           alt={image?.alt || t.about.mediaTitle}

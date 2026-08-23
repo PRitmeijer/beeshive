@@ -7,7 +7,8 @@
         "prebuild": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\"",
         "build": "next build",
         "start": "next start",
-        "lint": "next lint",
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix",
         "payload": "cross-env PAYLOAD_CONFIG_PATH=src/payload.config.ts NODE_OPTIONS=\"--import tsx\" payload --disable-transpile",
         "generate:types": "cross-env PAYLOAD_CONFIG_PATH=src/payload.config.ts NODE_OPTIONS=\"--import tsx\" payload --disable-transpile generate:types",
         "migrate:create": "cross-env PAYLOAD_CONFIG_PATH=src/payload.config.ts NODE_OPTIONS=\"--import tsx\" payload --disable-transpile migrate:create",
@@ -23,7 +24,6 @@
     },
     "dependencies": {
         "@payloadcms/db-postgres": "^3.10.0",
-        "@payloadcms/db-sqlite": "3.10.0",
         "@payloadcms/email-nodemailer": "3.10.0",
         "@payloadcms/next": "3.10.0",
         "@payloadcms/plugin-seo": "^3.10.0",
@@ -41,6 +41,7 @@
         "sharp": "0.33.5"
     },
     "devDependencies": {
+        "@eslint/eslintrc": "^3.3.3",
         "@types/node": "22.10.2",
         "@types/react": "19.0.2",
         "@types/react-dom": "19.0.2",

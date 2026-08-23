@@ -41,6 +41,11 @@ yarn-error.log*
 Dockerfile
 docker-compose.yml
 README.md
+DEPLOY.md
 # The database and backup images are built from their own contexts
-# (ops/postgres, ops/pgbackrest); none of it belongs in the application image.
+# (ops/postgres, ops/pgbackrest); none of that belongs in the application
+# image. The one exception is the warm-up, which the application container runs
+# beside the server — the negation has to come after the exclusion, or Docker
+# never reconsiders the directory.
 ops
+!ops/warm-up.sh

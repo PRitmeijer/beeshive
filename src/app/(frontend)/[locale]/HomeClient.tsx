@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
+import { m, useReducedMotion, useScroll, useTransform } from "@/components/motion";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ScrollReveal } from "@/components/ScrollReveal";
@@ -29,8 +29,6 @@ interface Props {
    */
   today: { label: string; open: boolean; note?: string };
 }
-
-const SETTLE = [0.16, 0.84, 0.28, 1] as const;
 
 // The two grounds the landing page is printed on: the cream sheet, and the
 // sand of their existing site under the sign-up. A torn edge is the incoming
@@ -160,6 +158,18 @@ export function HomeClient({ locale, settings: s, today }: Props) {
    * point of the control the owners asked for. The plates draw these at about
    * 270 points across, so the browser has plenty to work with either way.
    *
+   * WebP, not the JPEGs that are still beside them in /public. These three
+   * are the only photographs the repository ships and they are the whole of
+   * the hero's weight: 286 KiB as JPEG, 170 KiB re-encoded by
+   * scripts/optimise-photos.mjs, on the page a phone loads first. The strip
+   * draws them as SVG <image>, which takes one URL and has no way to ask the
+   * browser what it can decode, so a format cannot be offered — it has to be
+   * chosen, for everyone. WebP is the format every browser released since
+   * 2020 reads; AVIF would save another 60 KiB and would show a browser two
+   * years older an empty plate. The JPEGs stay where they are: they are the
+   * originals, and they are what a scraper without an Accept header will
+   * take.
+   *
    * The family portrait starts at 78 rather than 100 because that is the
    * photograph the owners were talking about: at full bleed the plate cuts
    * the group off at both shoulders. They can move it from the CMS now, but
@@ -167,20 +177,20 @@ export function HomeClient({ locale, settings: s, today }: Props) {
    */
   const fallbackPanels: StampPanel[] = [
     {
-      src: "/food-34.jpg",
+      src: "/food-34.webp",
       alt: t.home.stamps.kitchenAlt,
       caption: t.home.stamps.kitchenCaption,
       aspect: 900 / 675,
     },
     {
-      src: "/family.jpg",
+      src: "/family.webp",
       alt: t.home.stamps.familyAlt,
       caption: t.home.stamps.familyCaption,
       aspect: 900 / 581,
       zoom: 78,
     },
     {
-      src: "/food-03.jpg",
+      src: "/food-03.webp",
       alt: t.home.stamps.seasonAlt,
       caption: t.home.stamps.seasonCaption,
       aspect: 900 / 675,
@@ -232,7 +242,7 @@ export function HomeClient({ locale, settings: s, today }: Props) {
             printed dessert page. Nothing drifts. */}
         <BeePlate />
 
-        <motion.div
+        <m.div
           style={{ opacity: heroOpacity, y: heroY }}
           className="relative z-10 w-full px-6 pb-24 pt-44 md:px-12 md:pb-28 md:pt-56 lg:px-20 lg:pt-64 xl:pt-60"
         >
@@ -244,11 +254,8 @@ export function HomeClient({ locale, settings: s, today }: Props) {
             <div className="relative z-10 max-w-3xl">
               <p className="sr-only">{heroTitleSpoken}</p>
 
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: reduce ? 0 : 1, delay: 0.15, ease: SETTLE }}
-                className="rule-ink mb-8 w-28"
+              <div
+                className="hero-rise rule-ink mb-8 w-28 [--rise-delay:0.15s] [--rise-travel:0px]"
                 aria-hidden="true"
               />
 
@@ -258,11 +265,8 @@ export function HomeClient({ locale, settings: s, today }: Props) {
                   The bullet is there because the second half is a link and
                   the first half is not. A gap alone read as one sentence
                   about today, and nobody clicked the end of it. */}
-              <motion.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: reduce ? 0 : 1, delay: 0.25, ease: SETTLE }}
-                className="mb-7 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.82rem] tracking-[0.02em] text-hive-400"
+              <p
+                className="hero-rise mb-7 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.82rem] tracking-[0.02em] text-hive-400 [--rise-delay:0.25s] [--rise-travel:0px]"
               >
                 <span>{today.label}</span>
                 {today.note ? (
@@ -280,16 +284,8 @@ export function HomeClient({ locale, settings: s, today }: Props) {
                   </span>
                   <DrawnArrow className="transition-transform duration-500 ease-settle group-hover:translate-x-1" />
                 </Link>
-              </motion.p>
+              </p>
 
-              {/* Deliberately not a motion.p, unlike everything around it.
-                  This sentence is the page's Largest Contentful Paint element,
-                  and as a framer-motion element it was sent to the browser at
-                  opacity 0 and could not paint until the animation library had
-                  downloaded, parsed and hydrated — seconds of a phone's first
-                  impression spent on a fade. The same fade is now .hero-rise
-                  in globals.css: identical travel, easing and 0.35s stagger,
-                  no JavaScript in front of it. */}
               <p className="hero-rise max-w-xl text-lg leading-relaxed text-hive-400 md:text-2xl">
                 {s.heroSubtitle}
               </p>
@@ -313,12 +309,17 @@ export function HomeClient({ locale, settings: s, today }: Props) {
                 meant the one part of this page that shows what the place
                 actually looks like was two screens down. With the name lifted
                 into the header there is room for it to land inside the first
-                screen, which is where it earns its keep. */}
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: reduce ? 0 : 1.1, delay: 0.5, ease: SETTLE }}
-              className="mt-9 xl:absolute xl:-top-20 xl:right-2 xl:mt-0"
+                screen, which is where it earns its keep.
+
+                Landing inside the first screen also makes it the largest
+                thing there, so it is what Chrome now times the page by, and
+                .hero-rise rather than framer-motion for the same reason the
+                subtitle is: the same 16 points of travel, the same settle,
+                the same half second behind it, but painted straight out of
+                the server's HTML rather than held at opacity 0 until an
+                animation library has downloaded and hydrated. */}
+            <div
+              className="hero-rise mt-9 [--rise-delay:0.5s] [--rise-duration:1.1s] [--rise-travel:16px] xl:absolute xl:-top-20 xl:right-2 xl:mt-0"
             >
               <StampStrip
                 panels={panels}
@@ -331,13 +332,10 @@ export function HomeClient({ locale, settings: s, today }: Props) {
                 orientation="vertical"
                 className="hidden w-[214px] xl:block"
               />
-            </motion.div>
+            </div>
 
-            <motion.div
-              initial={{ opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: reduce ? 0 : 1, delay: 0.6, ease: SETTLE }}
-              className="relative z-10 mt-9 flex max-w-3xl flex-col gap-4 sm:flex-row xl:mt-12"
+            <div
+              className="hero-rise relative z-10 mt-9 flex max-w-3xl flex-col gap-4 [--rise-delay:0.6s] sm:flex-row xl:mt-12"
             >
               <Link href={localeHref(locale, "/kaart")} className="btn-primary">
                 {t.home.ctaMenu}
@@ -348,28 +346,29 @@ export function HomeClient({ locale, settings: s, today }: Props) {
               >
                 {t.home.ctaAbout}
               </Link>
-            </motion.div>
+            </div>
           </div>
-        </motion.div>
+        </m.div>
 
         {/* xl only, the breakpoint at which the stamp strip moves out to the
             right margin. Below it the strip drops under the text and the cue
             lands on top of the photographs — pointing at a scroll the reader
             has already started, over the one thing worth looking at. */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: reduce ? 0 : 0.9, delay: 1.4, ease: SETTLE }}
-          className="absolute bottom-16 left-6 z-10 hidden text-honey-500/60 md:left-12 lg:left-20 xl:block"
+        <div
+          className="hero-rise absolute bottom-16 left-6 z-10 hidden text-honey-500/60 [--rise-delay:1.4s] [--rise-duration:0.9s] [--rise-travel:0px] md:left-12 lg:left-20 xl:block"
           aria-hidden="true"
         >
-          <motion.div
-            animate={{ y: reduce ? [0, 0, 0] : [0, 8, 0] }}
-            transition={{ duration: 3.4, repeat: Infinity, ease: "easeInOut" }}
-          >
+          {/* The cue nudges for as long as the landing page is open, which
+              as a motion value meant a rAF callback running forever behind
+              whatever the reader was doing. As a keyframe the compositor
+              owns it and the main thread never hears about it; the
+              prefers-reduced-motion block in globals.css already stops every
+              animation on the page, so the branch this used to carry has
+              nothing left to decide. */}
+          <div className="scroll-nudge">
             <ScrollMark />
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
 
         <TornEdge
           color={SAND}

@@ -220,7 +220,14 @@ export function StampStrip({
                     it — a CMS image saved before Payload recorded its
                     dimensions — there is nothing to compute from, so the plate
                     falls back to the cover crop it has always used and the
-                    zoom only scales the box it is drawn in. */}
+                    zoom only scales the box it is drawn in.
+
+                    `href` is served exactly as given. An SVG <image> has no
+                    equivalent of <picture>: it cannot offer a browser two
+                    formats and let it pick, so whoever supplies the panel
+                    supplies the file that is to go over the wire — the WebP
+                    in HomeClient's fallbacks, whatever Payload hands back for
+                    a CMS image. */}
                 <image
                   href={panel.src}
                   {...(panel.aspect

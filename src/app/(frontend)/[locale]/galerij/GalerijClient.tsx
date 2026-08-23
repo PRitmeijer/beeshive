@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { m, AnimatePresence, useReducedMotion } from "@/components/motion";
+import { LayoutMotionProvider } from "@/components/motion-layout";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { Sheet } from "@/components/Sheet";
 import { SketchBee } from "@/components/SketchBee";
@@ -227,83 +228,91 @@ export function GalerijClient({
 
       {/* ===== THE PLATES ===== */}
       <section className="section-padding relative overflow-hidden bg-paper !pt-0">
-        <div className="mx-auto max-w-6xl">
-          <motion.div
-            layout
-            className="grid auto-rows-[5.25rem] grid-cols-2 gap-4 md:auto-rows-[8rem] md:grid-cols-12 md:gap-6"
-          >
-            <AnimatePresence>
-              {filtered.map((img, i) => (
-                <motion.div
-                  key={img.id}
-                  layout
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  transition={{
-                    duration: 0.7,
-                    ease: EASE,
-                    delay: reduce ? 0 : Math.min(i * 0.05, 0.4),
-                  }}
-                  className={`${plateSpan(i)} min-h-0`}
-                >
-                  {/* A print in a mat board: cut sheet, paper margin, contact
-                      shadow. The last child is <Sheet>'s content layer, which
-                      has to inherit the cell height for the mat to fill it. */}
-                  <Sheet
-                    tone="deep"
-                    edge="soft"
-                    className="group h-full [&>*:last-child]:h-full"
+        {/* The grid, and only the grid, animates its own reflow: pick a
+            category and the surviving plates travel to their new cells
+            instead of vanishing and reappearing elsewhere. That is the
+            `layout` prop below, and `layout` is the one thing the feature set
+            the rest of the site runs on does not carry — so this subtree, and
+            nothing else, is handed the heavier one. */}
+        <LayoutMotionProvider>
+          <div className="mx-auto max-w-6xl">
+            <m.div
+              layout
+              className="grid auto-rows-[5.25rem] grid-cols-2 gap-4 md:auto-rows-[8rem] md:grid-cols-12 md:gap-6"
+            >
+              <AnimatePresence>
+                {filtered.map((img, i) => (
+                  <m.div
+                    key={img.id}
+                    layout
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{
+                      duration: 0.7,
+                      ease: EASE,
+                      delay: reduce ? 0 : Math.min(i * 0.05, 0.4),
+                    }}
+                    className={`${plateSpan(i)} min-h-0`}
                   >
-                    <figure className="flex h-full flex-col p-2 md:p-2.5">
-                      <div className="relative min-h-0 flex-1 overflow-hidden bg-paper-shade">
-                        {img.image?.url ? (
-                          <img
-                            src={img.image.sizes?.card?.url || img.image.url}
-                            alt={img.image.alt || img.title}
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center bg-paper-shade">
-                            <SketchBee
-                              size={96}
-                              variant={beeVariant(i)}
-                              strokeWidth={1}
-                              className="text-sage-500/30"
+                    {/* A print in a mat board: cut sheet, paper margin, contact
+                        shadow. The last child is <Sheet>'s content layer, which
+                        has to inherit the cell height for the mat to fill it. */}
+                    <Sheet
+                      tone="deep"
+                      edge="soft"
+                      className="group h-full [&>*:last-child]:h-full"
+                    >
+                      <figure className="flex h-full flex-col p-2 md:p-2.5">
+                        <div className="relative min-h-0 flex-1 overflow-hidden bg-paper-shade">
+                          {img.image?.url ? (
+                            <img
+                              src={img.image.sizes?.card?.url || img.image.url}
+                              alt={img.image.alt || img.title}
+                              className="h-full w-full object-cover"
                             />
-                          </div>
-                        )}
-                      </div>
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center bg-paper-shade">
+                              <SketchBee
+                                size={96}
+                                variant={beeVariant(i)}
+                                strokeWidth={1}
+                                className="text-sage-500/30"
+                              />
+                            </div>
+                          )}
+                        </div>
 
-                      {/* Printed plate caption: number, title, category. */}
-                      <figcaption className="flex items-baseline gap-3 pt-2.5">
-                        <span
-                          className="label figures-old shrink-0 !text-honey-500"
-                          aria-hidden="true"
-                        >
-                          {String(i + 1).padStart(2, "0")}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate font-display text-[0.8rem] text-hive-500 transition-colors duration-700 ease-settle group-hover:text-honey-600">
-                          {img.title}
-                        </span>
-                        <span className="label hidden shrink-0 md:inline">
-                          {categoryName(img)}
-                        </span>
-                      </figcaption>
-                    </figure>
+                        {/* Printed plate caption: number, title, category. */}
+                        <figcaption className="flex items-baseline gap-3 pt-2.5">
+                          <span
+                            className="label figures-old shrink-0 !text-honey-500"
+                            aria-hidden="true"
+                          >
+                            {String(i + 1).padStart(2, "0")}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate font-display text-[0.8rem] text-hive-500 transition-colors duration-700 ease-settle group-hover:text-honey-600">
+                            {img.title}
+                          </span>
+                          <span className="label hidden shrink-0 md:inline">
+                            {categoryName(img)}
+                          </span>
+                        </figcaption>
+                      </figure>
 
-                    <button
-                      type="button"
-                      onClick={() => setSelected(img)}
-                      aria-label={img.title}
-                      className="absolute inset-0 z-10 h-full w-full cursor-pointer"
-                    />
-                  </Sheet>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </motion.div>
-        </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelected(img)}
+                        aria-label={img.title}
+                        className="absolute inset-0 z-10 h-full w-full cursor-pointer"
+                      />
+                    </Sheet>
+                  </m.div>
+                ))}
+              </AnimatePresence>
+            </m.div>
+          </div>
+        </LayoutMotionProvider>
 
         {/* No edge here: <Footer> draws its own tear up into this section. */}
       </section>
@@ -311,7 +320,7 @@ export function GalerijClient({
       {/* Lightbox */}
       <AnimatePresence>
         {selected && (
-          <motion.div
+          <m.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -322,7 +331,7 @@ export function GalerijClient({
             className="fixed inset-0 z-[100] flex items-center justify-center bg-hive-900/92 p-6"
             onClick={() => setSelected(null)}
           >
-            <motion.div
+            <m.div
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 14 }}
@@ -369,8 +378,8 @@ export function GalerijClient({
               >
                 <CrossMark />
               </button>
-            </motion.div>
-          </motion.div>
+            </m.div>
+          </m.div>
         )}
       </AnimatePresence>
     </>

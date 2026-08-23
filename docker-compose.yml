@@ -10,6 +10,21 @@ services:
       args:
         # Baked into the client bundle; see the Dockerfile for why.
         NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://debeeshive.nl}
+        # A database for the *build* to prerender against, and empty by
+        # default. Deliberately not the runtime DATABASE_URI a few lines down:
+        # that one names the `postgres` service on this stack's internal
+        # network, which the build container is not on and cannot reach. If
+        # this were the same variable, every build would spend a minute failing
+        # to connect and then bake the fallback content in as though nothing
+        # had happened, which is exactly the silence we are trying to end.
+        #
+        # Setting it means finding a route from the build to a cluster holding
+        # the real content — a CI service container, a restored copy, the
+        # production cluster with its port temporarily reachable. On this host
+        # there is no such route by design, so it stays empty and
+        # ops/warm-up.sh is what makes the deployment honest instead. DEPLOY.md
+        # says which one is in play and why.
+        DATABASE_URI: ${BUILD_DATABASE_URI:-}
     # Published on the host. Nginx Proxy Manager runs outside this stack and
     # reaches the site over the network by the host's own name, so the port
     # has to be open on the host — an unpublished container is invisible to
@@ -46,6 +61,12 @@ services:
       # published port above; the Dockerfile's 3000 is the standalone default
       # for a plain `docker run`, and this overrides it.
       - PORT=${HOST_PORT:-3100}
+      # The start-up warm-up in ops/warm-up.sh, which asks the site for every
+      # public page once so that Next regenerates it against this database
+      # rather than serving what the image was built with. On by default;
+      # WARMUP=off in .env turns it off, which is only ever right while you are
+      # deliberately looking at the prerendered output.
+      - WARMUP=${WARMUP:-on}
       # The database lives in the `postgres` service on this stack's own
       # network, so the host name is the service name and the port is the
       # container's 5432 whatever the host has published.

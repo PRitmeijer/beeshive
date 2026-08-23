@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { m, AnimatePresence, useReducedMotion } from "@/components/motion";
 import { CraftIcon } from "@/components/CraftIcon";
 import { getDict } from "@/i18n/dictionaries";
 import { defaultLocale, type Locale } from "@/i18n/config";
@@ -152,7 +152,7 @@ export function NotificationBanner({
       <div className="fixed inset-x-0 top-0 z-[60]">
         <AnimatePresence mode="wait">
           {currentBanner && bannerStyle && (
-            <motion.div
+            <m.div
               key={currentBanner.id}
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}
@@ -213,7 +213,7 @@ export function NotificationBanner({
                   </button>
                 )}
               </div>
-            </motion.div>
+            </m.div>
           )}
         </AnimatePresence>
       </div>
@@ -221,7 +221,7 @@ export function NotificationBanner({
       {/* ===== POPUP MODE ===== */}
       <AnimatePresence>
         {currentPopup && popupStyle && (
-          <motion.div
+          <m.div
             key={`popup-overlay-${currentPopup.id}`}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -234,7 +234,7 @@ export function NotificationBanner({
               }
             }}
           >
-            <motion.div
+            <m.div
               key={`popup-${currentPopup.id}`}
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
@@ -296,8 +296,8 @@ export function NotificationBanner({
                   )}
                 </div>
               </div>
-            </motion.div>
-          </motion.div>
+            </m.div>
+          </m.div>
         )}
       </AnimatePresence>
     </>

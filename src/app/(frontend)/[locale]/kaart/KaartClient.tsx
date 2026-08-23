@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { m, AnimatePresence, useReducedMotion } from "@/components/motion";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { TornEdge } from "@/components/TornEdge";
 import { Sheet } from "@/components/Sheet";
@@ -251,7 +251,7 @@ export function KaartClient({
           </ScrollReveal>
 
           <AnimatePresence mode="wait">
-            <motion.div
+            <m.div
               key={activeCategory || "all"}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -317,7 +317,7 @@ export function KaartClient({
                   </Sheet>
                 </div>
               </div>
-            </motion.div>
+            </m.div>
           </AnimatePresence>
         </div>
       </section>

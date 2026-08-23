@@ -146,6 +146,7 @@ import { EVENTS, track } from "@/lib/umami";
 | `src/app/(frontend)/[locale]/evenementen/[slug]/EventClient.tsx` | mount effect | `track(EVENTS.eventViewed, { title })` |
 | `src/app/(frontend)/[locale]/evenementen/[slug]/EventClient.tsx` | each link in the calendar `<details>` | `track(EVENTS.addToCalendar, { title, target })` — `target` is `apple`/`google`/`outlook`/`ics`/`series` |
 | `src/app/(frontend)/[locale]/reservering/[token]/GuestPassClient.tsx` | mount effect | `track(EVENTS.guestPassOpened)` — no properties at all; the URL carries a token, and a token must never become a property |
+| `src/components/AddToCalendarTracker.tsx` | one delegated `onClick` around the guest pass's four calendar links | `track(EVENTS.addToCalendar, { source: "guest-pass", target })` — `target` is `apple`/`google`/`outlook`/`ics`, read off the link's `data-calendar-target` |
 | `src/app/(frontend)/[locale]/reservering/[token]/GuestPassClient.tsx` | the two route links and the `tel:` link | `track(EVENTS.directionsClicked, { source: "guest-pass-google" \| "guest-pass-apple" })`, `track(EVENTS.phoneClicked)` |
 
 Two notes on `directions_clicked`. The contact page has no dedicated route
@@ -156,12 +157,31 @@ event is therefore always sent with a `source`, and any reading of the figures
 has to look at it: `google-listing` is "went to our Google page", the two
 `guest-pass-*` values are unambiguous route requests.
 
-One more gap worth knowing about: `src/components/AddToCalendar.tsx` is a
-**server** component (so `@/lib/ics` stays out of the visitor bundle), which
-means it cannot carry an `onClick`. The guest pass therefore does not report
-`add_to_calendar`; the event page, whose control is client-side, does. Making
-the guest pass report it means either splitting a client wrapper out of
-`AddToCalendar` or moving the tracking to the `/api/guest-pass?ics=1` handler.
+Both pages that offer a calendar report `add_to_calendar`, and they report it
+differently, which any reading of the figures has to know. The event page sends
+`{ title, target }`, because which event was saved is the interesting half
+there. The guest pass sends `{ source: "guest-pass", target }` and no title:
+that page's URL carries a reservation token, and the only fact about it worth
+counting is that somebody took the evening away with them.
+
+`target` is one vocabulary across both: `apple`, `google`, `outlook`, `ics`,
+and `series` on the event page, which is the only one that offers a whole
+recurring run. On the guest pass `apple` and `ics` are the same file under two
+names — see the note in `AddToCalendar.tsx` — so a reading of "how many used a
+calendar at all" adds them up rather than choosing between them.
+
+How the guest pass manages it is worth a line, because it looks impossible at
+first glance. `src/components/AddToCalendar.tsx` is a **server** component, so
+that `@/lib/ics` stays out of the visitor bundle, and a server component cannot
+carry an `onClick`. So it does not: it renders its four links inside
+`src/components/AddToCalendarTracker.tsx`, a client component of some twenty
+lines that hears the clicks bubble past and reads the `data-calendar-target`
+attribute off the link. Nothing else moves to the client, and the wrapper
+replaces the `<div>` that was around those links anyway, so the markup is
+unchanged. The alternative on the table — reporting from the
+`/api/guest-pass?ics=1` handler — was left alone: it would see the two `.ics`
+routes and never Google or Outlook, and it would put a measurement in a request
+path a calendar app makes on its own schedule.
 
 Properties must stay non-identifying: a page title or an error code is fine, a
 guest's name, email, phone number or party size is not.

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, m, useReducedMotion } from "@/components/motion";
 import { usePathname } from "next/navigation";
 import { ReservationForm } from "@/components/ReservationForm";
 import { getDict } from "@/i18n/dictionaries";
@@ -183,7 +183,7 @@ export function MobileReserveButton({
       <AnimatePresence>
         {open && (
           <div className="fixed inset-0 z-50 flex items-end md:hidden">
-            <motion.div
+            <m.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -193,7 +193,7 @@ export function MobileReserveButton({
               aria-hidden="true"
             />
 
-            <motion.div
+            <m.div
               ref={panelRef}
               role="dialog"
               aria-modal="true"
@@ -239,7 +239,7 @@ export function MobileReserveButton({
                     markup for it to disagree with. */}
                 <ReservationForm locale={locale} openingHours={openingHours} />
               </div>
-            </motion.div>
+            </m.div>
           </div>
         )}
       </AnimatePresence>

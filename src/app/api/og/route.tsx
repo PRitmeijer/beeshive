@@ -240,7 +240,6 @@ function card(title: string, subtitle: string, fontList: LoadedFont[] | undefine
             ) : null}
           </div>
 
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={BEE}
             alt=""

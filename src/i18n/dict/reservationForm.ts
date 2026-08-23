@@ -18,11 +18,26 @@ export const reservationFormNl = {
   timeNeedsDate: "Kies eerst een datum",
   timeNoneThatDay: "Deze dag zijn we gesloten",
   timeOption: (slot: string) => `${slot} uur`,
+  /**
+   * A sitting that is already given away. The form learns which ones from
+   * /api/availability the moment a date is picked, so the word arrives before
+   * the guest has typed anything rather than as a refusal afterwards. "Vol" is
+   * what they would be told on the phone; "niet beschikbaar" is what a website
+   * says.
+   */
+  timeOptionFull: (slot: string) => `${slot} uur \u2014 vol`,
   /** Shown before a date has been picked, when the day is still unknown. */
   timeHint: "Kies een datum, dan laten we zien welke tijden vrij zijn.",
   /** Once the day is known, the hours come straight uit de openingstijden. */
   timeHintForDay: (hours: string, last: string) =>
     `Open ${hours}. Laatste tafel om ${last} uur.`,
+  /**
+   * Every sitting that day is taken, so picking another time is not the
+   * answer. Says the same thing as `errors.dayFull` and stays a separate line
+   * because this one is read before the button, where it can still save
+   * somebody the trouble.
+   */
+  timeDayFull: "Deze dag zit vol. Kies een andere datum, of bel ons even.",
   notes: "Opmerkingen",
   notesHint:
     "Allergieën, een verjaardag, een kinderstoel, een rustige tafel: laat het weten.",
@@ -106,9 +121,12 @@ export const reservationFormEn: ReservationFormDict = {
   timeNeedsDate: "Choose a date first",
   timeNoneThatDay: "We are closed that day",
   timeOption: (slot: string) => `${slot}`,
+  timeOptionFull: (slot: string) => `${slot} \u2014 fully booked`,
   timeHint: "Choose a date and we will show you which times are free.",
   timeHintForDay: (hours: string, last: string) =>
     `Open ${hours}. Last table at ${last}.`,
+  timeDayFull:
+    "That day is fully booked. Please choose another date, or give us a ring.",
   notes: "Notes",
   notesHint:
     "Allergies, a birthday, a high chair, a quiet table: do let us know.",
