@@ -382,6 +382,27 @@ export const Reservations: CollectionConfig = {
           label: "Drinken",
           type: "text",
         },
+        {
+          /**
+           * The one line a companion writes in their own words.
+           *
+           * The ticked lists above only ever hold labels the owners wrote, so
+           * an allergy nobody thought to put on the list had nowhere to go. A
+           * guest who cannot eat sesame is not helped by a "Vegetarisch" box.
+           *
+           * Free text from an unauthenticated page, so it is capped here and
+           * again in the endpoint, and it is rendered as text and never as
+           * markup. See GUEST_RESPONSE_LIMITS in src/lib/guestPass.ts.
+           */
+          name: "note",
+          label: "Toelichting",
+          type: "textarea",
+          maxLength: 300,
+          admin: {
+            description:
+              "Wat deze persoon er zelf bij schreef, bijvoorbeeld een allergie die niet in de lijst staat.",
+          },
+        },
       ],
     },
     {

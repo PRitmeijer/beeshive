@@ -13,6 +13,7 @@ import {
   type StampPanel,
 } from "@/components/StampStrip";
 import { HeroLockup } from "@/components/HeroLockup";
+import { WelcomeBlock } from "@/components/WelcomeBlock";
 import type { SiteSettingsData } from "@/lib/payload";
 import { getDict } from "@/i18n/dictionaries";
 import { localeHref, type Locale } from "@/i18n/config";
@@ -36,6 +37,11 @@ interface Props {
 // section's fill painted into the outgoing one, so SAND must stay in step with
 // `bg-paper-shade` in tailwind.config.ts.
 const SAND = "#DCD5AC";
+// The middle stock, between the hero's cream and the sand under the sign-up.
+// Must stay in step with `bg-paper-deep` in tailwind.config.ts, for the same
+// reason SAND must: a torn edge is the next section's fill painted into this
+// one, and a colour that drifts shows up as a seam.
+const PAPER_DEEP = "#E8E2D4";
 const LIP_LIGHT = "rgba(255,255,255,0.5)";
 
 /** A drawn line-arrow, replacing the arrow glyph the old cards used. */
@@ -108,6 +114,11 @@ function BeePlate() {
 }
 
 export function HomeClient({ locale, settings: s, today }: Props) {
+  // Whether the welcome sits under the hero decides two things at once: that
+  // the section renders, and which fill the hero tears into.
+  // Its own words if the owners wrote them, the About intro if they have not.
+  const welcomeText = s.welcomeText?.trim() || s.aboutIntro?.trim() || "";
+  const hasWelcome = Boolean(welcomeText || s.aboutImage);
   const t = getDict(locale);
   const heroRef = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
@@ -273,7 +284,7 @@ export function HomeClient({ locale, settings: s, today }: Props) {
                   the first half is not. A gap alone read as one sentence
                   about today, and nobody clicked the end of it. */}
               <p
-                className="hero-rise mb-7 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.82rem] tracking-[0.02em] text-hive-400 [--rise-delay:0.25s] [--rise-travel:0px]"
+                className="hero-rise mb-7 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.95rem] tracking-[0.02em] text-hive-400 [--rise-delay:0.25s] [--rise-travel:0px]"
               >
                 <span>{today.label}</span>
                 {today.note ? (
@@ -293,7 +304,14 @@ export function HomeClient({ locale, settings: s, today }: Props) {
                 </Link>
               </p>
 
-              <p className="hero-rise max-w-xl text-lg leading-relaxed text-hive-400 md:text-2xl">
+              {/* The page's typographic anchor, now that the name is drawn
+                  rather than set. Something has to be the thing you read
+                  after the crest, and a line of small grey text under a large
+                  logo is not it: the eye landed on the artwork and then had
+                  nowhere to go. A shade darker and a size up, so the ladder
+                  runs crest, then what the place actually is, then the two
+                  buttons — rather than crest, then a wall. */}
+              <p className="hero-rise max-w-xl text-xl leading-relaxed text-hive-500 md:text-3xl">
                 {s.heroSubtitle}
               </p>
             </div>
@@ -381,13 +399,60 @@ export function HomeClient({ locale, settings: s, today }: Props) {
           </div>
         </div>
 
+        {/* Torn into whatever follows. With a welcome under the hero that is
+            the middle stock; without one the sign-up's sand comes straight
+            after, and painting the wrong fill here leaves a visible seam. */}
         <TornEdge
-          color={SAND}
+          color={hasWelcome ? PAPER_DEEP : SAND}
           lip={LIP_LIGHT}
           variant={0}
           className="absolute inset-x-0 bottom-0 z-20"
         />
       </section>
+
+      {/* ===== WELCOME =====
+           Straight under the hero, on the same sand the hero's torn edge
+           paints into it, so the two read as one sheet rather than as a seam.
+
+           The comment on the mailing list below records that this page used to
+           carry an introduction and lost it, because everything it said is
+           said properly on /over-ons and saying it twice made the front door
+           long. This is deliberately not that: three or four lines and two
+           links, not the old middle of the page. What it adds over the About
+           tab is the part that was never on this page at all — somewhere to
+           follow them from the one screen most visitors ever see. */}
+      {hasWelcome ? (
+        <section
+          className="section-padding relative overflow-hidden bg-paper-deep"
+          aria-label={t.home.welcomeLabel}
+        >
+          <div className="mx-auto max-w-6xl">
+            <WelcomeBlock
+              heading={t.home.welcomeHeading}
+              followHint={t.home.followHint}
+              text={welcomeText}
+              imageUrl={s.aboutImage?.sizes?.card?.url || s.aboutImage?.url || ""}
+              imageAlt={s.aboutImage?.alt ?? ""}
+              instagramUrl={s.socialMedia?.instagram?.trim() ?? ""}
+              facebookUrl={s.socialMedia?.facebook?.trim() ?? ""}
+              imageWidthClass="w-32 sm:w-52 md:w-64"
+              headingClassName="text-clay-600"
+            />
+          </div>
+
+          {/* And torn again into the sand, so the sign-up below reads as a
+              different sheet rather than as more of this one. Three stocks
+              down the page — cream, this, sand — is what stops the middle of
+              the landing page looking like one long field of the same colour
+              with headings floating in it. */}
+          <TornEdge
+            color={SAND}
+            lip={LIP_LIGHT}
+            variant={1}
+            className="absolute inset-x-0 bottom-0 z-20"
+          />
+        </section>
+      ) : null}
 
       {/* ===== MAILING LIST =====
            The one thing that still follows the landing page. Everything the

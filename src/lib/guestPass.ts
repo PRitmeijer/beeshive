@@ -48,6 +48,8 @@ export interface GuestResponseRow {
   name?: string | null;
   dietary?: string | null;
   drinks?: string | null;
+  /** The companion's own line, free text. Capped on the way in and out. */
+  note?: string | null;
   addedAt?: string | null;
 }
 
@@ -91,6 +93,8 @@ export interface GuestResponseView {
   name: string;
   dietary: string[];
   drinks: string[];
+  /** What they wrote themselves; "" when they wrote nothing. */
+  note: string;
 }
 
 /** A whole reservation, as the browser is allowed to see it. */
@@ -131,6 +135,8 @@ export const GUEST_RESPONSE_LIMITS = {
   /** Per picked label, and how many labels one person may pick. */
   label: 60,
   picks: 12,
+  /** The line a companion writes themselves. Matches `note`'s maxLength. */
+  note: 300,
 } as const;
 
 /**
@@ -298,6 +304,7 @@ export function redactForGuests(doc: ReservationDoc): GuestPassView {
         name: firstNameOf(row.name),
         dietary: splitList(row.dietary),
         drinks: splitList(row.drinks),
+        note: noteText(row.note, GUEST_RESPONSE_LIMITS.note),
       }))
       // A row with no name left after redaction is a row the owners emptied
       // by hand in the admin. Showing a blank line would only look broken.

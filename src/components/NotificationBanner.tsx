@@ -1,20 +1,33 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+  useRef,
+} from "react";
+
+/**
+ * useLayoutEffect, without the warning it prints when React renders this on
+ * the server. The measurement has to happen before the browser paints — that
+ * is the whole point of it — and on the server there is nothing to measure.
+ */
+const useIsomorphicLayoutEffect =
+  typeof window === "undefined" ? useEffect : useLayoutEffect;
 import { m, AnimatePresence, useReducedMotion } from "@/components/motion";
 import { CraftIcon } from "@/components/CraftIcon";
 import { getDict } from "@/i18n/dictionaries";
+import type { ActiveNotification } from "@/lib/notifications";
 import { defaultLocale, type Locale } from "@/i18n/config";
 
-interface Notification {
-  id: string;
-  title: string;
-  message: string;
-  type: "info" | "offer" | "event" | "important";
-  displayMode?: "banner" | "popup";
-  link?: string;
-  dismissible: boolean;
-}
+/**
+ * The shape is declared once, in src/lib/notifications.ts, because the server
+ * reads these and hands them straight to this component. Two hand-kept copies
+ * of the same interface is how a field ends up optional on one side and
+ * required on the other.
+ */
+type Notification = ActiveNotification;
 
 /**
  * Four inks rather than four UI colours: a solid ground with paper ink on top,
@@ -67,29 +80,24 @@ function CrossMark({ size = 14 }: { size?: number }) {
 
 export function NotificationBanner({
   locale = defaultLocale,
+  initial = [],
 }: {
   locale?: Locale;
+  /**
+   * The live notifications, read on the server by the layout.
+   *
+   * This used to be fetched here on mount, and the page paid for it: the bar
+   * appeared a moment after everything else had been laid out, and since the
+   * body reserves room for it, the whole page dropped by the bar's height in
+   * front of the reader. Handed in from the server it is in the first HTML,
+   * measured before the first paint, and nothing moves.
+   */
+  initial?: Notification[];
 }) {
   const t = getDict(locale).notifications;
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications] = useState<Notification[]>(initial);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
-  const [loaded, setLoaded] = useState(false);
   const reduce = useReducedMotion();
-
-  useEffect(() => {
-    // The title and message are localized in Payload, so the language has to
-    // travel with the request.
-    fetch(`/api/active-notifications?locale=${locale}`)
-      .then((res) => {
-        if (!res.ok) throw new Error("fetch failed");
-        return res.json();
-      })
-      .then((data) => {
-        if (data?.docs) setNotifications(data.docs);
-      })
-      .catch(() => {})
-      .finally(() => setLoaded(true));
-  }, [locale]);
 
   const dismiss = useCallback((id: string) => {
     setDismissed((prev) => new Set(prev).add(id));
@@ -121,7 +129,7 @@ export function NotificationBanner({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [currentPopup, dismiss]);
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     const root = document.documentElement;
     const bar = barRef.current;
     if (!bar) {
@@ -141,7 +149,6 @@ export function NotificationBanner({
     };
   }, [currentBanner]);
 
-  if (!loaded) return null;
 
   const bannerStyle = currentBanner ? typeStyles[currentBanner.type] : null;
   const popupStyle = currentPopup ? typeStyles[currentPopup.type] : null;
@@ -149,12 +156,26 @@ export function NotificationBanner({
   return (
     <>
       {/* ===== BANNER MODE ===== */}
-      <div className="fixed inset-x-0 top-0 z-[60]">
-        <AnimatePresence mode="wait">
+      {/* Sticky, not fixed. Fixed took the bar out of the flow, so the body
+          had to reserve room for it out of a height that only Javascript knew
+          — and the reader watched the page drop by 64 pixels the moment that
+          number arrived. In the flow it reserves its own room, at whatever
+          height its text actually wraps to, before a single pixel is painted.
+          It still never leaves the top of the screen: its containing block is
+          the whole document, so `top-0` pins it for the entire scroll exactly
+          as `fixed` did. */}
+      <div className="sticky top-0 z-[60]">
+        {/* `initial={false}` is the other half of not moving the page. The bar
+            is in the first HTML now, so there is no arrival to announce — and
+            an opening height animation, which was decoration while the bar
+            floated over everything, becomes the page being shoved down half a
+            second after it was painted. Dismissing one still animates out; a
+            reader who just pressed the cross is expecting movement, and a
+            shift they caused is not a shift that counts against them. */}
+        <AnimatePresence mode="wait" initial={false}>
           {currentBanner && bannerStyle && (
             <m.div
               key={currentBanner.id}
-              initial={{ height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
               transition={{ duration: 0.6, ease: SETTLE }}
@@ -190,10 +211,14 @@ export function NotificationBanner({
                 <span className="label" style={{ color: "inherit" }}>
                   {currentBanner.title}
                 </span>
-                <span className="opacity-70" aria-hidden="true">
-                  &middot;
-                </span>
-                <span>{currentBanner.message}</span>
+                {currentBanner.message?.trim() ? (
+                  <>
+                    <span className="opacity-70" aria-hidden="true">
+                      &middot;
+                    </span>
+                    <span>{currentBanner.message}</span>
+                  </>
+                ) : null}
                 {currentBanner.link && (
                   <a
                     href={currentBanner.link}
@@ -274,9 +299,11 @@ export function NotificationBanner({
               {/* Body: the sheet, never white. */}
               <div className="bg-paper px-6 py-6">
                 <div className="rule-ink w-12 mb-5" aria-hidden="true" />
-                <p className="text-hive-500 leading-relaxed">
-                  {currentPopup.message}
-                </p>
+                {currentPopup.message?.trim() ? (
+                  <p className="text-hive-500 leading-relaxed">
+                    {currentPopup.message}
+                  </p>
+                ) : null}
                 <div className="mt-6 flex items-center gap-5">
                   {currentPopup.link && (
                     <a

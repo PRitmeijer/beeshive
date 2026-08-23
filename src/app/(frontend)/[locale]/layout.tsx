@@ -8,6 +8,7 @@ import { MobileReserveButton } from "@/components/MobileReserveButton";
 import { NotificationBanner } from "@/components/NotificationBanner";
 import { MotionProvider } from "@/components/motion";
 import { PaperDefs } from "@/components/Sheet";
+import { getActiveNotifications } from "@/lib/notifications";
 import { getSiteSettings } from "@/lib/payload";
 import { locales, parseLocale } from "@/i18n/config";
 
@@ -94,6 +95,10 @@ export default async function FrontendLayout({
   if (!locale) notFound();
 
   const s = await getSiteSettings(locale);
+  // Read here rather than in the bar itself: the body reserves room for the
+  // notification bar, so a bar that arrives after a client fetch drops the
+  // whole page by its own height in front of the reader.
+  const notices = await getActiveNotifications(locale);
 
   return (
     <html lang={locale}>
@@ -126,8 +131,14 @@ export default async function FrontendLayout({
         className="min-h-screen flex flex-col antialiased"
         style={
           {
-            paddingTop:
-              "max(var(--notice-h, 0px), env(safe-area-inset-top, 0px))",
+            // When there is a bar it sits in the flow and brings its own
+            // safe-area padding, so the body must not add it a second time.
+            // Decided on the server, from data the server already has, which
+            // is what keeps this off the critical path: a padding that only
+            // resolves after a measurement is a padding that moves the page.
+            paddingTop: notices.length
+              ? undefined
+              : "env(safe-area-inset-top, 0px)",
             // The two faces, published as custom properties so anything that
             // would rather name a variable than a family — a Tailwind stack,
             // a one-off rule — has a handle on them. The family names in the
@@ -145,7 +156,7 @@ export default async function FrontendLayout({
             column below begins at <PaperDefs> exactly as it did. */}
         <MotionProvider>
           <PaperDefs />
-          <NotificationBanner locale={locale} />
+          <NotificationBanner locale={locale} initial={notices} />
           <Navigation
             locale={locale}
             reservationUrl={s.reservationUrl || undefined}

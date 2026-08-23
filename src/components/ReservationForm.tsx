@@ -259,6 +259,14 @@ export function ReservationForm({
   const [passUrl, setPassUrl] = useState<string | null>(null);
 
   /**
+   * The token out of the guest pass URL: the only key the calendar endpoint
+   * reads a booking by. Derived rather than held in its own state, so there is
+   * exactly one place the secret lives and exactly one place to clear it when
+   * the form is reset for the next booking.
+   */
+  const passToken = passUrl ? (passUrl.split("/").pop() ?? "") : "";
+
+  /**
    * The fast checkout for somebody who has booked here before.
    *
    * Two pieces of state and no more. `rememberMe` is the tickbox beside the
@@ -496,6 +504,30 @@ export function ReservationForm({
             button and the address gone with it. */}
         {passUrl ? (
           <div className="mt-8">
+            {/* The calendar before the share block, and deliberately so. Most
+                people who have just booked want the evening off their mind and
+                into their phone; passing the link on is the second thought, and
+                for plenty of tables it never comes at all. A plain link to a
+                plain URL answering with text/calendar is also the only shape
+                every phone agrees to hand to the calendar app — see the note
+                in src/app/api/guest-pass/route.ts. */}
+            {passToken ? (
+              <div className="mb-10">
+                <div className="rule-ink w-10" aria-hidden="true" />
+                <p className="mt-4 max-w-prose leading-relaxed text-hive-500">
+                  {t.calendarText}
+                </p>
+                <a
+                  href={`/api/guest-pass?ics=1&token=${encodeURIComponent(passToken)}&locale=${locale}`}
+                  onClick={() =>
+                    track(EVENTS.addToCalendar, { source: "reservation-confirmation" })
+                  }
+                  className="ink-link mt-4 inline-block"
+                >
+                  {t.addToCalendar}
+                </a>
+              </div>
+            ) : null}
             <div className="rule-ink w-10" aria-hidden="true" />
             <p className="mt-4 max-w-prose leading-relaxed text-hive-500">
               {t.shareText}

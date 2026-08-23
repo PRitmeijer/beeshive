@@ -26,6 +26,29 @@ export const homepageTab: Tab = {
         "Waar eten en creativiteit samenkomen. Een warm eetcafé in het hart van Zuilen.",
     },
     {
+      /**
+       * The block under the hero, and its own words rather than the About
+       * page's.
+       *
+       * It used to borrow `aboutIntro`, which is why it read as a repeat: the
+       * hero already says what the place is, and the About intro says it again
+       * in the same breath two centimetres lower. This is the paragraph for
+       * somebody who has just been told what the restaurant is and now wants
+       * to know who runs it — the people, the kitchen, the reason it exists.
+       *
+       * Left empty it falls back to the About intro, so a site that has never
+       * been touched still says something rather than showing a bare picture.
+       */
+      name: "welcomeText",
+      label: "Welkom-tekst op de homepage",
+      type: "textarea",
+      localized: true,
+      admin: {
+        description:
+          "Staat onder de hero, naast de foto. Vertel hier iets anders dan de hero al zegt — over jullie, de keuken, waarom jullie dit doen. Laat leeg om de tekst van 'Over ons' te gebruiken.",
+      },
+    },
+    {
       name: "heroImages",
       label: "Foto's naast de titel",
       type: "array",

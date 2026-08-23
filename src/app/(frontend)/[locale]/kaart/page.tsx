@@ -41,13 +41,18 @@ export default async function KaartPage({ params }: PageProps) {
     const [catRes, itemRes] = await Promise.all([
       payload.find({
         collection: "menu-categories",
-        sort: "order",
+        // Second key on purpose. Rows tied on `order` come back in whatever
+        // sequence the database feels like, and it does not feel the same way
+        // twice — so a card with two categories both left at the same number
+        // reorders itself between page loads. `name` is stable, so ties break
+        // the same way every time.
+        sort: ["order", "name"],
         limit: 100,
         locale,
       }),
       payload.find({
         collection: "menu-items",
-        sort: "order",
+        sort: ["order", "name"],
         limit: 200,
         where: { available: { equals: true } },
         locale,

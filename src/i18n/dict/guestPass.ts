@@ -39,6 +39,9 @@
 export const guestPassNl = {
   metaTitle: (name: string) => `Je tafel bij ${name}`,
   heading: "Jullie tafel",
+  welcomeHeading: "Welkom bij ons",
+  seeMenu: "Bekijk de kaart",
+  followHint: "Volg ons, dan zie je wat er speelt en wat er op de kaart komt.",
   subheading: (name: string) => `${name} heeft gereserveerd`,
   notFound: "Deze link werkt niet meer",
   notFoundBody:
@@ -71,8 +74,8 @@ export const guestPassNl = {
   icsTitle: (name: string) => `Tafel bij ${name}`,
   icsDescription: (name: string, url: string, note: string) =>
     note
-      ? `Gereserveerd bij ${name}.\n\n${note}\n\nAlle details en wie er meekomen: ${url}`
-      : `Gereserveerd bij ${name}. Alle details en wie er meekomen: ${url}`,
+      ? `Gereserveerd bij ${name}.\n\n${note}\n\nAlle details: ${url}`
+      : `Gereserveerd bij ${name}. Alle details: ${url}`,
   directions: "Route hierheen",
   directionsGoogle: "Google Maps",
   directionsApple: "Apple Kaarten",
@@ -83,15 +86,21 @@ export const guestPassNl = {
   copied: "Gekopieerd",
   shareWhatsApp: "Deel via WhatsApp",
   whatsAppMessage: (name: string, url: string) =>
-    `We eten bij ${name}. Geef hier even door of je erbij bent: ${url}`,
-  joinHeading: "Kom je ook?",
-  joinHint: "Laat even weten dat je erbij bent, dan weten wij het ook.",
+    `We eten bij ${name}. Hier staan de details, en je kunt je dieetwensen doorgeven: ${url}`,
+  joinHeading: "Eet je iets niet?",
+  joinHint:
+    "Een allergie, vegetarisch, iets anders: zet het hier neer, dan weet de keuken het voor jullie komen.",
+  openForm: "Iets doorgeven",
   yourName: "Je naam",
   nameRequired: "Vul even je naam in.",
   dietaryHeading: "Dieetwensen",
   dietaryHint: "Allergie, vegetarisch, iets anders: we houden er rekening mee.",
   drinksHeading: "Alvast wat te drinken?",
   drinksHint: "Niet verplicht, maar het scheelt wachten bij binnenkomst.",
+  noteHeading: "Nog iets anders?",
+  noteHint:
+    "Staat je allergie er niet bij, of is er iets anders wat de keuken moet weten? Schrijf het hier.",
+  notePlaceholder: "Bijvoorbeeld: allergisch voor noten en sesam",
   submit: "Doorgeven",
   submitting: "Bezig...",
   update: "Wijziging doorgeven",
@@ -100,11 +109,11 @@ export const guestPassNl = {
   thanks: "Genoteerd, tot dan.",
   thanksBody:
     "We zien je op de dag zelf. Je kunt deze pagina open laten staan.",
-  alreadyJoined: "Je staat al op de lijst.",
+  alreadyJoined: "Je wensen staan genoteerd.",
   error: "Er ging iets mis. Probeer het opnieuw.",
-  full: "De lijst zit vol. Bel ons even, dan schrijven we je erbij.",
-  attending: "Wie er komen",
-  noneYet: "Nog niemand heeft zich aangemeld.",
+  full: "We hebben er genoeg binnen. Bel ons even als er nog iets bij moet.",
+  attending: "Wat we alvast weten",
+  noneYet: "Nog niemand heeft iets doorgegeven.",
   nothingPicked: "geen wensen doorgegeven",
   you: "jij",
   privacyNote: "Alleen wie de link heeft, ziet deze pagina.",
@@ -115,6 +124,9 @@ export type GuestPassDict = typeof guestPassNl;
 export const guestPassEn: GuestPassDict = {
   metaTitle: (name: string) => `Your table at ${name}`,
   heading: "Your table",
+  welcomeHeading: "Welcome",
+  seeMenu: "See the menu",
+  followHint: "Follow along to see what we are up to and what is going on the menu.",
   subheading: (name: string) => `${name} made the booking`,
   notFound: "This link no longer works",
   notFoundBody:
@@ -147,8 +159,8 @@ export const guestPassEn: GuestPassDict = {
   icsTitle: (name: string) => `Table at ${name}`,
   icsDescription: (name: string, url: string, note: string) =>
     note
-      ? `Booked at ${name}.\n\n${note}\n\nAll the details and who else is coming: ${url}`
-      : `Booked at ${name}. All the details and who else is coming: ${url}`,
+      ? `Booked at ${name}.\n\n${note}\n\nAll the details: ${url}`
+      : `Booked at ${name}. All the details: ${url}`,
   directions: "Directions",
   directionsGoogle: "Google Maps",
   directionsApple: "Apple Maps",
@@ -160,9 +172,11 @@ export const guestPassEn: GuestPassDict = {
   copied: "Copied",
   shareWhatsApp: "Share on WhatsApp",
   whatsAppMessage: (name: string, url: string) =>
-    `We are eating at ${name}. Let them know here whether you are joining: ${url}`,
-  joinHeading: "Are you coming too?",
-  joinHint: "Let us know you are joining and we will count you in.",
+    `We are eating at ${name}. All the details are here, and you can pass on what you do not eat: ${url}`,
+  joinHeading: "Anything you do not eat?",
+  joinHint:
+    "An allergy, vegetarian, anything else: put it here and the kitchen will know before you arrive.",
+  openForm: "Pass something on",
   yourName: "Your name",
   nameRequired: "Please fill in your name.",
   dietaryHeading: "Dietary wishes",
@@ -170,6 +184,10 @@ export const guestPassEn: GuestPassDict = {
     "An allergy, vegetarian, anything else: we will take it into account.",
   drinksHeading: "Something to drink already?",
   drinksHint: "Not required, but it saves waiting when you arrive.",
+  noteHeading: "Anything else?",
+  noteHint:
+    "Allergy not on the list, or something else the kitchen should know? Write it here.",
+  notePlaceholder: "For example: allergic to nuts and sesame",
   submit: "Send it through",
   submitting: "Sending...",
   update: "Send the change through",
@@ -177,11 +195,11 @@ export const guestPassEn: GuestPassDict = {
   editCancel: "Never mind",
   thanks: "Noted, see you then.",
   thanksBody: "We will see you on the day. Feel free to leave this page open.",
-  alreadyJoined: "You are already on the list.",
+  alreadyJoined: "Your wishes are noted.",
   error: "Something went wrong. Please try again.",
-  full: "The list is full. Give us a ring and we will add you ourselves.",
-  attending: "Who is coming",
-  noneYet: "Nobody has signed up yet.",
+  full: "We have enough in. Give us a ring if something still needs adding.",
+  attending: "What we know so far",
+  noneYet: "Nothing passed on yet.",
   nothingPicked: "no wishes passed on",
   you: "you",
   privacyNote: "Only people with the link can see this page.",

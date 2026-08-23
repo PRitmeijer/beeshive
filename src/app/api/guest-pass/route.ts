@@ -195,6 +195,17 @@ export async function POST(request: Request) {
     const drinks = keepPicks(input.drinks, allowed.drinks);
 
     /**
+     * The one field a companion writes in their own words rather than picks.
+     *
+     * `str` trims and caps it, which is the whole defence it needs: it is
+     * stored as text and rendered as text, never as markup and never into a
+     * query, and the cap is the same number the collection enforces. An empty
+     * line is stored as "" rather than refused — somebody with nothing to add
+     * is the normal case, not a failed submission.
+     */
+    const note = str(input.note, GUEST_RESPONSE_LIMITS.note);
+
+    /**
      * The write, and the whole of it.
      *
      * `guestResponses` is rebuilt from the rows already stored and handed back
@@ -241,6 +252,7 @@ export async function POST(request: Request) {
       name,
       dietary: dietary.join(", "),
       drinks: drinks.join(", "),
+      note,
       addedAt: new Date().toISOString(),
     };
 

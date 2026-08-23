@@ -62,6 +62,19 @@ const webp = { format: "webp" as const, options: { quality: 78 } };
 
 export const Media: CollectionConfig = {
   slug: "media",
+  /**
+   * Uploads are public to read, and only to read.
+   *
+   * Payload's default access is authenticated-only for every operation, which
+   * is right for a collection of documents and wrong for a folder of
+   * photographs: the browser fetches these from /api/media/file/<name> as an
+   * ordinary image request with no session on it, so the default answers 403
+   * and every picture on the public site renders as a broken box. Writing
+   * still wants a logged-in user, which is the half that matters.
+   */
+  access: {
+    read: () => true,
+  },
   labels: {
     singular: "Bestand",
     plural: "Media",

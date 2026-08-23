@@ -28,10 +28,14 @@ export const Notifications: CollectionConfig = {
       name: "message",
       label: "Bericht",
       type: "textarea",
-      required: true,
+      // Optional on purpose. Plenty of notices are the title and nothing
+      // else — "Zondag gesloten", "Kerstmenu is er" — and being made to write
+      // a second sentence to say the same thing again is how a banner ends up
+      // reading like a form somebody had to fill in.
       localized: true,
       admin: {
-        description: "Het volledige bericht dat bezoekers zien",
+        description:
+          "Optioneel. Laat leeg als de titel het al zegt; dan toont de melding alleen de titel.",
       },
     },
     {

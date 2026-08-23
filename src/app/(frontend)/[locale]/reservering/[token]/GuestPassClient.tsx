@@ -5,8 +5,9 @@ import { LogoSvg } from "@/components/LogoSvg";
 import { ShareActions } from "@/components/ShareActions";
 import { Sheet } from "@/components/Sheet";
 import { TornEdge } from "@/components/TornEdge";
+import { WelcomeBlock } from "@/components/WelcomeBlock";
 import { getDict } from "@/i18n/dictionaries";
-import type { Locale } from "@/i18n/config";
+import { localeHref, type Locale } from "@/i18n/config";
 import type { GuestResponseView, GuestPassView } from "@/lib/guestPass";
 import { EVENTS, track } from "@/lib/umami";
 
@@ -52,6 +53,16 @@ interface Props {
   phone: string;
   mapsGoogleUrl: string;
   mapsAppleUrl: string;
+  /** Site Instellingen → Contact. Empty means no map is drawn. */
+  mapEmbedUrl: string;
+  mapTitle: string;
+  /** The welcome under the header: Site Instellingen → Over ons. */
+  welcomeText: string;
+  welcomeImageUrl: string;
+  welcomeImageAlt: string;
+  /** Site Instellingen → Contact. Either may be empty. */
+  instagramUrl: string;
+  facebookUrl: string;
   dietaryOptions: string[];
   drinkOptions: string[];
   formEnabled: boolean;
@@ -72,6 +83,7 @@ interface Remembered {
   name: string;
   dietary: string[];
   drinks: string[];
+  note: string;
 }
 
 const EMPTY: Remembered = {
@@ -79,6 +91,7 @@ const EMPTY: Remembered = {
   name: "",
   dietary: [],
   drinks: [],
+  note: "",
 };
 
 /** Same letterpress rule as every other field on the site. */
@@ -166,6 +179,13 @@ export function GuestPassClient({
   phone,
   mapsGoogleUrl,
   mapsAppleUrl,
+  mapEmbedUrl,
+  mapTitle,
+  welcomeText,
+  welcomeImageUrl,
+  welcomeImageAlt,
+  instagramUrl,
+  facebookUrl,
   dietaryOptions,
   drinkOptions,
   formEnabled,
@@ -216,6 +236,7 @@ export function GuestPassClient({
         name: parsed.name,
         dietary: Array.isArray(parsed.dietary) ? parsed.dietary : [],
         drinks: Array.isArray(parsed.drinks) ? parsed.drinks : [],
+        note: typeof parsed.note === "string" ? parsed.note : "",
       };
       setRemembered(saved);
       setDraft(saved);
@@ -231,13 +252,20 @@ export function GuestPassClient({
    * character. The year is always there: this is a single evening being read
    * out of a chat message, with nothing around it to date it.
    */
-  const dateLabel = (iso: string): string => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "";
+  const dateParts = (
+    iso: string,
+  ): { weekday: string; day: string; month: string; year: string } | null => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
     const d = new Date(`${iso}T12:00:00.000Z`);
-    const weekday = dict.weekdays[(d.getUTCDay() + 6) % 7];
-    const month = dict.months[d.getUTCMonth()];
-    return `${weekday} ${d.getUTCDate()} ${month} ${d.getUTCFullYear()}`;
+    return {
+      weekday: dict.weekdays[(d.getUTCDay() + 6) % 7],
+      day: String(d.getUTCDate()),
+      month: dict.months[d.getUTCMonth()],
+      year: String(d.getUTCFullYear()),
+    };
   };
+
+  const when = dateParts(view.date);
 
   const toggle = (key: "dietary" | "drinks") => (option: string) =>
     setDraft((prev) => ({
@@ -276,6 +304,7 @@ export function GuestPassClient({
           name: draft.name,
           dietary: draft.dietary,
           drinks: draft.drinks,
+          note: draft.note,
         }),
       });
       const data = (await res.json().catch(() => null)) as {
@@ -315,7 +344,16 @@ export function GuestPassClient({
   // An evening that is over or called off is not asking anyone anything. The
   // endpoint refuses these too; this only keeps the page honest about it.
   const canJoin = formEnabled && !cancelled && !isPast;
-  const showForm = canJoin && (editing || !remembered);
+  /**
+   * The form opens on a tap, never on arrival.
+   *
+   * Expanded by default it was the tallest thing on the page — a name, two
+   * lists of tickboxes and a text area — sitting between somebody and the
+   * booking they opened the link for, on the phone, in a hallway. Most of the
+   * party have nothing to declare and should not have to scroll past the
+   * question; the ones who do are looking for it and will find a button.
+   */
+  const showForm = canJoin && editing;
 
   // First names only, on both sides, so this is a match on what is shown.
   const myFirstName = (remembered?.name ?? "").trim().split(/\s+/)[0] ?? "";
@@ -356,25 +394,56 @@ export function GuestPassClient({
       </section>
 
       <section className="section-padding relative overflow-hidden bg-paper-deep">
-        <div className="mx-auto max-w-2xl space-y-14">
+        <div className="mx-auto max-w-2xl space-y-12">
           {/* ===== When, where, how many ===== */}
           <Sheet tone="paper" edge="soft">
             <div className="px-6 py-10 md:px-10 md:py-12">
-              <dl className="space-y-7">
-                <div>
-                  <dt className="label">{t.whenLabel}</dt>
-                  <dd className="menu-row mt-2">
-                    <span className="menu-name">{dateLabel(view.date)}</span>
+              {/* ===== The evening, given the room it deserves =====
+                  For most of the party this page is the first thing they ever
+                  see of the place: a link tapped inside a chat, on a phone, on
+                  the way to somewhere else. So the one fact they came for is
+                  set like the front of an invitation rather than filed as the
+                  first row of a list. The day and the month carry the sheet,
+                  the hour answers them in the honey ink, and the weekday and
+                  year sit underneath at reading size, where somebody checking
+                  a diary goes looking. */}
+              {when ? (
+                <div className="pb-7">
+                  <p className="label">{t.whenLabel}</p>
+                  <div className="mt-4 flex flex-wrap items-baseline gap-x-7 gap-y-2">
+                    <p className="heading-xl figures-old text-hive-800">
+                      {when.day} {when.month}
+                    </p>
                     {view.time ? (
-                      <span className="menu-price figures-old">
+                      <p className="font-display figures-old text-3xl font-medium
+                                    leading-none text-honey-600 md:text-4xl">
                         {view.time}
-                      </span>
+                      </p>
                     ) : null}
-                  </dd>
+                  </div>
+                  {/* Weekday and year are the two things a person checks
+                      against a diary, and they are not the same fact — a
+                      middot keeps them from reading as one odd phrase. */}
+                  <p className="mt-4 font-display text-lg text-hive-500">
+                    {when.weekday} <span className="text-hive-300">·</span>{" "}
+                    {when.year}
+                  </p>
+
+                  {/* The calendar belongs to the date, not to a block of its
+                      own further down. Somebody reading "12 september 19:00"
+                      is at that exact moment deciding whether they will
+                      remember it, and the answer to that thought should be
+                      under their thumb rather than two scrolls away. */}
+                  <div className="mt-7">{calendar}</div>
                 </div>
+              ) : null}
 
-                <div className="rule-ink w-full" aria-hidden="true" />
+              <div
+                className={when ? "rule-ink w-full" : "hidden"}
+                aria-hidden="true"
+              />
 
+              <dl className="mt-8 space-y-6">
                 <div>
                   <dt className="label">{t.whereLabel}</dt>
                   <dd className="mt-2">
@@ -386,26 +455,97 @@ export function GuestPassClient({
                         </span>
                       ))}
                     </address>
+
+                    {/* The map and the way to it, under the address itself.
+                        "Zuilen, Utrecht" answers where; this answers how, and
+                        the two were a page apart for no reason other than that
+                        they arrived as separate ideas. Same embed and the same
+                        sepia as /contact, so the one rectangle on the page
+                        that is not ours reads the same in both places. */}
+                    {mapEmbedUrl ? (
+                      <div className="mt-5 overflow-hidden rounded-[2px] border border-hive-700/15">
+                        <iframe
+                          src={mapEmbedUrl}
+                          width="100%"
+                          height="170"
+                          style={{
+                            border: 0,
+                            filter: "sepia(0.22) saturate(0.85) contrast(0.96)",
+                          }}
+                          loading="lazy"
+                          referrerPolicy="no-referrer-when-downgrade"
+                          title={mapTitle}
+                          className="block w-full"
+                        />
+                      </div>
+                    ) : null}
+
+                    <div className="mt-4 flex flex-wrap items-center gap-x-7 gap-y-2">
+                      <a
+                        href={mapsGoogleUrl}
+                        onClick={() =>
+                          track(EVENTS.directionsClicked, {
+                            source: "guest-pass-google",
+                          })
+                        }
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="ink-link"
+                      >
+                        {t.directionsGoogle}
+                      </a>
+                      <a
+                        href={mapsAppleUrl}
+                        onClick={() =>
+                          track(EVENTS.directionsClicked, {
+                            source: "guest-pass-apple",
+                          })
+                        }
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="ink-link"
+                      >
+                        {t.directionsApple}
+                      </a>
+                      {phone ? (
+                        <a
+                          href={`tel:${phone.replace(/\s/g, "")}`}
+                          onClick={() => track(EVENTS.phoneClicked)}
+                          className="ink-link"
+                        >
+                          {t.callUs}
+                        </a>
+                      ) : null}
+                    </div>
                   </dd>
                 </div>
 
                 <div className="rule-ink w-full" aria-hidden="true" />
 
-                <div className="menu-row">
-                  <dt className="label self-center">{t.guestsLabel}</dt>
-                  <dd className="menu-price figures-old">
-                    {view.guests === null ? t.guestsUnknown : t.guestsValue(view.guests)}
-                  </dd>
-                </div>
+                {/* Three one-line facts, set as a group rather than on the
+                    same rhythm as the blocks above. They are read together —
+                    how many of us, is it confirmed, whose name is it under —
+                    and 28 points of air between each was the page pretending
+                    they were three separate subjects. */}
+                <div className="space-y-3">
+                  <div className="menu-row">
+                    <dt className="label self-center">{t.guestsLabel}</dt>
+                    <dd className="menu-price figures-old">
+                      {view.guests === null
+                        ? t.guestsUnknown
+                        : t.guestsValue(view.guests)}
+                    </dd>
+                  </div>
 
-                <div className="menu-row">
-                  <dt className="label self-center">{t.statusLabel}</dt>
-                  <dd className="menu-price">{t.status[view.status]}</dd>
-                </div>
+                  <div className="menu-row">
+                    <dt className="label self-center">{t.statusLabel}</dt>
+                    <dd className="menu-price">{t.status[view.status]}</dd>
+                  </div>
 
-                <div className="menu-row">
-                  <dt className="label self-center">{t.nameLabel}</dt>
-                  <dd className="menu-price">{view.firstName}</dd>
+                  <div className="menu-row">
+                    <dt className="label self-center">{t.nameLabel}</dt>
+                    <dd className="menu-price">{view.firstName}</dd>
+                  </div>
                 </div>
               </dl>
 
@@ -428,48 +568,6 @@ export function GuestPassClient({
               ) : null}
             </div>
           </Sheet>
-
-          {/* ===== Into the calendar ===== */}
-          {calendar}
-
-          {/* ===== Getting there ===== */}
-          <div>
-            <h2 className="label">{t.directions}</h2>
-            <div className="rule-ink mt-3 w-10" aria-hidden="true" />
-            <div className="mt-4 flex flex-wrap items-center gap-x-8 gap-y-3">
-              <a
-                href={mapsGoogleUrl}
-                onClick={() =>
-                  track(EVENTS.directionsClicked, { source: "guest-pass-google" })
-                }
-                target="_blank"
-                rel="noopener noreferrer"
-                className="ink-link"
-              >
-                {t.directionsGoogle}
-              </a>
-              <a
-                href={mapsAppleUrl}
-                onClick={() =>
-                  track(EVENTS.directionsClicked, { source: "guest-pass-apple" })
-                }
-                target="_blank"
-                rel="noopener noreferrer"
-                className="ink-link"
-              >
-                {t.directionsApple}
-              </a>
-              {phone ? (
-                <a
-                  href={`tel:${phone.replace(/\s/g, "")}`}
-                  onClick={() => track(EVENTS.phoneClicked)}
-                  className="ink-link"
-                >
-                  {t.callUs}
-                </a>
-              ) : null}
-            </div>
-          </div>
 
           {/* ===== Passing it on ===== */}
           <div>
@@ -538,6 +636,31 @@ export function GuestPassClient({
                     />
                   ) : null}
 
+                  {/* The line nobody could pick off a list.
+                      Always here, unlike the two lists above, which appear
+                      only when the owners have written options: an allergy the
+                      kitchen never thought of is exactly the thing that has
+                      nowhere else to go, so this cannot depend on a setting
+                      somebody forgot to fill in. */}
+                  <div>
+                    <label htmlFor="guest-note" className="label block">
+                      {t.noteHeading}
+                    </label>
+                    <p className="mt-2 text-sm text-hive-400">{t.noteHint}</p>
+                    <textarea
+                      id="guest-note"
+                      name="note"
+                      rows={3}
+                      maxLength={300}
+                      value={draft.note}
+                      onChange={(e) =>
+                        setDraft((prev) => ({ ...prev, note: e.target.value }))
+                      }
+                      placeholder={t.notePlaceholder}
+                      className={`${fieldClass} resize-none`}
+                    />
+                  </div>
+
                   <div className="flex flex-wrap items-center gap-4 pt-1">
                     <button
                       type="submit"
@@ -571,6 +694,17 @@ export function GuestPassClient({
                     </p>
                   ) : null}
                 </form>
+              ) : !remembered ? (
+                <div className="mt-5">
+                  <p className="leading-relaxed text-hive-500">{t.joinHint}</p>
+                  <button
+                    type="button"
+                    onClick={() => setEditing(true)}
+                    className="btn-secondary mt-5"
+                  >
+                    {t.openForm}
+                  </button>
+                </div>
               ) : (
                 <div className="mt-5" role="status">
                   <p className="font-display text-xl text-hive-700">
@@ -594,15 +728,18 @@ export function GuestPassClient({
             </div>
           ) : null}
 
-          {/* ===== Who is coming ===== */}
+          {/* ===== What the party has passed on =====
+              Only once somebody has. An empty list under a heading is a
+              question nobody answered yet, and on a pass that has just been
+              opened for the first time that is every single time — a whole
+              block of page spent saying nothing happened. The person who has
+              just answered still sees their own line, because `responses` has
+              it by then. */}
+          {responses.length > 0 ? (
           <div>
             <h2 className="label">{t.attending}</h2>
             <div className="rule-ink mt-3 w-10" aria-hidden="true" />
-            {responses.length === 0 ? (
-              <p className="mt-4 italic leading-relaxed text-hive-400">
-                {t.noneYet}
-              </p>
-            ) : (
+            {(
               <ul className="mt-5 space-y-5">
                 {responses.map((response, index) => {
                   const picks = [...response.dietary, ...response.drinks];
@@ -620,15 +757,58 @@ export function GuestPassClient({
                           ticked: a bare name in a list of answers reads as a
                           row that failed to load rather than as somebody who
                           simply eats everything. */}
-                      <p className="menu-desc">
-                        {picks.length > 0 ? picks.join(" · ") : t.nothingPicked}
-                      </p>
+                      {/* "geen wensen doorgegeven" is only true when they
+                          ticked nothing AND wrote nothing. Somebody who typed
+                          an allergy has passed plenty on, and saying otherwise
+                          directly above their own sentence reads as a bug. */}
+                      {picks.length > 0 || !response.note ? (
+                        <p className="menu-desc">
+                          {picks.length > 0
+                            ? picks.join(" · ")
+                            : t.nothingPicked}
+                        </p>
+                      ) : null}
+                      {/* Their own words get the display face, the way the
+                          house note does: it is a sentence somebody wrote,
+                          not another field with a value. */}
+                      {response.note ? (
+                        <p className="mt-1 max-w-prose font-display text-[0.95rem] italic
+                                      leading-relaxed text-hive-500">
+                          {response.note}
+                        </p>
+                      ) : null}
                     </li>
                   );
                 })}
               </ul>
             )}
           </div>
+          ) : null}
+
+          {/* ===== Who they have just been booked in with =====
+              At the foot rather than under the header. Most of the party got
+              here from a chat message and have never met the place, so the
+              introduction earns its spot — but not above the booking they
+              opened the link for. Whoever has read this far has already found
+              the date, the address and the calendar. */}
+          {welcomeText || welcomeImageUrl ? (
+            <div>
+              <div className="rule-ink w-full" aria-hidden="true" />
+              <div className="mt-10">
+                <WelcomeBlock
+                  heading={t.welcomeHeading}
+                  followHint={t.followHint}
+                  text={welcomeText}
+                  imageUrl={welcomeImageUrl}
+                  imageAlt={welcomeImageAlt}
+                  instagramUrl={instagramUrl}
+                  facebookUrl={facebookUrl}
+                  ctaHref={localeHref(locale, "/kaart")}
+                  ctaLabel={t.seeMenu}
+                />
+              </div>
+            </div>
+          ) : null}
 
           <p className="text-sm italic leading-snug text-hive-400">
             {t.privacyNote}

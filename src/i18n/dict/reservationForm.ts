@@ -158,14 +158,17 @@ export const reservationFormNl = {
    * in front of them and can see what it is; here, nobody has seen it yet, so
    * this has to say what the link leads to before it asks anyone to send it on.
    */
+  calendarText:
+    "Zet de avond meteen in je agenda, dan hoef je er niet meer aan te denken.",
+  addToCalendar: "Zet in mijn agenda",
   shareText:
-    "Dit is de pagina van jullie tafel. Stuur hem door naar wie er meekomt: zij zien wanneer en waar, en kunnen hun wensen alvast doorgeven.",
+    "Dit is de pagina van jullie tafel. Stuur hem door naar wie er meekomt: zij zien wanneer en waar, kunnen doorgeven wat ze niet eten, en zetten hem in hun eigen agenda.",
   copyLink: "Kopieer de link",
   copied: "Gekopieerd",
   shareWhatsApp: "Stuur via WhatsApp",
   /** What WhatsApp opens with. The guest may rewrite every word of it. */
   whatsAppMessage: (url: string) =>
-    `Ik heb een tafel geregeld. Hier staan de details, en je kunt doorgeven of je erbij bent: ${url}`,
+    `Ik heb een tafel geregeld. Hier staat alles: wanneer, waar, en zo in je agenda: ${url}`,
   successAgain: "Nog een tafel reserveren",
 };
 
@@ -242,12 +245,15 @@ export const reservationFormEn: ReservationFormDict = {
   successTitle: "Thank you, we have got it",
   successText:
     "Your request is noted; it is not a confirmation yet. We will let you know whether the table is free.",
+  calendarText:
+    "Put the evening straight into your calendar, so you can stop holding it in your head.",
+  addToCalendar: "Add to my calendar",
   shareText:
-    "This is your table's own page. Send it on to whoever is coming: they will see when and where, and can pass on their wishes in advance.",
+    "This is your table's own page. Send it on to whoever is coming: they will see when and where, can pass on what they do not eat, and put it in their own calendar.",
   copyLink: "Copy the link",
   copied: "Copied",
   shareWhatsApp: "Send on WhatsApp",
   whatsAppMessage: (url: string) =>
-    `I have booked us a table. All the details are here, and you can let them know whether you are joining: ${url}`,
+    `I have booked us a table. Everything is here: when, where, and straight into your calendar: ${url}`,
   successAgain: "Book another table",
 };

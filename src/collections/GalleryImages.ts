@@ -1,4 +1,5 @@
 import type { CollectionConfig } from "payload";
+import { assignNextOrder } from "@/lib/ordering";
 
 export const GalleryImages: CollectionConfig = {
   slug: "gallery-images",
@@ -12,6 +13,12 @@ export const GalleryImages: CollectionConfig = {
     description:
       "Upload foto's van het restaurant, gerechten, evenementen en meer. Ze verschijnen op de Galerij-pagina.",
     group: "Inhoud",
+  },
+  // The overview opens in the order the site prints them, not by whenever
+  // somebody happened to add them. Seeing the sequence is most of managing it.
+  defaultSort: "order",
+  hooks: {
+    beforeChange: [assignNextOrder("gallery-images")],
   },
   fields: [
     {
@@ -71,10 +78,10 @@ export const GalleryImages: CollectionConfig = {
       name: "order",
       label: "Volgorde",
       type: "number",
-      defaultValue: 0,
       admin: {
         position: "sidebar",
-        description: "Lagere nummers verschijnen eerst",
+        description:
+          "Lagere nummers verschijnen eerst. Laat leeg en het komt onderaan te staan; de nummers gaan met stappen van 10, zodat je er altijd iets tussen kunt zetten.",
       },
     },
   ],

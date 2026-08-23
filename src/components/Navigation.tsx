@@ -183,7 +183,21 @@ export function Navigation({
     // contents are pushed down clear of them. When the notification bar is up
     // it has already taken that strip, and the class resolves to nothing.
     <header
-      className={`fixed left-0 right-0 z-50 safe-head-below-notice transition-colors duration-500 ease-settle ${
+      // Sticky, and pulled back up by its own height.
+      //
+      // Fixed, it had to be told where its top was, and the only thing that
+      // knew was a Javascript measurement of the notification bar. For the
+      // frame before that number existed the bar sat at zero and so did this,
+      // and the bar — which stacks above — painted straight over the reserve
+      // and menu links. A split second, and completely unacceptable: the one
+      // thing chrome may never do is cover the way out of the page.
+      //
+      // In the flow it simply begins under the bar, because the bar is in the
+      // flow above it. `-mb-20` is its own 5rem back, so nothing below moves
+      // down and the hero still runs up underneath it exactly as before. The
+      // variable is still here, but only as the offset it sticks at once the
+      // reader scrolls — and by then it has long been measured.
+      className={`sticky z-50 -mb-20 safe-head-below-notice transition-colors duration-500 ease-settle ${
         opaque ? "bg-paper" : "bg-transparent"
       }`}
       style={{ top: "var(--notice-h, 0px)" }}

@@ -41,7 +41,9 @@ export default async function GalerijPage({ params }: PageProps) {
     const payload = await getPayloadClient();
     const res = await payload.find({
       collection: "gallery-images",
-      sort: "order",
+      // Ties broken by title rather than left to the database, which returns
+      // equal rows in a different order on different requests.
+      sort: ["order", "title"],
       limit: 100,
       depth: 1,
       locale,

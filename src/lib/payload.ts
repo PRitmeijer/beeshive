@@ -117,6 +117,11 @@ const nlDefaults = {
     "Hooguit een mail per maand, nooit spam, en uitschrijven kan met een klik.",
   aboutIntro:
     "De Bee's Hive is meer dan een restaurant. Het is een plek waar kunst, creativiteit en lekker eten samenkomen in het hart van Zuilen, Utrecht.",
+  /** The welcome under the hero. Blank falls through to `aboutIntro`. */
+  welcomeText: "",
+  /** The welcome at the foot of a guest pass. Blank falls through to the two
+   *  above, in that order. */
+  guestPassWelcome: "",
   aboutStory: null as string | null,
   aboutImage: null as MediaRef | null,
   aboutVideoUrl: "",
@@ -202,6 +207,11 @@ const enDefaults: SiteSettingsData = {
     "At most one email a month, never spam, and you can unsubscribe in one click.",
   aboutIntro:
     "De Bee's Hive is more than a restaurant. It is a place where art, creativity and good food come together in the heart of Zuilen, Utrecht.",
+  /** The welcome under the hero. Blank falls through to `aboutIntro`. */
+  welcomeText: "",
+  /** The welcome at the foot of a guest pass. Blank falls through to the two
+   *  above, in that order. */
+  guestPassWelcome: "",
   aboutStory: null as string | null,
   aboutImage: null as MediaRef | null,
   aboutVideoUrl: "",

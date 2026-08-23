@@ -162,6 +162,24 @@ export default async function GuestPassPage({ params }: PageProps) {
       phone={s.phone}
       mapsGoogleUrl={googleDirectionsUrl(s)}
       mapsAppleUrl={appleDirectionsUrl(s)}
+      mapEmbedUrl={s.googleMapsEmbedUrl?.trim() ?? ""}
+      mapTitle={getDict(locale).contact.mapTitle}
+      // The welcome under the header, and the two places to follow them.
+      // Everything here is already in Site Instellingen — the About tab's
+      // intro and picture, the Contact tab's socials — so the owners edit it
+      // where they already know to look, and no field exists twice.
+      welcomeText={
+        s.guestPassWelcome?.trim() ||
+        s.welcomeText?.trim() ||
+        s.aboutIntro?.trim() ||
+        ""
+      }
+      welcomeImageUrl={
+        s.aboutImage?.sizes?.card?.url || s.aboutImage?.url || ""
+      }
+      welcomeImageAlt={s.aboutImage?.alt ?? ""}
+      instagramUrl={s.socialMedia?.instagram?.trim() ?? ""}
+      facebookUrl={s.socialMedia?.facebook?.trim() ?? ""}
       dietaryOptions={(s.guestPassDietary ?? [])
         .map((row) => row?.label?.trim() ?? "")
         .filter(Boolean)}

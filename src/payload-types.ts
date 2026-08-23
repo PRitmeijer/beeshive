@@ -390,7 +390,7 @@ export interface GalleryImage {
    */
   description?: string | null;
   /**
-   * Lagere nummers verschijnen eerst
+   * Lagere nummers verschijnen eerst. Laat leeg en het komt onderaan te staan; de nummers gaan met stappen van 10, zodat je er altijd iets tussen kunt zetten.
    */
   order?: number | null;
   updatedAt: string;
@@ -409,7 +409,7 @@ export interface GalleryCategory {
    */
   name: string;
   /**
-   * Lagere nummers staan vooraan in de filterbalk
+   * Lagere nummers staan vooraan in de filterbalk. Laat leeg en het komt onderaan te staan; de nummers gaan met stappen van 10, zodat je er altijd iets tussen kunt zetten.
    */
   order?: number | null;
   updatedAt: string;
@@ -463,7 +463,7 @@ export interface MenuItem {
    */
   available?: boolean | null;
   /**
-   * Lagere nummers verschijnen eerst binnen de categorie
+   * Lagere nummers verschijnen eerst binnen de categorie. Laat leeg en het komt onderaan te staan; de nummers gaan met stappen van 10, zodat je er altijd iets tussen kunt zetten.
    */
   order?: number | null;
   updatedAt: string;
@@ -490,7 +490,7 @@ export interface MenuCategory {
    */
   icon?: string | null;
   /**
-   * Lagere nummers verschijnen eerst op de kaart
+   * Lagere nummers verschijnen eerst op de kaart. Laat leeg en het komt onderaan te staan; de nummers gaan met stappen van 10, zodat je er altijd iets tussen kunt zetten.
    */
   order?: number | null;
   updatedAt: string;
@@ -509,9 +509,9 @@ export interface Notification {
    */
   title: string;
   /**
-   * Het volledige bericht dat bezoekers zien
+   * Optioneel. Laat leeg als de titel het al zegt; dan toont de melding alleen de titel.
    */
-  message: string;
+  message?: string | null;
   /**
    * Bepaalt de kleur van de banner
    */
@@ -610,6 +610,10 @@ export interface Reservation {
          */
         dietary?: string | null;
         drinks?: string | null;
+        /**
+         * Wat deze persoon er zelf bij schreef, bijvoorbeeld een allergie die niet in de lijst staat.
+         */
+        note?: string | null;
         id?: string | null;
       }[]
     | null;
@@ -1071,6 +1075,7 @@ export interface ReservationsSelect<T extends boolean = true> {
         addedAt?: T;
         dietary?: T;
         drinks?: T;
+        note?: T;
         id?: T;
       };
   status?: T;
@@ -1231,6 +1236,10 @@ export interface SiteSetting {
   heroTitle?: string | null;
   heroSubtitle?: string | null;
   /**
+   * Staat onder de hero, naast de foto. Vertel hier iets anders dan de hero al zegt — over jullie, de keuken, waarom jullie dit doen. Laat leeg om de tekst van 'Over ons' te gebruiken.
+   */
+  welcomeText?: string | null;
+  /**
    * De drie foto's die naast de titel op de homepage staan. Laat dit helemaal leeg om de standaardfoto's te tonen. Zet je er zelf foto's in, doe er dan het liefst drie, in dezelfde volgorde als je ze op de site wilt zien.
    */
   heroImages?:
@@ -1317,6 +1326,10 @@ export interface SiteSetting {
    */
   guestPassEnabled?: boolean | null;
   /**
+   * Staat onderaan de deelbare pagina, voor gasten die jullie nog niet kennen. Laat leeg om de welkom-tekst van de homepage te gebruiken.
+   */
+  guestPassWelcome?: string | null;
+  /**
    * Wat het gezelschap alvast kan kiezen. Laat leeg om niets te vragen.
    */
   guestPassDrinks?:
@@ -1369,11 +1382,11 @@ export interface SiteSetting {
    */
   umamiWebsiteId?: string | null;
   /**
-   * Waar Umami draait, bijvoorbeeld https://cloud.umami.is. Nodig om de cijfers in dit paneel te tonen.
+   * Waar Umami draait. Nodig om de cijfers in dit paneel te tonen. Umami draait bij ons op dezelfde server als de website: vul dan http://umami:3000 in, dan blijven de cijfers binnen de server en hoeven ze niet eerst naar buiten en weer terug. Gebruiken jullie Umami Cloud, dan is het https://cloud.umami.is.
    */
   umamiHostUrl?: string | null;
   /**
-   * Let op: dit is een sleutel, behandel hem als een wachtwoord en deel hem met niemand. Hij kan ook buiten dit scherm om worden ingesteld als de omgevingsvariabele UMAMI_API_KEY; staat die ingevuld, dan wint die en wordt wat hier staat genegeerd.
+   * Meestal leeg laten. Draait Umami op deze server, dan meldt de site zich hier zelf aan met de gebruikersnaam en het wachtwoord die op de server staan, en is dit veld niet nodig. Vul het alleen bij Umami Cloud, of als iemand met de hand een sleutel voor jullie heeft opgehaald. Let op: zo'n sleutel is als een wachtwoord, deel hem met niemand. Staat de omgevingsvariabele UMAMI_API_KEY ingevuld, dan wint die en wordt wat hier staat genegeerd.
    */
   umamiApiKey?: string | null;
   /**
@@ -1436,6 +1449,7 @@ export interface SiteSettingsSelect<T extends boolean = true> {
       };
   heroTitle?: T;
   heroSubtitle?: T;
+  welcomeText?: T;
   heroImages?:
     | T
     | {
@@ -1460,6 +1474,7 @@ export interface SiteSettingsSelect<T extends boolean = true> {
   reservationLeadMinutes?: T;
   reservationHorizonDays?: T;
   guestPassEnabled?: T;
+  guestPassWelcome?: T;
   guestPassDrinks?:
     | T
     | {

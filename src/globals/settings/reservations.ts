@@ -106,6 +106,30 @@ export const reservationsTab: Tab = {
       },
     },
     {
+      /**
+       * The same block at the foot of a guest pass, and deliberately not the
+       * same words.
+       *
+       * The two readers are in different situations. Somebody on the landing
+       * page went looking for a restaurant. Somebody on a guest pass was
+       * booked in by a friend, has never heard of the place, and is reading a
+       * chat message on the way somewhere — so this one can be shorter, and
+       * can say the thing the homepage never has to: what to expect when they
+       * walk in.
+       *
+       * Falls back to the homepage welcome, then to the About intro.
+       */
+      name: "guestPassWelcome",
+      label: "Welkom-tekst op de gastenpagina",
+      type: "textarea",
+      localized: true,
+      admin: {
+        description:
+          "Staat onderaan de deelbare pagina, voor gasten die jullie nog niet kennen. Laat leeg om de welkom-tekst van de homepage te gebruiken.",
+        condition: (data) => Boolean(data?.guestPassEnabled),
+      },
+    },
+    {
       name: "guestPassDrinks",
       label: "Keuzes voor drinken",
       type: "array",
