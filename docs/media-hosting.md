@@ -1,23 +1,32 @@
 # Where the photographs are served from
 
-The uploads live in a Cloudflare R2 bucket. That part is settled and it is worth
-having on its own: the container stops keeping files on a disk that a rebuild
-wipes, and the photographs are somewhere that can be backed up and moved.
+The uploads can live in a Cloudflare R2 bucket, and for a while the plan was
+that they would. That is no longer the recommendation, and the reason belongs at
+the top rather than three sections down.
 
-What is still a choice is the **address a visitor's browser fetches them from**,
-and that choice is `R2_PUBLIC_URL`. There are three answers and the right one
-depends on where the domain's DNS lives.
+What the bucket was going to buy was durability. The photographs were on a
+Docker volume that nothing copied, and a volume nobody copies is a volume that
+eventually gets wiped. They now have that durability where they are: the backup
+container takes an encrypted snapshot of the `media-uploads` volume every night,
+into the same bucket the database backups already go to, and a photograph
+deleted by accident can be brought back from it. `docs/backups.md` is the
+runbook for that.
+
+What is left for the bucket to buy is speed, and whether it buys any at all
+depends entirely on where the domain's DNS lives. So the three answers below are
+all still real. The one that is right today is the one that needs no bucket.
 
 ## The short version
 
-| | address | cached at the edge | rate limited | needs DNS at Cloudflare |
-|---|---|---|---|---|
-| **A** custom domain | `https://media.debeeshive.nl/...` | yes | no | yes |
-| **B** the bucket's own subdomain | `https://pub-<hash>.r2.dev/...` | **no** | **yes** | no |
-| **C** leave it unset | `https://debeeshive.nl/api/media/file/...` | n/a, same origin | no | no |
+| | files are stored in | address a browser fetches | cached at the edge | rate limited | needs DNS at Cloudflare |
+|---|---|---|---|---|---|
+| **A** bucket with a custom domain | R2 | `https://media.debeeshive.nl/...` | yes | no | yes |
+| **B** bucket on its own subdomain | R2 | `https://pub-<hash>.r2.dev/...` | **no** | **yes** | no |
+| **C** no bucket at all | the `media-uploads` volume, snapshotted nightly | `https://debeeshive.nl/api/media/file/...` | n/a, same origin | no | no |
 
 All three work with the code as it stands. **A** is what the site is written
-for and **C** is what it does with no configuration.
+for, **C** is what it does with no configuration, and **C is the
+recommendation until the nameservers move.**
 
 **B is not the middle road it looks like**, and that is the single most
 important thing on this page. Cloudflare's CDN cache does not apply to the
@@ -86,29 +95,42 @@ If you do take this option, put the hostname in `R2_PUBLIC_URL` and rebuild: it
 is baked into `next.config.mjs`'s `images.remotePatterns` at build time, so a
 runtime-only change would leave the optimiser refusing the host.
 
-## C: no public address, served through the app
+## C: keep the files where they are, and back them up
 
-Leave `R2_PUBLIC_URL` unset.
+Leave all five `R2_*` variables unset.
 
-Payload keeps the URLs on `/api/media/file/...`, fetches the object from R2 and
-streams it to the visitor. Same origin, no third-party hostname, no rate limit,
-nothing to configure. It costs one Node request per photograph on a server that
-has other things to do, and it gives up the reason for putting the images on a
-CDN at all.
+Payload writes uploads to `MEDIA_DIR`, which in Docker is the `media-uploads`
+volume, and serves them from `/api/media/file/...` on our own origin. Same
+origin, no third-party hostname, no rate limit, nothing to configure, and the
+file is on the same disk as the process reading it. Every night at half past
+four the backup container takes an encrypted restic snapshot of that volume into
+the backups bucket, which is what makes this a durable answer rather than a
+convenient one.
 
-This is the recommendation until the nameservers move.
+This is the recommendation until the nameservers move, and it is close to being
+the best of the three outright.
 
-It sounds like the compromise and it is close to being the best of the three.
-The bucket still does the thing that actually mattered: the photographs stop
-living on a Docker volume that a rebuild can wipe and that no backup covers,
-which is durability rather than speed. What is given up is a CDN in front of the
-images, and option B does not really provide one either.
+The objection it used to have was durability, and that objection is answered.
+The one it still has is that there is no CDN in front of the images. That is
+real, and option B does not answer it either: an uncached bucket origin behind
+an unpublished rate limit is not a CDN. Only A is, and A is about where the
+nameservers live.
 
-The cost is one Node request per photograph on a cache miss, on a server that
-serves a few dozen images to a few hundred people a day. That is not the
+What C costs is one Node request per photograph on a cache miss, on a server
+that serves a few dozen images to a few hundred people a day. That is not the
 bottleneck this site had. The mobile score went from 50 to 95 by fixing
 render-blocking fonts, `no-store` on every page, and a hero image gated behind
 hydration. None of that was image hosting.
+
+There is a fourth arrangement, which is a bucket for storage with
+`R2_PUBLIC_URL` left unset: Payload keeps the URLs on `/api/media/file/...`,
+fetches each object from R2 and streams it to the visitor. It was the
+recommendation here before the snapshots existed. It is now the worst of both,
+adding a network round trip to R2 in front of every image while giving up the
+CDN anyway, and it protects the photographs against less rather than more:
+R2's durability covers the server dying, which the nightly snapshot also
+covers, and it does not cover somebody deleting a photograph in the admin,
+which the snapshot does. If a bucket is going to be turned on, turn it on for A.
 
 ## Is any of this bad for SEO?
 
@@ -139,19 +161,24 @@ actually about speed is A, and A is about where the nameservers live.
 
 ## So, in order
 
-1. **Create the bucket and set the four R2 variables, leave `R2_PUBLIC_URL`
-   empty.** The photographs move off the container's disk and become something
-   that can be backed up. Nothing about the site's speed changes, and nothing
-   can break.
-2. **If and when the domain's nameservers move to Cloudflare**, add the custom
-   domain to the bucket and set `R2_PUBLIC_URL` to it. One variable, one
-   rebuild, and the images are on a real CDN.
+1. **Do nothing.** Leave the `R2_*` variables unset. The photographs are written
+   to the `media-uploads` volume, served from our own origin, and snapshotted to
+   the backups bucket every night. Confirm that last part rather than assuming
+   it: `docker compose exec pgbackrest restic snapshots` should show one per
+   night.
+2. **If and when the domain's nameservers move to Cloudflare**, create the media
+   bucket, set the four variables and point `R2_PUBLIC_URL` at a custom domain
+   on it, then rebuild. That is option A, and it is the only one that puts the
+   images on a real CDN.
 3. **Reach for r2.dev only to try something out**, which is what Cloudflare
    built it for.
 
-Nothing is broken today either. With the R2 variables unset the site writes
-uploads to the `media-uploads` volume exactly as it always has, which is what a
-laptop wants.
+One trap in step 2, and it is the reason to decide before there are hundreds of
+photographs rather than after: **turning R2 on does not move the files that are
+already on the volume.** Payload writes new uploads to the bucket from that
+moment and goes on expecting the old ones somewhere it no longer looks, and the
+result is a gallery that half loads. `DEPLOY.md` has the fix, which is an import
+from an empty database with the bucket configured first.
 
 ## Where each value comes from
 

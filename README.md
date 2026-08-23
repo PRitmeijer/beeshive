@@ -1,6 +1,6 @@
 # De Bee's Hive: Website
 
-Eetcafé website built with **Next.js 15** and **Payload CMS 3** (self-hosted, PostgreSQL, media on Cloudflare R2).
+Eetcafé website built with **Next.js 15** and **Payload CMS 3** (self-hosted, PostgreSQL, with the database and the photographs both backed up to Cloudflare R2).
 
 **Deploying, or moving the live site onto this stack? Read
 [`DEPLOY.md`](DEPLOY.md).** It is the runbook for the cutover from the old
@@ -301,18 +301,19 @@ type wins.
 The generated URL is built from a small map in `src/payload.config.ts`. If a
 public route is ever renamed, that map is the place to change.
 
-## Media on Cloudflare R2
+## Media: where the photographs live
 
-Where visitors actually load the photographs from is a separate decision from
-where they are stored, and it depends on whether the domain's DNS is at
-Cloudflare. `docs/media-hosting.md` sets out the three options, what each costs,
-and why none of them affects search.
-
+By default they are written to the `media-uploads` volume and served from this
+origin, and the backup container takes an encrypted snapshot of that volume
+every night. That is the recommended arrangement, and it needs no configuration
+at all.
 
 With `R2_BUCKET`, `R2_ENDPOINT`, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`
-set, uploads go to the bucket and the container stores nothing itself. With any
-of them missing, uploads are written to `MEDIA_DIR` exactly as before — so a
-laptop, or a test host without a bucket, needs no configuration at all.
+set, uploads go to a Cloudflare R2 bucket instead and the container stores
+nothing itself. Whether that is worth doing depends on where visitors would then
+load the images from, which depends on whether the domain's DNS is at
+Cloudflare: `docs/media-hosting.md` sets out the three options, what each costs,
+and why none of them affects search.
 
 Every generated size (`thumbnail`, `card`, `hero` and the 1200x630 `og` used
 for share cards) is re-encoded as WebP at quality 78; the original the owners
@@ -322,11 +323,13 @@ uploaded is kept untouched.
 
 ## Backups
 
-The database is backed up to a second R2 bucket by pgBackRest, running as its
-own container: a full copy every Sunday night, a differential every other
-night, and every write-ahead-log segment in between, encrypted before it leaves
-the machine. That last part is what allows a restore to land on any moment
-rather than only on a backup.
+One container backs up both halves of what the site cannot regenerate, into one
+private R2 bucket, encrypted before anything leaves the machine.
+
+The database goes through pgBackRest: a full copy every Sunday night, a
+differential every other night, and every write-ahead-log segment in between.
+That last part is what allows a restore to land on any moment rather than only
+on a backup.
 
 ```bash
 ops/backup.sh full                              # take one now
@@ -335,10 +338,22 @@ ops/restore.sh                                  # prints the plan, changes nothi
 ops/restore.sh --time "2026-08-01 12:00:00" --yes-really
 ```
 
-Two things to know before you need them, both spelled out in `ops/README.md`:
-`PGBACKREST_CIPHER_PASS` is not recoverable and a lost passphrase makes every
-backup unreadable, and a restore to a point in time discards everything written
-after it.
+The photographs go through restic, one snapshot a night, with old snapshots
+expired on a policy rather than kept forever.
+
+```bash
+ops/backup-media.sh                             # take one now
+docker compose exec pgbackrest restic snapshots
+ops/restore-media.sh                            # prints the plan, changes nothing
+ops/restore-media.sh --yes-really
+```
+
+Three things to know before you need them, all spelled out in `ops/README.md`
+and `docs/backups.md`: `PGBACKREST_CIPHER_PASS` is not recoverable and a lost
+passphrase makes both repositories unreadable; a database restore to a point in
+time discards everything written after it; and the photographs have snapshots
+rather than point-in-time recovery, which is a property of files and not a gap
+in the tooling.
 
 ## Docker
 
@@ -423,9 +438,9 @@ applies migrations the moment it connects and a container that starts first
 fails its first request while looking perfectly healthy.
 
 `docker compose down` is safe; **`down -v` deletes the database and the
-uploads**, which live in the `pg-data` and `media-uploads` volumes. That is
-survivable now — the backups in R2 are exactly for this — but only if the
-restore in `ops/README.md` is something you have actually done once.
+uploads**, which live in the `pg-data` and `media-uploads` volumes. Both are in
+the bucket, and `ops/restore.sh` and `ops/restore-media.sh` are how they come
+back, but only if that is something you have actually done once.
 
 `.dockerignore` keeps the local `.next`, `node_modules`, `.env` and
 `database.db` out of the build context. Leaving `.next` in it is not a tidiness
@@ -481,7 +496,8 @@ the uploads — the local-disk fallback cannot work there.
 
 - Next.js 15 (App Router)
 - Payload CMS 3 (embedded, PostgreSQL 16)
-- Cloudflare R2 for uploads, pgBackRest for database backups
+- pgBackRest for the database and restic for the photographs, both encrypted to
+  Cloudflare R2; R2 optionally for serving the uploads as well
 - Tailwind CSS
 - Framer Motion
 - TypeScript

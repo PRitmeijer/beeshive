@@ -209,13 +209,22 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-  # Scheduled backups to Cloudflare R2. Shares the data directory and the
-  # socket with the database: pgBackRest reads the files itself and only uses
-  # the connection to start and stop the backup, so this has to sit on the same
-  # host as the cluster it backs up. It runs as the same uid as the server for
-  # the same reason — see ops/pgbackrest/entrypoint.sh.
+  # Scheduled backups to Cloudflare R2, of both halves of what this site
+  # cannot regenerate. Shares the data directory and the socket with the
+  # database: pgBackRest reads the files itself and only uses the connection to
+  # start and stop the backup, so this has to sit on the same host as the
+  # cluster it backs up. It runs as the same uid as the server for the same
+  # reason — see ops/pgbackrest/entrypoint.sh, which also says why the
+  # photographs are snapshotted with restic instead of copied.
   pgbackrest:
     container_name: beeshive-pgbackrest
+    # Given a name of its own because restic notices. Every snapshot is stamped
+    # with the host that took it, and the repository lock carries the same name;
+    # left to Docker that is a fresh random hex id after every rebuild, which
+    # turns `restic snapshots` into a list of strangers and, worse, leaves the
+    # lock from an interrupted backup looking like it belongs to a machine that
+    # might still be running. restic will not clear one of those on its own.
+    hostname: beeshive-pgbackrest
     build:
       context: ./ops/pgbackrest
     networks:
@@ -245,12 +254,71 @@ services:
       - BACKUP_HOUR=${BACKUP_HOUR:-3}
       - BACKUP_MINUTE=${BACKUP_MINUTE:-15}
       - FULL_BACKUP_DOW=${FULL_BACKUP_DOW:-0}
+      # The photographs, into the same bucket pgBackRest is already writing to
+      # and under a prefix of its own so the two can never tread on each other:
+      # pgBackRest owns /beeshive (repo1-path in ops/pgbackrest/pgbackrest.conf)
+      # and restic owns /media. One bucket, one token, one thing to check.
+      #
+      # Set RESTIC_REPOSITORY in .env to override the whole address, which is
+      # what a second bucket or a local test repository would need.
+      - RESTIC_REPOSITORY=${RESTIC_REPOSITORY:-s3:https://${PGBACKREST_S3_ENDPOINT:-}/${PGBACKREST_S3_BUCKET:-}/media}
+      # The same passphrase as the database backups, and that is a decision
+      # rather than a shortcut. Both repositories are encrypted before anything
+      # leaves this machine and neither can be read back without its
+      # passphrase, so the real question is how many secrets somebody has to
+      # keep safe somewhere off this server for the restaurant to survive
+      # losing it. Two passphrases means the one nobody wrote down is the one
+      # you need at two in the morning. One, on paper, in two places, is the
+      # entire recovery plan and it fits on a card.
+      - RESTIC_PASSWORD=${PGBACKREST_CIPHER_PASS:-}
+      # restic reads S3 credentials under the AWS names, so the same key that
+      # pgBackRest is given above is handed over twice under two spellings.
+      - AWS_ACCESS_KEY_ID=${PGBACKREST_S3_KEY:-}
+      - AWS_SECRET_ACCESS_KEY=${PGBACKREST_S3_KEY_SECRET:-}
+      # R2 has no regions to choose between; "auto" is what it answers to, and
+      # a real AWS region name ends up in the request signature and is
+      # rejected. Same value as repo1-s3-region in ops/pgbackrest/pgbackrest.conf,
+      # for the same reason.
+      - AWS_DEFAULT_REGION=auto
+      # An hour and a quarter after the database, so the two are never reading
+      # the disk and filling the uplink at the same moment.
+      - MEDIA_BACKUP_HOUR=${MEDIA_BACKUP_HOUR:-4}
+      - MEDIA_BACKUP_MINUTE=${MEDIA_BACKUP_MINUTE:-30}
+      # How far back the photographs can be recovered from. The reasoning for
+      # these three numbers is in ops/pgbackrest/entrypoint.sh, where changing
+      # them would be felt.
+      - MEDIA_KEEP_WITHIN=${MEDIA_KEEP_WITHIN:-7d}
+      - MEDIA_KEEP_DAILY=${MEDIA_KEEP_DAILY:-14}
+      - MEDIA_KEEP_WEEKLY=${MEDIA_KEEP_WEEKLY:-8}
+      - MEDIA_KEEP_MONTHLY=${MEDIA_KEEP_MONTHLY:-12}
+      # Read as a yes-or-no and nothing more. With the bucket configured Payload
+      # writes no files to the volume at all, so the scheduler uses this to say
+      # once that there is nothing here to snapshot instead of reporting an
+      # empty one every night. The two R2 secrets are deliberately not passed
+      # in: this container has no business holding the media token as well as
+      # the backup one.
+      - R2_BUCKET=${R2_BUCKET:-}
     volumes:
       - pg-data:/var/lib/postgresql/data
       - pg-run:/var/run/postgresql
       - ./ops/pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
       - pgbackrest-spool:/var/spool/pgbackrest
       - pgbackrest-log:/var/log/pgbackrest
+      # The photographs, READ-ONLY, and the flag is the point rather than a
+      # detail. This container's whole job is to copy them somewhere safe, and
+      # a backup process holding write access to the thing it is backing up is
+      # one bug away from being the disaster it was installed to insure
+      # against. Read-only makes that impossible instead of unlikely.
+      #
+      # ops/restore-media.sh is the one thing that has to write here, and it
+      # mounts the volume itself, writably, in a container that exists for the
+      # minute the restore takes and is then thrown away.
+      #
+      # Not /media: the base image already has a /media with the usual empty
+      # cdrom and floppy directories in it, and Docker copies the contents of
+      # an image directory into a fresh named volume mounted over it.
+      - media-uploads:/uploads:ro
+      - restic-cache:/var/cache/restic
     restart: unless-stopped
 
 networks:
@@ -275,6 +343,12 @@ volumes:
   # up when, which is the first thing you want during a restore.
   pgbackrest-spool:
   pgbackrest-log:
+  # restic's index cache, so a nightly snapshot does not read the repository
+  # index back out of R2 first. Throwing it away costs requests and nothing
+  # else.
+  restic-cache:
   # Uploaded originals and their generated sizes, for the case where R2 is not
-  # configured. With a bucket set up this volume stays empty.
+  # configured. With a bucket set up this volume stays empty. Either way the
+  # backup container snapshots it nightly, so `down -v` is no longer the end of
+  # the photographs — see docs/backups.md.
   media-uploads:

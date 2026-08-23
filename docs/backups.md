@@ -13,29 +13,64 @@ protected, how to tell whether it is working, and what to type when it is not.
 | | Where it lives | How it survives the server dying |
 |---|---|---|
 | The database (menu, blog, events, reservations, contact messages, users, settings) | PostgreSQL 16 in the `pg-data` volume | pgBackRest, encrypted, to a private Cloudflare R2 bucket |
-| Uploaded photographs, **with R2 configured** | Cloudflare R2 (`R2_BUCKET`) | R2's own durability. Nothing on this server holds them, so nothing on this server can lose them |
-| Uploaded photographs, **without R2** | the `media-uploads` Docker volume | **nothing.** See below |
+| Uploaded photographs, on the volume, which is the default | the `media-uploads` Docker volume | restic, encrypted, a snapshot every night into the same bucket under a prefix of its own |
+| Uploaded photographs, **with R2 configured for storage** | Cloudflare R2 (`R2_BUCKET`) | R2's own durability. The volume is empty by design, the nightly snapshot notices and says so once, and there is nothing here to lose |
 | The CMS schema | `src/migrations/` | git |
 | Everything else (code, config) | git | git |
 
-The photographs are deliberately *not* in the database backup. With a bucket
-configured they are already in object storage that is not on this server, and
-copying them nightly into a second bucket would double the bill to protect
-against a failure Cloudflare does not really have.
+The photographs are not inside the database backup and never will be:
+pgBackRest copies the PostgreSQL data directory and nothing else. They have a
+backup of their own instead, taken by restic from the same container, into the
+same bucket, an hour and a quarter after the database, under `/media` while
+pgBackRest owns `/beeshive`. One bucket, one API token, one passphrase, two
+things covered.
 
-**Without a bucket, the photographs are not backed up at all.** pgBackRest backs
-up the PostgreSQL data directory and nothing else; the `media-uploads` volume is
-not in its scope and never will be. That is the state the site ships in, because
-R2 is optional, and it is the single strongest argument for turning R2 on: not
-speed, which turned out to be marginal (see `docs/media-hosting.md`), but the
-fact that a volume nobody copies is a volume that eventually gets wiped.
+### It is snapshots, and it is not point-in-time recovery
+
+Worth being plain about, because everything written above about the database
+invites the stronger reading. PostgreSQL can be put back to any minute of the
+retention window because it writes an ordered log of every change it makes and
+every segment of that log is shipped to the bucket as it is filled. A directory
+of files writes no such log. What it can honestly offer is last night, the
+night before, and the Sunday before that.
+
+That costs less than it sounds, and here is why. An uploaded file never
+changes. Payload names the stored object after the filename, so a re-upload is
+a new name rather than a new version of an old one, and nothing in the admin
+edits a photograph in place. Deletion is the only thing that can happen to a
+file that already exists, and a nightly snapshot catches deletions. There are
+no edits for it to miss.
+
+restic rather than a copy or a mirror, for the same reason. A sync would carry
+last night's deletion up to the bucket tonight, which insures against the disk
+dying and not against somebody removing a photograph in the admin, and the
+second is much the likelier accident. A nightly tar would upload a complete
+copy of everything for the sake of the two files that changed. restic keeps a
+real history, stores each photograph once however many snapshots point at it,
+encrypts before anything leaves the machine, and expires old snapshots on a
+policy. The long version of that argument is at the top of
+`ops/pgbackrest/entrypoint.sh`.
 
 ## If the media volume is wiped
 
 This is the question worth thinking through before it happens, because the
 answer is completely different in the two configurations.
 
-**With R2 configured, there is nothing to restore.** `disableLocalStorage` is
+**With the photographs on the volume, there is a restore, and it is one
+command.** Run it once with no arguments first: it lists the snapshots, shows
+exactly which files it would write, and changes nothing.
+
+```bash
+ops/restore-media.sh                              # the plan, and nothing else
+ops/restore-media.sh --exact --yes-really         # a wiped volume, put back as it was
+```
+
+`--exact` is right for a volume that was wiped or is no longer trusted: it
+makes the directory match the snapshot, deleting anything the snapshot does not
+contain. Without it the restore only ever adds, which is what the far commoner
+accident wants. Both are described under **Restoring** below.
+
+**With R2 configured for storage, there is nothing to restore.** `disableLocalStorage` is
 switched on the moment all four R2 variables are present
 (`src/collections/Media.ts`), which means Payload writes no files to the
 container at all. The `media-uploads` volume is vestigial. Delete it, rebuild
@@ -45,11 +80,13 @@ bucket, and the two find each other again with no step in between. That is the
 recovery path, and it is why the two halves are stored apart rather than
 together.
 
-**Without R2, a wiped volume is unrecoverable.** The database restore brings
-back every media row, so the admin looks correct and the pages reference every
-photograph by name, and every one of them is a 404. There is no copy anywhere.
-Re-uploading by hand is the only way back, and the alt text and the captions
-survive while the pictures do not, which is a peculiarly annoying place to be.
+**The state that restore exists to prevent** is worth describing, because it is
+the one this site shipped in until the snapshots were added, and because it is
+where a broken or forgotten media backup lands you again. A database restore
+brings back every media row, so the admin looks correct and every page
+references its photographs by name, and every single one of them is a 404. The
+alt text and the captions survive while the pictures do not, which is a
+peculiarly annoying place to be, and re-uploading by hand is the only way out.
 
 ### The one gap R2 does not close
 
@@ -70,6 +107,14 @@ The website's R2 credentials are scoped to Object Read and Write on that bucket
 alone, so the application can neither remove the lock rule nor shorten it. Only
 somebody logged into the Cloudflare dashboard can, deliberately.
 
+Note which way round this now falls. Keeping the photographs on the volume does
+not have this gap at all: a picture deleted in the admin is still in last
+night's snapshot, and last night's snapshot is not something the website's
+credentials can reach. Storing them in the bucket is the arrangement that needs
+a lock rule bolted on before a deletion becomes undoable. That is one of the
+reasons `docs/media-hosting.md` no longer recommends the bucket until the
+domain's DNS is at Cloudflare.
+
 ### Restoring the database to an earlier point, with a live bucket
 
 Worth knowing, because the two halves have different clocks. pgBackRest can put
@@ -81,8 +126,11 @@ since last Tuesday is gone from the bucket, while the restored row expects it.
 A retention rule covers that too.
 
 **The encryption passphrase (`PGBACKREST_CIPHER_PASS`) is not recoverable.**
-Lose it and every backup in the bucket is noise. Keep a copy somewhere that is
-not this server and not this repository.
+Lose it and every backup in the bucket is noise, the photographs along with the
+database: the same passphrase opens both repositories, on purpose, because one
+secret that somebody has actually written down is worth more than two that
+nobody has. Keep a copy somewhere that is not this server and not this
+repository.
 
 ## How often
 
@@ -99,6 +147,22 @@ That third line is what makes point-in-time recovery possible. Without it a
 restore can only land on 03:15 of some night; with it, it can land on any minute
 inside the retention window. Four full backups are kept, so that window is
 roughly a month.
+
+The photographs, from the same file and the same container:
+
+- **04:30 every night**, Europe/Amsterdam. An hour and a quarter after the
+  database, so the two are never reading the disk and filling the uplink at the
+  same moment.
+- One snapshot of the whole volume, deduplicated against everything already in
+  the repository. A night on which nobody uploaded anything costs a few
+  kilobytes.
+- Then the expiry: **everything from the last 7 days, then 14 daily, 8 weekly
+  and 12 monthly snapshots.** In words the owners would use, a photograph
+  deleted by accident can be brought back if it is noticed within a fortnight,
+  or within two months if it happened while the restaurant was closed for the
+  holiday, or within the year if nobody missed it until the season came round
+  again. `ops/pgbackrest/entrypoint.sh` has a paragraph on each number,
+  including why the first seven days keep everything rather than one a day.
 
 ## Checking that it is healthy
 
@@ -123,6 +187,28 @@ docker compose exec postgres psql -U beeshive -c \
   "SELECT archived_count, failed_count, last_failed_time FROM pg_stat_archiver;"
 ```
 
+The photographs are a separate repository and answer separately:
+
+```bash
+# The snapshots, newest last. There should be one per night.
+docker compose exec pgbackrest restic snapshots
+
+# Reads the whole repository and verifies it. Slower, worth doing now and then.
+docker compose exec pgbackrest restic check
+```
+
+An empty list, or a newest snapshot from three weeks ago, means the same thing
+it means for the database. The scheduler writes a line either way, so the other
+place to look is the container's own log:
+
+```bash
+docker compose logs pgbackrest | grep media
+```
+
+One case there is not a fault: with R2 configured for storage the volume is
+empty by design, and the scheduler says so once when it starts rather than
+reporting an empty snapshot every night.
+
 A `failed_count` that is climbing is an emergency in slow motion. PostgreSQL
 keeps every segment it could not archive and refuses to recycle them, `pg_wal`
 grows, and when the volume fills the database stops accepting writes and will
@@ -132,7 +218,9 @@ renamed bucket, and a missing `PGBACKREST_CIPHER_PASS`.
 
 ## Restoring
 
-Three situations, in the order you are likely to meet them.
+Three situations for the database, in the order you are likely to meet them,
+and then the photographs, which are a separate command that does not touch the
+database at all.
 
 ### Something was deleted this morning
 
@@ -219,6 +307,51 @@ and would leak the fact that the database is empty to anyone who asks.
 **Do this once on a spare machine before you need it.** A backup that has never
 been restored is a hypothesis.
 
+### A photograph was deleted in the admin
+
+The commonest of all of these, and the smallest. The restore only adds by
+default: every file in the snapshot is written back and anything uploaded since
+is left exactly where it is.
+
+```bash
+ops/restore-media.sh                                    # the snapshots, and the plan
+ops/restore-media.sh --yes-really                       # newest snapshot
+ops/restore-media.sh --snapshot 4a1b2c3d --yes-really   # a particular one
+```
+
+Run it without `--yes-really` first. It prints the list of snapshots and then
+the exact list of files it would write, produced by the same command that does
+the work with `--dry-run` added, so the plan cannot describe something other
+than what happens. The website is stopped for the minute the restore takes and
+started again afterwards.
+
+### The volume was wiped, or is not to be trusted
+
+```bash
+ops/restore-media.sh --exact --yes-really
+```
+
+`--exact` deletes anything in the volume that the snapshot does not contain, so
+the directory ends up matching the snapshot exactly. On a wiped volume that is
+the same thing as the default; on a volume with newer photographs in it, those
+newer photographs are lost. The dry run names every file it would delete.
+
+### Both halves, after a full rebuild
+
+The two are backed up by different tools at different times, so they are put
+back separately and the moments have to be made to fit. The rule of thumb:
+
+1. Restore the database first, to the point in time you want.
+2. Then restore the photographs from the first snapshot taken **after** that
+   point in time.
+
+The reason for that order is which mistake is visible. A file with no row is
+invisible on the website and costs a few kilobytes in the bucket; a row with no
+file is a broken image on the gallery, seen by every customer. Aiming later
+than the database's target time produces the harmless one. `ops/restore-media.sh`
+carries the same note at the top, for whoever is reading it at two in the
+morning instead of this.
+
 ## What the admin page does, and does not, do
 
 Does:
@@ -243,6 +376,10 @@ Does not, and will not:
   public internet. The convenience is not worth the blast radius. There is a
   second, quieter reason: the restore has to stop the container the request is
   running in, so the handler could not report on its own work anyway.
+- **say anything about the photographs.** The page reads the pgBackRest
+  repository, which holds the database. The media snapshots are a different
+  tool writing a different repository, and nothing in the admin looks at them
+  yet. `docker compose exec pgbackrest restic snapshots` is the answer for now.
 - delete a backup, expire one early, or change the retention.
 - show anything to somebody who is not logged in. Both `/api/admin/backups` and
   the page itself require a Payload session.

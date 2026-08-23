@@ -10,7 +10,8 @@ repeated here:
 - `ops/README.md` — the Cloudflare buckets, the API token, the environment,
   and what each container is for.
 - `docs/backups.md` — what is backed up, how to tell whether it is working,
-  and the three ways to restore.
+  the ways to restore each half, and why the photographs get snapshots rather
+  than point-in-time recovery.
 - `scripts/README.md` — what the export, import and verify scripts do to ids,
   to files and to passwords, and what they cannot do.
 - `docs/rate-limiting.md` — which endpoints are throttled, and the one
@@ -33,7 +34,9 @@ cannot be recreated.** Everything else — the database password, the R2 keys,
 cipher passphrase cannot: it is the key the backups are encrypted with before
 they leave the machine, it exists nowhere but in your `.env` and wherever you
 put it, and a backup repository whose passphrase is gone is a bucket of noise
-that you still pay to store. Generate it once, with
+that you still pay to store. It opens both repositories, the database's and the
+photographs', which is one secret to keep safe rather than two and is the whole
+of the recovery plan on a card. Generate it once, with
 
 ```bash
 openssl rand -base64 48
@@ -235,19 +238,24 @@ it here rather than in the middle of step 12.
 
 ## 8. Where the photographs ended up
 
-If the four `R2_*` variables are set in `.env` before step 6, the import
-uploaded every photograph straight into the bucket and the container is holding
-no files of its own. That is the arrangement `ops/README.md` describes and the
-one to aim for.
+With the four `R2_*` variables unset, which is the recommended arrangement, the
+import wrote every photograph into the `media-uploads` volume and the site
+serves them from this origin. They are backed up from there every night by the
+same container that backs up the database, so nothing else is needed;
+`docs/media-hosting.md` is the argument for doing it this way and
+`docs/backups.md` is what happens when something goes wrong.
 
-If they are not set, the import wrote the files to the `media-uploads` volume
-instead, which works and is what a test host should do — but **turning R2 on
-afterwards does not move them.** Payload writes new uploads to the bucket from
-that moment and goes on serving the old ones from a disk the new configuration
-no longer believes in, and the result is a gallery that half loads. If you are
-going to use a bucket, configure it before the import. If you have already
-imported without one, the honest fix is to set the variables and run the import
-again from an empty database, with the same `MEDIA_IMPORT_DIR`.
+If the four `R2_*` variables were set in `.env` before step 6, the import
+uploaded every photograph straight into the bucket instead and the container is
+holding no files of its own.
+
+Either way, the thing to know is that **the two cannot be swapped afterwards.**
+Turning R2 on later does not move what is already on the volume: Payload writes
+new uploads to the bucket from that moment and goes on expecting the old ones
+from a disk the new configuration no longer believes in, and the result is a
+gallery that half loads. Decide before the import. If you have already imported
+and want to change your mind, the honest fix is to set the variables and run the
+import again from an empty database, with the same `MEDIA_IMPORT_DIR`.
 
 Either way, look at `/galerij` in a browser before you call it done. A missing
 photograph is obvious there and nowhere else.
@@ -307,6 +315,19 @@ docker compose exec pgbackrest pgbackrest --stanza=beeshive info
 `info` has to show a `full backup` entry with a recent timestamp, a
 `wal start/stop` range and a non-zero size. An empty list means the backups are
 failing silently, which is the state `docs/backups.md` was written about.
+
+The photographs are the other half, and they have their own repository in the
+same bucket. Take that one now too, rather than waiting for 04:30:
+
+```bash
+ops/backup-media.sh
+```
+
+It prints the snapshot it has just taken and then everything in the repository.
+One snapshot, with the number of files matching what step 7 imported, is what
+you want to see. If the `R2_*` variables are set the volume is empty by design,
+nothing is snapshotted, and the scheduler says so once in
+`docker compose logs pgbackrest`.
 
 While you are here, confirm that WAL archiving has started working now that the
 stanza exists — it fails independently of the backups, and it is the failure
@@ -571,6 +592,21 @@ ops/restore.sh                                  # prints the plan, changes nothi
 ops/restore.sh --time "2026-08-01 12:00:00" --yes-really
 ```
 
+**After step 11, and the photographs are wrong.** A separate command, and it
+does not touch the database:
+
+```bash
+ops/restore-media.sh                            # prints the plan, changes nothing
+ops/restore-media.sh --yes-really               # put missing files back
+ops/restore-media.sh --exact --yes-really       # make the volume match the snapshot
+```
+
+If both halves need putting back, restore the database first and then the
+photographs from the first snapshot taken *after* the database's target time.
+The reasoning is at the top of `ops/restore-media.sh` and in `docs/backups.md`,
+and the short version is that a file with no row is invisible while a row with
+no file is a broken image on the gallery.
+
 Run it once without `--yes-really` and read what it prints. That output is the
 entire safety mechanism, and a restore to a point in time discards everything
 written after it — including, on a restaurant's site, somebody's table for
@@ -597,6 +633,6 @@ For the second time you do this, or for reading over somebody's shoulder.
 | 9 | `DELETE FROM payload_migrations WHERE batch = -1` — see the section on it; skipped, the preflight keeps the container down until you do |
 | 10 | `/galerij` in a browser: every photograph loads |
 | 11 | Owners reset their passwords through *Wachtwoord vergeten* |
-| 12 | `docker compose up -d`, stanza created, `ops/backup.sh full`, `info` shows it |
+| 12 | `docker compose up -d`, stanza created, `ops/backup.sh full`, `info` shows it; `ops/backup-media.sh`, `snapshots` shows it |
 | 13 | `rm docker-compose.override.yml`, `docker compose up -d`, proxy over, page down |
 | 14 | `docker compose logs beeshive \| grep -E 'preflight\|warm-up'` — preflight clean, pass 2 clean, no ALARM |

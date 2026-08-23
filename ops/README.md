@@ -20,27 +20,49 @@ reference it points back at.
 | | Where it lives | How it survives a dead server |
 |---|---|---|
 | Database | `pg-data` volume, PostgreSQL 16 | pgBackRest, encrypted, to an R2 bucket |
-| Uploads | Cloudflare R2 (or the `media-uploads` volume without R2) | R2 keeps its own copies; the volume does not |
+| Uploads | the `media-uploads` volume (or Cloudflare R2, if a bucket is configured) | restic, encrypted, to the same R2 bucket under its own prefix |
 | CMS schema | `src/migrations/` | in git |
 
-The backup is a **full copy every Sunday night, a differential every other
-night, and every write-ahead-log segment in between**, which means a restore
-can land on any moment in the retention window rather than only on a backup.
+The database backup is a **full copy every Sunday night, a differential every
+other night, and every write-ahead-log segment in between**, which means a
+restore can land on any moment in the retention window rather than only on a
+backup. The photographs get **one snapshot a night** and no such minute, which
+is a property of files rather than a gap in the tooling; `docs/backups.md` says
+why, and why it is enough.
+
+Four scripts drive it, and none of them does anything you cannot do by hand:
+
+| | |
+|---|---|
+| `backup.sh [full\|diff\|incr]` | a database backup now, out of turn |
+| `restore.sh` | put the database back |
+| `backup-media.sh` | a snapshot of the photographs now, out of turn |
+| `restore-media.sh` | list the media snapshots, and put one back |
+
+`restore.sh` and `restore-media.sh` both print their whole plan and stop unless
+`--yes-really` is on the command line. Neither one touches the other's half.
 
 ---
 
-## 1. Cloudflare: two buckets and one token
+## 1. Cloudflare: one bucket, and a second only if you want it
 
-You need an R2 bucket for the uploads and, ideally, a second for the backups.
-Two, not one: the uploads bucket is read by the public internet, and database
-backups have no business sharing a permission boundary with it.
+You need one private R2 bucket for the backups. A second, public one for the
+photographs is optional and is now recommended against until the domain's DNS
+is at Cloudflare; if you do create it, keep it separate from the first. The
+uploads bucket is read by the public internet, and the backups have no business
+sharing a permission boundary with it.
 
-1. Cloudflare dashboard → R2 → **Create bucket**, twice:
-   - `beeshive-media` — the photographs. Give it a public custom domain
-     (`media.debeeshive.nl`) or enable the r2.dev subdomain, and put that
-     address in `R2_PUBLIC_URL`.
-   - `beeshive-backups` — the database. **Public access off.** Nothing should
-     ever be able to read this over HTTP.
+1. Cloudflare dashboard → R2 → **Create bucket**:
+   - `beeshive-backups`, the backups, and the only one you actually need.
+     **Public access off.** Nothing should ever be able to read this over HTTP.
+     It holds the database under `/beeshive` and the photograph snapshots under
+     `/media`, which are two tools writing two repositories that cannot see
+     each other.
+   - `beeshive-media`, optional, and only if the photographs are to be *served*
+     from R2 rather than from our own origin. `docs/media-hosting.md` recommends
+     against it until the domain's DNS is at Cloudflare, and explains why. If
+     you do create it, give it a public custom domain and put that address in
+     `R2_PUBLIC_URL`.
 2. R2 → **Manage API tokens** → *Create API token*, with **Object Read &
    Write**, scoped to those buckets. You are shown the access key id and the
    secret exactly once.
@@ -49,7 +71,8 @@ backups have no business sharing a permission boundary with it.
    **without** the scheme; the website's `R2_ENDPOINT` wants it **with**.
 
 Generate an encryption passphrase for the backups and store it somewhere that
-is not this server:
+is not this server. One passphrase covers both repositories, deliberately: two
+would mean the one nobody wrote down is the one you need.
 
 ```bash
 openssl rand -base64 48
@@ -67,18 +90,25 @@ POSTGRES_USER=beeshive
 POSTGRES_PASSWORD=<something long>
 POSTGRES_DB=beeshive
 
-R2_BUCKET=beeshive-media
-R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
-R2_ACCESS_KEY_ID=...
-R2_SECRET_ACCESS_KEY=...
-R2_PUBLIC_URL=https://media.debeeshive.nl
-
 PGBACKREST_S3_BUCKET=beeshive-backups
 PGBACKREST_S3_ENDPOINT=<account-id>.r2.cloudflarestorage.com
 PGBACKREST_S3_KEY=...
 PGBACKREST_S3_KEY_SECRET=...
 PGBACKREST_CIPHER_PASS=<the passphrase from above>
+
+# Optional, and only for serving the photographs from R2 rather than from our
+# own origin. See docs/media-hosting.md before setting these.
+R2_BUCKET=beeshive-media
+R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+R2_ACCESS_KEY_ID=...
+R2_SECRET_ACCESS_KEY=...
+R2_PUBLIC_URL=https://media.debeeshive.nl
 ```
+
+The photographs need nothing beyond the five pgBackRest values: the media
+snapshot repository is built out of the same endpoint, bucket and passphrase,
+under a prefix of its own. `.env.example` lists the handful of variables that
+change the schedule and the retention.
 
 A `$` in any of these has to be doubled — Compose interpolates this file, so
 `ab$cd` arrives as `ab`. Check what actually landed:
@@ -109,11 +139,16 @@ docker compose exec pgbackrest pgbackrest --stanza=beeshive stanza-create
 docker compose exec pgbackrest pgbackrest --stanza=beeshive check
 ```
 
-Take the first backup immediately rather than waiting for the scheduler:
+Take the first backups immediately rather than waiting for the scheduler:
 
 ```bash
 ops/backup.sh full
+ops/backup-media.sh
 ```
+
+The second one prints `0 files` on a host where nobody has uploaded anything
+yet, and with a media bucket configured the volume is empty by design and the
+scheduler says so once in its log instead of snapshotting nothing every night.
 
 ## 4. Verifying that backups exist
 
@@ -138,6 +173,13 @@ docker compose exec postgres psql -U beeshive -c \
 segment it could not archive, `pg_wal` grows, and when the volume fills the
 database stops. See the long comment in `ops/postgres/postgresql.conf`.
 
+The photographs answer separately, in the same container:
+
+```bash
+docker compose exec pgbackrest restic snapshots   # one per night
+docker compose exec pgbackrest restic check       # reads it all through, slower
+```
+
 ## 5. Restoring
 
 ### Onto the same server
@@ -151,6 +193,17 @@ ops/restore.sh --time "2026-08-01 12:00:00" --yes-really
 It stops the website, stops the database, replaces the data directory, brings
 both back and waits for the cluster to finish replaying. Read what it prints
 before typing `--yes-really`.
+
+The photographs, which are a separate command and a separate decision:
+
+```bash
+ops/restore-media.sh                            # the snapshots, and the plan
+ops/restore-media.sh --yes-really               # put missing files back, keep the rest
+ops/restore-media.sh --exact --yes-really       # make the volume match the snapshot
+```
+
+`docs/backups.md` has the three cases and, more importantly, the note on
+restoring both halves at moments that fit each other.
 
 ### Onto a brand-new, empty install
 
@@ -179,9 +232,16 @@ because the repository in R2 is self-contained.
    docker compose up -d
    ```
 
-5. The media is already in R2 and needs nothing. If this install predates R2,
-   copy the old `media` directory into the `media-uploads` volume instead.
-6. `ops/backup.sh full`, so that the new cluster has a backup of its own.
+5. Put the photographs back:
+
+   ```bash
+   ops/restore-media.sh --exact --yes-really
+   ```
+
+   With a media bucket configured this step is unnecessary: the objects are
+   still in the bucket and the restored database rows find them again.
+6. `ops/backup.sh full` and `ops/backup-media.sh`, so the new install has
+   backups of its own.
 
 Do a dry run of this on a spare machine once, before you need it. A backup
 that has never been restored is a hypothesis.
@@ -220,6 +280,11 @@ when deleting the row is *not* safe.
 - **A restore to a point in time discards everything after it.** Reservations
   taken this morning are gone if you restore to last night. Export them first
   if there is any chance of that mattering: `npm run db:export`.
-- **The backups do not include the uploads.** R2 holds those, and R2's own
-  durability is the plan. If that is not enough, enable object versioning on
-  the media bucket.
+- **The database backup does not include the uploads**, and never will:
+  pgBackRest copies the PostgreSQL data directory and nothing else. The
+  photographs have their own nightly restic snapshot in the same bucket, and
+  their own restore command. Two halves, two tools, one passphrase.
+- **A media snapshot is not point-in-time recovery.** The database can be put
+  back to any minute; the photographs can be put back to a night.
+  `docs/backups.md` says why that is a property of files rather than a
+  shortcoming.
