@@ -2,11 +2,8 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
-import {
-  RichText,
-  type JSXConvertersFunction,
-} from "@payloadcms/richtext-lexical/react";
 import type { SerializedEditorState } from "@payloadcms/richtext-lexical/lexical";
+import { ProseRichText } from "@/components/ProseRichText";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { Sheet } from "@/components/Sheet";
 import { SketchBee } from "@/components/SketchBee";
@@ -31,121 +28,6 @@ interface BlogPostProps {
     author?: { name?: string; email?: string };
   };
 }
-
-/**
- * Where a document one of the owners links to from inside an article lives on
- * the public site.
- *
- * It repeats `publicPathByCollection` in src/payload.config.ts rather than
- * importing it, because that module is the entire CMS: pulling it in here would
- * drag Payload, the database adapter and the whole admin panel into the browser
- * bundle for the sake of two strings. If a route is renamed, both have to move.
- */
-const publicPathByCollection: Record<string, string> = {
-  "blog-posts": "blog",
-  events: "evenementen",
-};
-
-/**
- * How the article's rich text is drawn.
- *
- * Tailwind's typography plugin is not installed and preflight strips the
- * browser's own margins, so nothing below can be left to a default — an
- * unstyled `<p>` would sit flush against the next one. Writing the converters
- * out by hand also keeps the running text in the same ink as the rest of the
- * sheet: house rules, house links, the same measure as the lead.
- *
- * Built per language rather than once, because a link to another page on the
- * site has to keep the reader in the language they are reading in.
- */
-const articleConverters =
-  (locale: Locale): JSXConvertersFunction =>
-  ({ defaultConverters }) => ({
-    ...defaultConverters,
-
-    paragraph: ({ node, nodesToJSX }) => {
-      const children = nodesToJSX({ nodes: node.children });
-      // An empty paragraph is what pressing Enter twice leaves behind. The gap
-      // between paragraphs is already set here, so honouring it would only open
-      // a hole the writer did not mean to make.
-      if (!children?.length) return null;
-      return (
-        <p className="mt-6 text-lg leading-[1.75] text-hive-500 first:mt-0">
-          {children}
-        </p>
-      );
-    },
-
-    heading: ({ node, nodesToJSX }) => {
-      // The post title is the page's only h1. A heading typed into the body is
-      // therefore demoted one level, so an article that opens with a big heading
-      // does not give the page two first-level headings and a broken outline.
-      const level = Math.min(Number(node.tag.slice(1)) + 1, 6);
-      const Tag = `h${level}` as "h2" | "h3" | "h4" | "h5" | "h6";
-      return (
-        <Tag
-          className={`mt-12 text-hive-700 first:mt-0 ${
-            level <= 3 ? "heading-md" : "font-display text-lg"
-          }`}
-        >
-          {nodesToJSX({ nodes: node.children })}
-        </Tag>
-      );
-    },
-
-    quote: ({ node, nodesToJSX }) => (
-      <blockquote className="my-10 border-l-2 border-honey-400 pl-6 font-display text-xl leading-[1.6] text-hive-700">
-        {nodesToJSX({ nodes: node.children })}
-      </blockquote>
-    ),
-
-    list: ({ node, nodesToJSX }) => {
-      const Tag = node.tag as "ol" | "ul";
-      return (
-        <Tag
-          className={`mt-6 space-y-2 pl-6 text-lg leading-[1.75] text-hive-500 ${
-            node.listType === "number" ? "list-decimal" : "list-disc"
-          } marker:text-honey-500`}
-        >
-          {nodesToJSX({ nodes: node.children })}
-        </Tag>
-      );
-    },
-
-    horizontalrule: () => <div className="rule-ink my-12 w-full" />,
-
-    link: ({ node, nodesToJSX }) => {
-      const { fields } = node;
-      let href = fields.url ?? "#";
-      if (fields.linkType === "internal") {
-        const doc = fields.doc;
-        const segment = publicPathByCollection[doc?.relationTo ?? ""];
-        const value = doc?.value;
-        const slug =
-          value && typeof value === "object" && "slug" in value
-            ? String((value as { slug?: unknown }).slug ?? "")
-            : "";
-        // Nothing sensible to point at: keep the words, drop the link, rather
-        // than sending a reader to the "#" the default converter falls back to.
-        if (!segment || !slug) return <>{nodesToJSX({ nodes: node.children })}</>;
-        href = localeHref(locale, `/${segment}/${slug}`);
-      }
-      return (
-        <a
-          href={href}
-          className="ink-link"
-          rel={fields.newTab ? "noopener noreferrer" : undefined}
-          target={fields.newTab ? "_blank" : undefined}
-        >
-          {nodesToJSX({ nodes: node.children })}
-        </a>
-      );
-    },
-
-    // A node type nobody wrote a converter for — a relationship, say — otherwise
-    // prints the literal words "unknown node" on the public page.
-    unknown: () => null,
-  });
 
 export function BlogPostClient({ locale, post }: BlogPostProps) {
   const t = getDict(locale);
@@ -276,10 +158,10 @@ export function BlogPostClient({ locale, post }: BlogPostProps) {
                     article "is loaded from the CMS" and pointed at /admin —
                     a note to the developer left standing on the public page,
                     which is all a reader would ever have seen of a real post. */}
-                <RichText
+                <ProseRichText
+                  locale={locale}
                   data={post.content}
-                  converters={articleConverters(locale)}
-                  className="payload-richtext mt-10 max-w-[34rem]"
+                  className="mt-10 max-w-[34rem]"
                 />
               </article>
             </ScrollReveal>

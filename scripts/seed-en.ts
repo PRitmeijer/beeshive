@@ -5,6 +5,18 @@
  * that already exist in `nl`. Runs after scripts/seed.ts and is idempotent: it
  * matches on the fields that are not localised (slug for posts, order for menu
  * rows) and overwrites only the English values.
+ *
+ * Every English write passes `fallbackLocale: false`, and it is not optional.
+ * A partial update reads the existing document first and keeps whatever it
+ * finds for the fields the patch does not mention — and a normal read of an
+ * untranslated English document hands back Dutch, because `localization
+ * .fallback` is on in src/payload.config.ts. So without this flag, setting one
+ * English field writes the Dutch text of every other field into the English
+ * rows as if somebody had typed it there. That is exactly how the English site
+ * came to serve a Dutch hero, a Dutch newsletter block and a Dutch About
+ * intro: this script set `openingHoursNote` and took the rest of the global
+ * with it. scripts/clear-en-echo.ts undoes that on a database it already
+ * happened to.
  */
 import { getPayload } from "payload";
 import config from "@payload-config";
@@ -120,6 +132,7 @@ async function main() {
       collection: "menu-categories",
       id: doc.id,
       locale: "en",
+      fallbackLocale: false,
       data: en as never,
     });
     written += 1;
@@ -139,6 +152,7 @@ async function main() {
       collection: "menu-items",
       id: doc.id,
       locale: "en",
+      fallbackLocale: false,
       data: en as never,
     });
     items += 1;
@@ -158,6 +172,7 @@ async function main() {
       collection: "blog-posts",
       id: doc.id,
       locale: "en",
+      fallbackLocale: false,
       data: { ...en, content: lexicalParagraph(en.excerpt) } as never,
     });
     posts += 1;
@@ -176,6 +191,7 @@ async function main() {
   await payload.updateGlobal({
     slug: "site-settings",
     locale: "en",
+    fallbackLocale: false,
     data: {
       openingHoursNote: "We are also open on the last Sunday of every month.",
     } as never,

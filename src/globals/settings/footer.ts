@@ -11,7 +11,7 @@ export const footerTab: Tab = {
       label: "Footer Slogan",
       type: "text",
       localized: true,
-      defaultValue: "Gemaakt met liefde in Zuilen",
+      // Geen defaultValue op een vertaald veld — zie SiteSettings.ts.
     },
   ],
 };

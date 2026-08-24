@@ -10,7 +10,36 @@ database directly, so they follow the collections instead of the tables.
 | `verify-import.ts` | `npm run db:verify` | Re-export and compare, field by field and locale by locale, against the dump. |
 | `seed.ts` / `seed-en.ts` | `npm run seed`, `npm run seed:en` | Fill an empty install with example content. |
 | `import-subscribers.ts` | `npm run import:subscribers` | The old site's newsletter table, from CSV. See the main README. |
+| `clear-en-echo.ts` | — | Clear English fields that only hold a copy of the Dutch text, so the English defaults take over again. |
 | `backfill-nl-locale.ts` | — | One-time repair from the move to two languages. Kept for reference. |
+
+## English pages that are still in Dutch
+
+`localization.fallback` is on, so an untranslated English field reads back as
+Dutch — right for a visitor, a trap for anything that writes. A partial update
+reads the document first and keeps what it finds for every field the patch does
+not mention, so a write that sets one English field stores the Dutch text of
+all the others in the English rows as if an editor had typed it. After that no
+fallback and no English default can help: the field is filled, and what it is
+filled with is Dutch.
+
+Every write to a locale other than `nl` therefore passes `fallbackLocale:
+false` — `seed-en.ts`, `import-content.ts` and `src/lib/localeCopy.ts` all do.
+For the same reason no `localized: true` field in `src/globals/` carries a
+`defaultValue`: a default is Dutch text, and Payload writes it into whichever
+locale saves the field first. The per-language defaults live in
+`src/lib/payload.ts` instead, and empty in the CMS is what selects them.
+
+To repair a database where it already happened:
+
+```bash
+npx tsx scripts/clear-en-echo.ts                     # what it would clear
+npx tsx scripts/clear-en-echo.ts --apply --skip=heroTitle
+```
+
+`--skip` is for the fields that are identical because they are the same in both
+languages — the name of the restaurant, mostly. The dry run prints the value it
+would clear, which is enough to tell those apart.
 
 ## Moving the content to another database
 

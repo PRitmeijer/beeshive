@@ -26,6 +26,23 @@ import { footerTab } from "./settings/footer";
  * standaardwaarden bij voor het geval het CMS leeg of onbereikbaar is. Elk veld
  * dat je hier toevoegt heeft daar dus ook een standaard nodig, in zowel de
  * Nederlandse als de Engelse set, anders valt het veld op de Engelse site weg.
+ *
+ * En daaruit volgt de regel die de rest van dit bestand niet meer uitlegt: een
+ * veld met `localized: true` krijgt hier géén `defaultValue`. Een defaultValue
+ * is Nederlandse tekst, en Payload schrijft hem in de taal waarin het veld voor
+ * het eerst wordt opgeslagen — ook in het Engels. Die Nederlandse zin staat dan
+ * echt in de Engelse rij, getSiteSettings() ziet een ingevuld veld en de
+ * Engelse standaard uit src/lib/payload.ts komt er nooit meer aan te pas. De
+ * Engelse pagina toont dan Nederlands terwijl de eigenaren niets fout deden.
+ * De standaardtekst hoort dus in src/lib/payload.ts, per taal; leeg in het CMS
+ * betekent hier "gebruik die".
+ *
+ * Om dezelfde reden krijgt elk schrijven naar een andere taal dan het
+ * Nederlands `fallbackLocale: false` mee (zie scripts/seed-en.ts en
+ * src/lib/localeCopy.ts). Zonder dat leest Payload het bestaande document mét
+ * fallback, en zet het elke Nederlandse zin die het zo terugkrijgt als echte
+ * Engelse waarde weg — één veld bijwerken vertaalt dan per ongeluk de hele
+ * global naar het Nederlands.
  */
 export const SiteSettings: GlobalConfig = {
   slug: "site-settings",

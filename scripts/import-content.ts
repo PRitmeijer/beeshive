@@ -839,6 +839,12 @@ async function main() {
           collection: item.collection as never,
           id: item.newId,
           locale: "en",
+          // Without this, every localised field the dump does not carry an
+          // English value for is read back through the fallback and written
+          // into the English rows as Dutch. A restore would then quietly
+          // "translate" the English site back into Dutch. See the note at the
+          // top of scripts/seed-en.ts.
+          fallbackLocale: false,
           data: en as never,
           overrideAccess: true,
           context: importContext,
@@ -884,6 +890,8 @@ async function main() {
       await payload.updateGlobal({
         slug: global.slug as never,
         locale,
+        // Same reason as the collection write above.
+        fallbackLocale: false,
         data: data as never,
         overrideAccess: true,
         context: importContext,

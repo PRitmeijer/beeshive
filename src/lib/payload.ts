@@ -1,6 +1,8 @@
 import { getPayload } from "payload";
+import type { SerializedEditorState } from "@payloadcms/richtext-lexical/lexical";
 import config from "@payload-config";
 import { defaultLocale, type Locale } from "@/i18n/config";
+import { isLexicalDocument, lexicalIsEmpty } from "./lexical";
 
 export const getPayloadClient = () => getPayload({ config });
 
@@ -122,7 +124,7 @@ const nlDefaults = {
   /** The welcome at the foot of a guest pass. Blank falls through to the two
    *  above, in that order. */
   guestPassWelcome: "",
-  aboutStory: null as string | null,
+  aboutStory: null as SerializedEditorState | null,
   aboutImage: null as MediaRef | null,
   aboutVideoUrl: "",
   aboutMediaCaption: "",
@@ -212,7 +214,7 @@ const enDefaults: SiteSettingsData = {
   /** The welcome at the foot of a guest pass. Blank falls through to the two
    *  above, in that order. */
   guestPassWelcome: "",
-  aboutStory: null as string | null,
+  aboutStory: null as SerializedEditorState | null,
   aboutImage: null as MediaRef | null,
   aboutVideoUrl: "",
   aboutMediaCaption: "",
@@ -271,6 +273,11 @@ function hasContent(value: unknown): boolean {
   if (value === null || value === undefined || value === "") return false;
   if (Array.isArray(value)) return value.some(hasContent);
   if (typeof value === "object") {
+    // A rich text field is the one object whose own structure says nothing
+    // about whether anybody wrote in it; see src/lib/lexical.ts. Without this
+    // the empty paragraph an untouched editor saves counts as content, beats
+    // the default, and the page renders a story that is not there.
+    if (isLexicalDocument(value)) return !lexicalIsEmpty(value);
     // Payload gives array rows an `id`, which is not content on its own.
     return Object.entries(value as Record<string, unknown>).some(
       ([key, v]) => key !== "id" && hasContent(v),

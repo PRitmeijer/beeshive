@@ -1,5 +1,6 @@
 import type { Field, Payload, TypedUser } from "payload";
 import type { CollectionSlug, GlobalSlug, TypedLocale } from "payload";
+import { lexicalHasText } from "./lexical";
 
 /**
  * Copying one locale's text into another, in one pass, from the server.
@@ -128,18 +129,6 @@ function isEmptyValue(value: unknown): boolean {
   }
   // Numbers, booleans and dates are shared rather than localized in this CMS,
   // but if one ever becomes localized, `0` and `false` are real values.
-  return false;
-}
-
-/** Depth-first search for a non-blank `text` property anywhere in a Lexical node. */
-function lexicalHasText(node: unknown): boolean {
-  if (!node || typeof node !== "object") return false;
-  const record = node as Record<string, unknown>;
-  if (typeof record.text === "string" && record.text.trim() !== "") return true;
-  const children = record.children;
-  if (Array.isArray(children)) {
-    return children.some((child) => lexicalHasText(child));
-  }
   return false;
 }
 

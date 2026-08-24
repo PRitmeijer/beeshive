@@ -1,5 +1,6 @@
 "use client";
 
+import { ProseRichText } from "@/components/ProseRichText";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { SketchBee } from "@/components/SketchBee";
 import { Sheet } from "@/components/Sheet";
@@ -114,17 +115,17 @@ export function OverOnsClient({ locale, settings: s }: Props) {
                   {s.aboutIntro}
                 </p>
 
-                {/* Rich text story from CMS, or fallback paragraphs */}
+                {/* What the owners wrote in the CMS, or the story that
+                    shipped with the site while they have not written one.
+
+                    This used to hand `aboutStory` to dangerouslySetInnerHTML as
+                    if it were HTML. A Payload rich text field is not HTML — it
+                    is a serialised Lexical document — so the guard on that line
+                    never matched, the story rendered as an empty div, and
+                    because the document was still truthy the fallback below did
+                    not get its turn either. The page simply lost its middle. */}
                 {s.aboutStory ? (
-                  <div
-                    className="space-y-7 [&_a]:text-honey-600 [&_h2]:font-display [&_h2]:text-hive-700 [&_h3]:font-display [&_h3]:text-hive-700 [&_strong]:text-hive-700"
-                    dangerouslySetInnerHTML={{
-                      __html:
-                        typeof s.aboutStory === "string"
-                          ? s.aboutStory
-                          : "",
-                    }}
-                  />
+                  <ProseRichText locale={locale} data={s.aboutStory} />
                 ) : (
                   <>
                     <p>{t.about.fallbackStoryOrigin}</p>

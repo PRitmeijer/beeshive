@@ -19,8 +19,7 @@ export const generalTab: Tab = {
       label: "Beschrijving (SEO)",
       type: "textarea",
       localized: true,
-      defaultValue:
-        "Een warm eetcafé in het hart van Zuilen waar creativiteit, verbinding en lekker eten samenkomen.",
+      // Geen defaultValue op een vertaald veld — zie SiteSettings.ts.
     },
     {
       name: "keywords",

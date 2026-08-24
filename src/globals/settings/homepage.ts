@@ -11,7 +11,7 @@ export const homepageTab: Tab = {
       label: "Hero Titel",
       type: "text",
       localized: true,
-      defaultValue: "De Bee's Hive",
+      // Geen defaultValue op een vertaald veld — zie SiteSettings.ts.
       admin: {
         description:
           "De grote titel op de homepage. Gebruik | om het accent-woord te scheiden, bijv. 'De Bee's|Hive'",
@@ -22,8 +22,7 @@ export const homepageTab: Tab = {
       label: "Hero Ondertitel",
       type: "text",
       localized: true,
-      defaultValue:
-        "Waar eten en creativiteit samenkomen. Een warm eetcafé in het hart van Zuilen.",
+      // Geen defaultValue op een vertaald veld — zie SiteSettings.ts.
     },
     {
       /**
@@ -124,23 +123,21 @@ export const homepageTab: Tab = {
       label: "Nieuwsbrief Titel",
       type: "text",
       localized: true,
-      defaultValue: "Schrijf je in",
+      // Geen defaultValue op een vertaald veld — zie SiteSettings.ts.
     },
     {
       name: "newsletterText",
       label: "Nieuwsbrief Tekst",
       type: "text",
       localized: true,
-      defaultValue:
-        "Ontvang als eerste nieuws over speciale evenementen, nieuwe gerechten en aanbiedingen.",
+      // Geen defaultValue op een vertaald veld — zie SiteSettings.ts.
     },
     {
       name: "newsletterPrivacyNote",
       label: "Nieuwsbrief Geruststelling",
       type: "text",
       localized: true,
-      defaultValue:
-        "Hooguit een mail per maand, nooit spam, en uitschrijven kan met een klik.",
+      // Geen defaultValue op een vertaald veld — zie SiteSettings.ts.
       admin: {
         description:
           "Het kleine regeltje onder het inschrijfveld. Mensen vullen hun "

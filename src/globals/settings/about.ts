@@ -11,8 +11,7 @@ export const aboutTab: Tab = {
       label: "Intro Tekst",
       type: "textarea",
       localized: true,
-      defaultValue:
-        "De Bee's Hive is meer dan een restaurant. Het is een plek waar kunst, creativiteit en lekker eten samenkomen in het hart van Zuilen, Utrecht.",
+      // Geen defaultValue op een vertaald veld — zie SiteSettings.ts.
     },
     {
       name: "aboutStory",
