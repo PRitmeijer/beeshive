@@ -6,6 +6,7 @@ import { ShareActions } from "@/components/ShareActions";
 import { Sheet } from "@/components/Sheet";
 import { TornEdge } from "@/components/TornEdge";
 import { WelcomeBlock } from "@/components/WelcomeBlock";
+import type { SocialLink } from "@/components/SocialMarks";
 import { getDict } from "@/i18n/dictionaries";
 import { localeHref, type Locale } from "@/i18n/config";
 import type { GuestResponseView, GuestPassView } from "@/lib/guestPass";
@@ -60,9 +61,8 @@ interface Props {
   welcomeText: string;
   welcomeImageUrl: string;
   welcomeImageAlt: string;
-  /** Site Instellingen → Contact. Either may be empty. */
-  instagramUrl: string;
-  facebookUrl: string;
+  /** Site Instellingen → Contact, plus the Google listing. May be empty. */
+  socials: SocialLink[];
   dietaryOptions: string[];
   drinkOptions: string[];
   formEnabled: boolean;
@@ -184,8 +184,7 @@ export function GuestPassClient({
   welcomeText,
   welcomeImageUrl,
   welcomeImageAlt,
-  instagramUrl,
-  facebookUrl,
+  socials,
   dietaryOptions,
   drinkOptions,
   formEnabled,
@@ -801,8 +800,7 @@ export function GuestPassClient({
                   text={welcomeText}
                   imageUrl={welcomeImageUrl}
                   imageAlt={welcomeImageAlt}
-                  instagramUrl={instagramUrl}
-                  facebookUrl={facebookUrl}
+                  links={socials}
                   ctaHref={localeHref(locale, "/kaart")}
                   ctaLabel={t.seeMenu}
                 />

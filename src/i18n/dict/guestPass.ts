@@ -41,7 +41,7 @@ export const guestPassNl = {
   heading: "Jullie tafel",
   welcomeHeading: "Welkom bij ons",
   seeMenu: "Bekijk de kaart",
-  followHint: "Volg ons, dan zie je wat er speelt en wat er op de kaart komt.",
+  followHint: "Volg ons, of lees wat gasten over ons schreven.",
   subheading: (name: string) => `${name} heeft gereserveerd`,
   notFound: "Deze link werkt niet meer",
   notFoundBody:
@@ -126,7 +126,7 @@ export const guestPassEn: GuestPassDict = {
   heading: "Your table",
   welcomeHeading: "Welcome",
   seeMenu: "See the menu",
-  followHint: "Follow along to see what we are up to and what is going on the menu.",
+  followHint: "Follow along, or read what our guests have written.",
   subheading: (name: string) => `${name} made the booking`,
   notFound: "This link no longer works",
   notFoundBody:

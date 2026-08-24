@@ -14,6 +14,7 @@ import {
 } from "@/components/StampStrip";
 import { HeroLockup } from "@/components/HeroLockup";
 import { WelcomeBlock } from "@/components/WelcomeBlock";
+import { socialLinks } from "@/components/SocialMarks";
 import type { SiteSettingsData } from "@/lib/payload";
 import { getDict } from "@/i18n/dictionaries";
 import { localeHref, type Locale } from "@/i18n/config";
@@ -417,10 +418,11 @@ export function HomeClient({ locale, settings: s, today }: Props) {
            The comment on the mailing list below records that this page used to
            carry an introduction and lost it, because everything it said is
            said properly on /over-ons and saying it twice made the front door
-           long. This is deliberately not that: three or four lines and two
-           links, not the old middle of the page. What it adds over the About
-           tab is the part that was never on this page at all — somewhere to
-           follow them from the one screen most visitors ever see. */}
+           long. This is deliberately not that: three or four lines and a row
+           of marks, not the old middle of the page. What it adds over the
+           About tab is the part that was never on this page at all — somewhere
+           to follow them, and the reviews other guests left, from the one
+           screen most visitors ever see. */}
       {hasWelcome ? (
         <section
           className="section-padding relative overflow-hidden bg-paper-deep"
@@ -433,8 +435,7 @@ export function HomeClient({ locale, settings: s, today }: Props) {
               text={welcomeText}
               imageUrl={s.aboutImage?.sizes?.card?.url || s.aboutImage?.url || ""}
               imageAlt={s.aboutImage?.alt ?? ""}
-              instagramUrl={s.socialMedia?.instagram?.trim() ?? ""}
-              facebookUrl={s.socialMedia?.facebook?.trim() ?? ""}
+              links={socialLinks(s)}
               imageWidthClass="w-32 sm:w-52 md:w-64"
               headingClassName="text-clay-600"
             />

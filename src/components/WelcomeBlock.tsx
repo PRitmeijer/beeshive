@@ -1,6 +1,7 @@
+import { SocialRow, type SocialLink } from "@/components/SocialMarks";
+
 /**
- * The short welcome: a photograph, a few words, and the two places to follow
- * them.
+ * The short welcome: a photograph, a few words, and the places to find them.
  *
  * It exists twice — under the hero on the landing page, and at the foot of a
  * guest pass — and both are the same situation seen from different doors:
@@ -11,7 +12,8 @@
  * Everything it renders comes from Site Instellingen, so the owners write it
  * once, in the place they already know, and it appears in both. Nothing here
  * is a field of its own: the words are the About tab's intro, the picture is
- * its picture, and the links are the Contact tab's socials.
+ * its picture, and the marks are the Contact tab's socials plus the Google
+ * listing.
  *
  * The whole thing returns null when there is neither text nor picture. An
  * empty bordered rectangle where an introduction should be reads as a page
@@ -24,13 +26,19 @@
  */
 interface WelcomeBlockProps {
   heading: string;
-  /** The line above the social links. Not shown when neither link is set. */
+  /** The line above the marks. Not shown when there are no links. */
   followHint: string;
   text: string;
   imageUrl: string;
   imageAlt: string;
-  instagramUrl: string;
-  facebookUrl: string;
+  /**
+   * Where to find them: the accounts to follow and the Google listing where
+   * the reviews live, as marks rather than as the words "Instagram" and
+   * "Facebook". A row of glyphs reads as one thing at a glance, which is what
+   * this is; two spelled-out nouns read as two unrelated links, and spelling
+   * out "Google" would have promised a search engine rather than reviews.
+   */
+  links: SocialLink[];
   /** Wider on the landing page than on the pass, which is one narrow column. */
   imageWidthClass?: string;
   /**
@@ -59,8 +67,7 @@ export function WelcomeBlock({
   text,
   imageUrl,
   imageAlt,
-  instagramUrl,
-  facebookUrl,
+  links,
   imageWidthClass = "w-28 sm:w-44",
   ctaHref = "",
   ctaLabel = "",
@@ -97,33 +104,20 @@ export function WelcomeBlock({
           </p>
         ) : null}
 
-        {instagramUrl || facebookUrl ? (
+        {links.length > 0 ? (
           <div className="mt-5">
             <p className="text-sm leading-relaxed text-hive-400">
               {followHint}
             </p>
-            <div className="mt-3 flex flex-wrap items-center gap-x-7 gap-y-2">
-              {instagramUrl ? (
-                <a
-                  href={instagramUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="ink-link"
-                >
-                  Instagram
-                </a>
-              ) : null}
-              {facebookUrl ? (
-                <a
-                  href={facebookUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="ink-link"
-                >
-                  Facebook
-                </a>
-              ) : null}
-            </div>
+            {/* The same marks the footer and the contact page print, at the
+                contact page's size and ink, so the third place they appear is
+                not a third design. */}
+            <SocialRow
+              links={links}
+              size={19}
+              gap="gap-4"
+              className="mt-3 block text-hive-400 transition-colors duration-500 ease-settle hover:text-honey-600"
+            />
           </div>
         ) : null}
 

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AddToCalendar } from "@/components/AddToCalendar";
+import { socialLinks } from "@/components/SocialMarks";
 import { getSiteSettings } from "@/lib/payload";
 import { buildMetadata } from "@/lib/metadata";
 import { getDict } from "@/i18n/dictionaries";
@@ -164,7 +165,7 @@ export default async function GuestPassPage({ params }: PageProps) {
       mapsAppleUrl={appleDirectionsUrl(s)}
       mapEmbedUrl={s.googleMapsEmbedUrl?.trim() ?? ""}
       mapTitle={getDict(locale).contact.mapTitle}
-      // The welcome under the header, and the two places to follow them.
+      // The welcome under the header, and the places to find them.
       // Everything here is already in Site Instellingen — the About tab's
       // intro and picture, the Contact tab's socials — so the owners edit it
       // where they already know to look, and no field exists twice.
@@ -178,8 +179,7 @@ export default async function GuestPassPage({ params }: PageProps) {
         s.aboutImage?.sizes?.card?.url || s.aboutImage?.url || ""
       }
       welcomeImageAlt={s.aboutImage?.alt ?? ""}
-      instagramUrl={s.socialMedia?.instagram?.trim() ?? ""}
-      facebookUrl={s.socialMedia?.facebook?.trim() ?? ""}
+      socials={socialLinks(s)}
       dietaryOptions={(s.guestPassDietary ?? [])
         .map((row) => row?.label?.trim() ?? "")
         .filter(Boolean)}
