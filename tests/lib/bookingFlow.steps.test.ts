@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { RENAMED_STEPS, STEPS, type ReservationStep } from "@/lib/umami";
+import { STEPS, type ReservationStep } from "@/lib/umami";
 
 /**
  * The funnel's vocabulary, and the two things about it that are load-bearing.
@@ -13,12 +13,15 @@ import { RENAMED_STEPS, STEPS, type ReservationStep } from "@/lib/umami";
  * abandonment figures simply start reporting the wrong rung, and the chart in
  * front of the owners goes on looking exactly as plausible as before.
  *
- * The second is the rename itself. These six are not the six the old form sent
- * — the party size arrives already answered, so the second thing that happens
- * is a date being chosen, and there is now a screen between the time and the
- * button. `RENAMED_STEPS` is the key between the old series and the new one,
- * and it has to stay complete: docs/analytics.md is written from it and the
- * Dutch labels in the admin panel are keyed on the values below.
+ * The second is that these six names are the join key with everything that
+ * reads them back — docs/analytics.md is written from them and the Dutch labels
+ * in the admin panel are keyed on the values below, so a rename in one place
+ * and not the others is a rung that quietly stops being drawn.
+ *
+ * There was a third thing here, asserting a `RENAMED_STEPS` table was a
+ * complete key from the old form's rungs to these. Both are gone: no custom
+ * event reached Umami before August 2026, so there is no old series for a key
+ * to point at.
  */
 
 const ORDER: ReservationStep[] = [
@@ -59,44 +62,6 @@ describe("the step vocabulary", () => {
     expect(STEPS.detailsShown).toBe("4_details_shown");
     expect(STEPS.timePicked < STEPS.detailsShown).toBe(true);
     expect(STEPS.detailsShown < STEPS.submitAttempted).toBe(true);
-  });
-});
-
-describe("the remap from the old funnel", () => {
-  it("accounts for every rung the old form sent", () => {
-    expect(Object.keys(RENAMED_STEPS).sort()).toEqual([
-      "1_opened",
-      "2_field_touched",
-      "3_date_picked",
-      "4_time_picked",
-      "5_submit_attempted",
-      "6_confirmed",
-    ]);
-  });
-
-  it("carries the four rungs that still mean the same thing", () => {
-    expect(RENAMED_STEPS["1_opened"]).toBe(STEPS.opened);
-    expect(RENAMED_STEPS["3_date_picked"]).toBe(STEPS.datePicked);
-    expect(RENAMED_STEPS["4_time_picked"]).toBe(STEPS.timePicked);
-    expect(RENAMED_STEPS["5_submit_attempted"]).toBe(STEPS.submitAttempted);
-    expect(RENAMED_STEPS["6_confirmed"]).toBe(STEPS.confirmed);
-  });
-
-  it("refuses to pretend 2_field_touched became anything", () => {
-    // The stage it measured — a keystroke before anything had been chosen — no
-    // longer exists anywhere in the flow, because there is no field on screen
-    // until an evening has been settled. Pointing it at the new second rung
-    // would be claiming a continuity that is not there, and somebody would
-    // draw a line through the deploy date and believe it.
-    expect(RENAMED_STEPS["2_field_touched"]).toBeNull();
-  });
-
-  it("points every old rung at a rung that still exists", () => {
-    const live = new Set<string>(Object.values(STEPS));
-    for (const [was, is] of Object.entries(RENAMED_STEPS)) {
-      if (is === null) continue;
-      expect(live.has(is), `${was} points at a stage nobody sends`).toBe(true);
-    }
   });
 });
 

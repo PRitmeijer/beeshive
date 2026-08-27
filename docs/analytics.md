@@ -175,7 +175,21 @@ The totals are one request. The graph, the top pages, the event totals and the
 twelve property breakdowns are fifteen more. Only the totals can fail the whole
 panel; every other request is allowed to come back empty on its own, so a block
 that is blank while the visitor count is fine means Umami refused that one
-request and nothing else.
+request **or there is genuinely nothing to draw**.
+
+Those two are not the same and this paragraph used to name only the first. It
+read as though a blank block were always an API fault, which is a confident
+answer that stops somebody looking — and for a year the events block was blank
+because there were no events, not because anything was refused. Check the data
+before you check the API:
+
+```sh
+docker exec -i beeshive-postgres psql -U beeshive -d umami \
+  -c "select event_type, event_name, count(*) from website_event group by 1,2;"
+```
+
+`event_type` 1 is a pageview and 2 is a custom event. No rows of type 2 at all
+is the subject of the next section, and it is not an API problem.
 
 That is not hypothetical. Umami renamed the top-pages report from `type=url` to
 `type=path`, and while all four requests were tied together a 400 on that one
@@ -183,6 +197,48 @@ made the panel announce that Umami was unreachable while Umami was sitting there
 answering everything else perfectly. Their API will move again — and the twelve
 new requests are the likeliest place for it to happen next, because they go to
 an endpoint Umami does not document at all.
+
+### When there are no events at all
+
+Pageviews arriving while **every** custom event is missing is a specific fault
+with a specific cause, and it is worth recognising on sight rather than
+rediscovering. It happened here, and it lasted from the day analytics was built
+until August 2026.
+
+Umami's tracker installs its API guarded:
+
+```js
+window.umami || (window.umami = { track, identify, getSession })
+```
+
+The guard is there so a second copy of the tag cannot clobber a live API. It
+cannot tell an API from anything else that happens to be sitting on that name —
+and **an element with `id="umami"` puts itself there**, by named access on the
+Window object, before its own code runs. So the tracker found the name taken and
+installed nothing. `window.umami.track` never existed.
+
+Pageviews were unaffected, which is what made it survive: the tracker counts
+those by calling its own internal function and never goes through the global.
+Every surface check said analytics was healthy.
+
+**To recognise it**, in the browser console on the live site:
+
+```js
+typeof window.umami.track   // "function" is healthy; anything else is this bug
+```
+
+If it is not a function, look at what else is claiming the name — start with
+element ids. `src/components/Analytics.tsx` carries the full note. `umamiGlobal()`
+in `src/lib/umami.ts` now warns once in development when it sees an occupied
+global, which is the check that would have turned a year into an afternoon.
+
+Note what did *not* catch it. `track()` swallows every error by design, which is
+right for a guest mid-booking and is why nobody found out. The hold-queue gives
+up silently after ten seconds, which turned a permanent fault into a quiet one.
+And `tests/lib/bookingFunnel.test.ts` stubs `window.umami = { track }` directly,
+so the suite validated the taxonomy against a global the real page never had —
+it mocked the exact seam the bug lived in. Treat an assertion about analytics
+made anywhere other than a real browser as unproven.
 
 ## Settings to fill in
 
@@ -282,7 +338,6 @@ again for the rest of the page.
 | `EVENTS.contentViewed` | `content_viewed` | `kind`, `ref` | A page of ours was read, or a rank of the menu card was chosen. |
 | `EVENTS.contactSubmitted` | `contact_submitted` | `outcome`: `sent` \| `refused` \| `network` | A contact message, and whether it got through. |
 | `EVENTS.newsletterSubscribed` | `newsletter_subscribed` | `outcome`, same three | A mailing list sign-up, and whether it got through. |
-| `EVENTS.reservationSubmitted` | `reservation_submitted` | none | **Legacy.** Duplicates `reservation_step { step: "6_confirmed" }`. See the cutover below. |
 
 ### The booking funnel
 
@@ -339,41 +394,25 @@ original complaint, verbatim.
 
 ### The funnel was remapped
 
-**Annotate the deploy date in Umami before reading anything across it.** The
-booking form was replaced by a two-screen flow, and three of the six rungs
-changed what they mean. Renamed rather than quietly redefined, because a rung
-called `2_field_touched` that fires when somebody presses a date chip is a rung
-that will be read wrongly by whoever opens the dashboard next year, and by then
-there will be nobody left who remembers. The old series stays where it is; this
-table is the key, and it is also `RENAMED_STEPS` in `src/lib/umami.ts`, which
-the suite asserts is complete.
+The booking form was replaced by a two-screen flow and three of the six rungs
+changed what they mean. They were renamed rather than quietly redefined, because
+a rung called `2_field_touched` that fires when somebody presses a date chip is
+a rung that will be read wrongly by whoever opens the dashboard next year.
 
-| Old value | New value | Comparable across the change? |
-| --- | --- | --- |
-| `1_opened` | `1_opened` | Yes. Same event, same moment. |
-| `2_field_touched` | *(nothing)* | **No.** The stage it measured no longer exists. |
-| `3_date_picked` | `2_date_picked` | Yes, and it is now the second rung rather than the third. |
-| `4_time_picked` | `3_time_picked` | Yes. |
-| — | `4_details_shown` | New. There was no screen boundary here before. |
-| `5_submit_attempted` | `5_submit_attempted` | Yes, but it now follows `4_details_shown` rather than the time. |
-| `6_confirmed` | `6_confirmed` | Yes. |
+There was a long section here with a key from the old rung names to the new
+ones, a `RENAMED_STEPS` table in `src/lib/umami.ts` that the suite asserted was
+complete, Dutch labels for the old values in `StatsView.tsx`, and an instruction
+to annotate the deploy date in Umami before reading across it. All of it is
+gone, and the reason is the one in "When there are no events at all" above: **no
+custom event ever reached Umami before August 2026**, so there is no old series.
+The key pointed at nothing, the labels described values that were never
+recorded, and the deploy date has nothing on either side of it.
 
-`2_field_touched` was "the first keystroke in any field", and it fired second
-because the old form asked everything at once. There is no field on screen now
-until an evening has been settled, so the stage has no successor: pointing it at
-`2_date_picked` would claim a continuity that is not there, and somebody would
-draw a line through the deploy date and believe it. The row is deliberately
-`null` in `RENAMED_STEPS`, and the suite asserts that too.
-
-The four old values are still in the Dutch label table in `StatsView.tsx`, so a
-period spanning the change reads as Dutch rather than as raw keys. They are not
-in `FUNNEL_STEPS`, so they draw no row in the chart. Take them out once no
-figures from before the change are in view.
-
-What to expect on the day: `2_date_picked` will read **higher** than
-`3_date_picked` did, because the rung above it no longer filters anybody out,
-and the drop between rungs one and two will look shallower for the same reason.
-Neither is conversion changing. It is measurement changing.
+The six rungs in `STEPS` are therefore the only ones that have ever existed in
+the data, whatever the names suggest about a history. `extraSteps` in
+`StatsView.tsx` still catches any value Umami returns that the panel does not
+know, so anything unexpected lands at the foot of the funnel rather than
+disappearing.
 
 ### The property values, in full
 
@@ -529,14 +568,15 @@ expected. Thirteen names became eleven:
 | `directions_clicked` | `outbound_clicked { kind: "directions" \| "google_listing" }` |
 | `add_to_calendar` | `outbound_clicked { kind: "calendar" }` |
 | `guest_pass_opened` | `guest_pass_step { step: "opened" }` |
-| `reservation_submitted` | `reservation_step { step: "6_confirmed" }` — **and itself, for now** |
+| `reservation_submitted` | `reservation_step { step: "6_confirmed" }` |
 
-That last row is the exception, and it is deliberate. `reservation_submitted` is
-still fired alongside `6_confirmed`, because bookings per week is the one figure
-the owners already read, and watching it fall off a cliff on the very day the
-measuring got better would make the improvement look exactly like a regression.
-Delete the constant, its call site in `src/components/booking/GuestDetails.tsx`
-and this row **after 1 March 2027**, by which point the overlap has covered a full winter.
+That last row carried an exception for a while: `reservation_submitted` was
+fired alongside `6_confirmed` and kept until March 2027, so that bookings per
+week — the one figure the owners already read — would not fall off a cliff on
+the day the measuring got better. It has been deleted, because that cliff could
+not happen: the figure never existed. See "When there are no events at all".
+None of the old names in this table were ever recorded either, so the whole
+table is a record of intent rather than a migration to plan around.
 
 Note also that `phone_clicked` was a *biased* sample rather than a small one:
 the footer's telephone number, which is on every page of the site, was never
@@ -691,12 +731,12 @@ Success:
   "bounceRate": 46, "avgSeconds": 94,
   "series":   [{ "date": "2026-08-17", "visitors": 61, "pageviews": 174 }],
   "topPages": [{ "url": "/kaart", "count": 212 }],
-  "events":   [{ "name": "reservation_submitted", "count": 9 }],
+  "events":   [{ "name": "reserve_clicked", "count": 96 }],
   "breakdowns": {
     "funnelSteps": [{ "value": "1_opened", "count": 412 }],
     "funnelStepsPhone": [{ "value": "1_opened", "count": 301 }],
     "funnelStepsTablet": [],
-    "abandonedAtStep": [{ "value": "4_time_picked", "count": 105 }],
+    "abandonedAtStep": [{ "value": "3_time_picked", "count": 105 }],
     "abandonedHow": [{ "value": "sheet_closed", "count": 190 }],
     "failureReasons": [{ "value": "slotFull", "count": 40 }],
     "failureReasonsPhone": [{ "value": "slotFull", "count": 34 }],

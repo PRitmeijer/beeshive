@@ -123,10 +123,15 @@ const UNITS: Record<UmamiRange, "hour" | "day" | "month"> = {
  * rebuilt. The party size arrives already answered at two, so the second thing
  * that happens to anybody is a day being chosen, and there is now a screen
  * between the time and the button — which is exactly the boundary the owners'
- * question is about, so it is a rung rather than a gap. The key between the old
- * series and this one is `RENAMED_STEPS` in src/lib/umami.ts, and the four old
- * values are still in the label table below so that a period spanning the
- * change reads as Dutch.
+ * question is about, so it is a rung rather than a gap.
+ *
+ * There is no old series to reconcile with, and that is not a figure of speech:
+ * no custom event ever reached Umami before August 2026, because the tracker's
+ * global was shadowed by an element id. So the `RENAMED_STEPS` key that used to
+ * be named here, and the old Dutch labels that used to sit in the table below,
+ * are both gone — they described a past that is empty. `extraSteps` still
+ * catches anything Umami returns that is not in this list, so a value nobody
+ * planned for lands at the foot of the funnel rather than vanishing.
  */
 const FUNNEL_STEPS: { key: string; label: string }[] = [
   { key: "1_opened", label: "Reserveren geopend" },
@@ -227,25 +232,6 @@ const LABELS: Record<string, string> = {
   "4_details_shown": "Bij de gegevens",
   "5_submit_attempted": "Op Reserveren gedrukt",
   "6_confirmed": "Reservering rond",
-
-  /**
-   * De drie trappen die het oude formulier stuurde en die nu anders heten,
-   * hier gehouden zodat een periode die over de omzetting heen loopt Nederlands
-   * blijft in plaats van ruwe sleutels te tonen.
-   *
-   * Ze staan niet in FUNNEL_STEPS hierboven, maar dat betekent niet dat ze
-   * onzichtbaar zijn: `extraSteps` verderop pakt juist alles op wat Umami
-   * terugstuurt en dáár niet in staat, en de grafiek tekent
-   * `[...FUNNEL_STEPS, ...extraSteps]`. Over een periode die de omzetting
-   * omvat krijgen ze dus wel degelijk een eigen regel, onderaan de trechter,
-   * met deze woorden erbij — wat precies de bedoeling is: cijfers van vóór de
-   * omzetting horen zichtbaar te zijn en herkenbaar oud, niet stilletjes weg.
-   * Weg te halen zodra er geen cijfers van vóór de omzetting meer in beeld
-   * staan.
-   */
-  "2_field_touched": "Begonnen met invullen (oud formulier)",
-  "3_date_picked": "Datum gekozen (oud formulier)",
-  "4_time_picked": "Tijd gekozen (oud formulier)",
 
   // Welke van de twee vragen aan de beschikbaarheid werd gesteld.
   window: "Welke dagen er open zijn",

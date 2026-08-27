@@ -25,9 +25,20 @@ import type { JSX } from "react";
  * fired from one was simply dropped, worst on a slow phone, silently. The fix is
  * a short-lived queue in src/lib/umami.ts rather than an earlier strategy here:
  * a counter is not worth a slower first paint, and the queue costs nothing when
- * the script arrives on time. Anyone tempted to move this to
- * `beforeInteractive` because "events are missing" should read that file first;
- * the missing events have already been paid for.
+ * the script arrives on time.
+ *
+ * That paragraph used to end by telling anyone investigating missing events to
+ * read the queue and stop looking, on the grounds that the shortfall had
+ * already been accounted for. It was wrong, and the way it was wrong is worth
+ * more than the paragraph. The race is real and the queue does fix it — but
+ * underneath it sat a second fault that dropped not *some* events on slow
+ * phones but *every* event on every device, for a year, and the sentence sent
+ * the next reader away with a plausible answer to the wrong question. It was
+ * the `id` on the tag below; see the note there.
+ *
+ * So: nothing in this file is a reason to stop investigating missing events.
+ * If they are missing, check in a browser whether `window.umami.track` is a
+ * function before believing any explanation written here, including this one.
  *
  * The admin is covered by where this is mounted rather than by a check in here —
  * the component belongs in the frontend layout at

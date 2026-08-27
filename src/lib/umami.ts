@@ -7,6 +7,14 @@
  * on a connection where it has not finished loading, or the tab is the admin
  * where the script is never rendered at all. Every one of those is normal.
  *
+ * There is a fifth, and it is not normal: the name `umami` on the window taken
+ * by something that is not the tracker, in which case Umami's installer — which
+ * guards with `window.umami || (…)` so a duplicate tag cannot clobber a live
+ * API — declines to install and `track` never appears at all. That is not a
+ * slow connection, it is a permanent fault, and it held for a year here because
+ * this file could not tell anybody. `umamiGlobal()` below now says so once, in
+ * development. See src/components/Analytics.tsx for what had taken the name.
+ *
  * So the whole point of this module is the swallowing. A counter is the least
  * important thing on the page, and the most important thing on the page is the
  * reservation form: a guest who fills in eight fields and then loses the lot to
@@ -95,19 +103,6 @@ export const EVENTS = {
   contentViewed: "content_viewed",
   contactSubmitted: "contact_submitted",
   newsletterSubscribed: "newsletter_subscribed",
-  /**
-   * Kept alongside `reservation_step { step: "6_confirmed" }` for one season,
-   * and then to be deleted — after 1 March 2027, at which point the overlap has
-   * covered a full winter and the owners have the new reading in front of them.
-   *
-   * Umami keys its history on the name string, so the day this name stops being
-   * sent is the day the owners' one existing number — bookings per week, the
-   * single figure they already read — falls off a cliff. Everything else in
-   * this taxonomy is an improvement they have to be shown; that one is a
-   * regression they would see for themselves, and it would be the first thing
-   * they said about the work.
-   */
-  reservationSubmitted: "reservation_submitted",
 } as const;
 
 export type UmamiEvent = (typeof EVENTS)[keyof typeof EVENTS];
@@ -137,9 +132,15 @@ export type UmamiEvent = (typeof EVENTS)[keyof typeof EVENTS];
  * say. A rung called `2_field_touched` that fires when somebody presses a date
  * chip is a rung that will be read wrongly by whoever opens the dashboard next
  * year, and by then there will be nobody left who remembers. So they are
- * renamed, the old series is left where it is, and `RENAMED_STEPS` below is the
- * key — written down here rather than in a commit message, because the person
- * who needs it will be looking at a chart and not at a git log.
+ * renamed and the old series is left where it is.
+ *
+ * There was a `RENAMED_STEPS` table here, mapping each old rung to its
+ * successor so a chart could be joined across the deploy. It is gone, and the
+ * reason is worth keeping: there was no old series. No custom event this file
+ * ever named reached Umami until August 2026 — see the note on the script id in
+ * src/components/Analytics.tsx — so the history it existed to bridge is empty,
+ * and a key to nothing is a thing for somebody to maintain and eventually
+ * believe.
  */
 export const STEPS = {
   opened: "1_opened",
@@ -152,25 +153,6 @@ export const STEPS = {
 } as const;
 
 export type ReservationStep = (typeof STEPS)[keyof typeof STEPS];
-
-/**
- * What each of the old rungs became, so a chart that stops on the deploy date
- * can be joined to the one that starts there.
- *
- * `2_field_touched` maps to nothing, and that is the honest answer rather than
- * a missing entry: the stage it measured — a keystroke before anything had been
- * chosen — no longer exists anywhere in the flow, because there is no field on
- * screen until an evening has been settled. Pointing it at the new second rung
- * would be claiming a continuity that is not there.
- */
-export const RENAMED_STEPS: Record<string, ReservationStep | null> = {
-  "1_opened": STEPS.opened,
-  "2_field_touched": null,
-  "3_date_picked": STEPS.datePicked,
-  "4_time_picked": STEPS.timePicked,
-  "5_submit_attempted": STEPS.submitAttempted,
-  "6_confirmed": STEPS.confirmed,
-};
 
 /** The shape Umami's script exposes, described only as far as we use it. */
 interface UmamiGlobal {
@@ -244,9 +226,43 @@ let poll: number | null = null;
 let holdUntil = 0;
 let gaveUp = false;
 
+/**
+ * Said once per page, and only where somebody building the site will see it.
+ *
+ * The silence everywhere else in this file is right, and the reasoning at the
+ * top stands: a guest mid-booking must never be shown a counter's problems. It
+ * is wrong for exactly one case, and it is the case that actually happened —
+ * `window.umami` present, holding something that is not the tracker.
+ *
+ * The distinction is the whole point. A global that is *absent* is the ordinary
+ * state of the first second of every page, it fixes itself, and the queue below
+ * exists precisely to ride it out; there is nothing to report. A global that is
+ * *occupied* never fixes itself, no queue can help, and every event for the
+ * life of the page is lost. The check on the next line could always tell those
+ * two apart and threw the answer away, which is how `<Script id="umami">` —
+ * an element id, claiming the name by nothing more than existing — cost a year
+ * of the booking flow measuring nothing at all.
+ *
+ * Development only, because it is a message to whoever is building the site
+ * rather than a console entry for a guest, and because a fault of this kind is
+ * present on the developer's own machine long before it can ship.
+ */
+let warnedAboutGlobal = false;
+
 function umamiGlobal(): UmamiGlobal | null {
   const umami = (window as unknown as { umami?: UmamiGlobal }).umami;
-  return umami && typeof umami.track === "function" ? umami : null;
+  if (umami && typeof umami.track === "function") return umami;
+  if (umami && !warnedAboutGlobal && process.env.NODE_ENV !== "production") {
+    warnedAboutGlobal = true;
+    console.warn(
+      "[analytics] window.umami exists but has no track(). Umami's installer "
+        + "skips a global that is already taken, so no custom event can be "
+        + "sent and none ever will be on this page. Something else has claimed "
+        + "the name — an element with id=\"umami\" is enough. "
+        + "See src/components/Analytics.tsx.",
+    );
+  }
+  return null;
 }
 
 /** One event onto the wire, or `false` if the script is not there yet. */

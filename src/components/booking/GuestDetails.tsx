@@ -376,12 +376,6 @@ export function GuestDetails({
       if (res.ok) {
         funnel.finish();
         funnel.step(STEPS.confirmed);
-        // The old name, sent alongside the new one until March 2027. See the
-        // note on EVENTS.reservationSubmitted: bookings per week is the one
-        // figure the owners already read, and Umami keys its history on the
-        // name string, so dropping it on the day the measuring got better
-        // would make the improvement look exactly like a regression.
-        track(EVENTS.reservationSubmitted);
         const data = (await res.json().catch(() => null)) as {
           guestPassUrl?: unknown;
         } | null;
@@ -465,8 +459,7 @@ export function GuestDetails({
           setNotesOpen(false);
           // Every stage is reported once per journey, and this is somebody
           // starting a second one: leaving the old marks in place would drop
-          // their whole second booking out of the funnel while
-          // `reservation_submitted` beside it went on counting.
+          // their whole second booking out of the funnel entirely.
           funnel.reset();
           /**
            * Back to the availability screen, whichever of the two ways there is
