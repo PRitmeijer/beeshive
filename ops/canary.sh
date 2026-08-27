@@ -47,7 +47,22 @@ SITES="${*:-https://debeeshive.nl/ https://debeeshive.nl/admin/login}"
 # stop working first: the operator can change a hostname or redeploy a contract
 # any afternoon. Hence the second check below, which does not depend on knowing
 # what the payload looks like.
-MARKERS="mc\.yandex|metrika|bnbchain\.org|binance\.org|drpc\.org|publicnode\.com|onfinality\.io|isGoalReached|0xf4a32588|0xE75744C5|0x4a0e8aC0|45\.86\.176\.242|use\.fontawesome\.com"
+#
+# One entry has been taken out, and why is worth more than the entry was.
+#
+# This list carried 45.86.176.242, described as the address the EtherHiding
+# contract decoded to. It is not. It is the OWNERS' OFFICE address, and it is
+# in the HAR because the HAR was recorded at the office. On 27 August 2026 it
+# was read back against the server's auth log, matched two entirely ordinary
+# root logins, and produced a confident conclusion that the host had been taken
+# over. A rebuild was minutes away.
+#
+# So: an address that appears in a capture is not thereby the attacker's, and
+# an indicator is only as good as its provenance. Anything added below needs to
+# say where it came from and how that was established — a hostname the payload
+# fetched, a contract address, a string from the script itself. Not "an IP that
+# was in the file".
+MARKERS="mc\.yandex|metrika|bnbchain\.org|binance\.org|drpc\.org|publicnode\.com|onfinality\.io|isGoalReached|0xf4a32588|0xE75744C5|0x4a0e8aC0|use\.fontawesome\.com"
 
 # Every host these pages are allowed to load a script from. Anything else in a
 # <script src> is reported, whatever it is called — which is what catches the
