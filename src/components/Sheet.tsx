@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { MARKS } from "@/components/CraftIcon";
 
 /**
  * A sheet of the mill stock the menu is printed on.
@@ -9,7 +10,16 @@ import type { ReactNode } from "react";
  * Content sits on a separate, unfiltered layer above it, so type stays crisp.
  */
 
-/** Mounted once, near the top of the tree. */
+/**
+ * Mounted once, near the top of the tree.
+ *
+ * Two kinds of thing live in here, for the same reason: they are drawings the
+ * page refers to over and over, and a document only needs one copy of each.
+ * The deckle filters are referenced by every sheet and every torn edge. The
+ * craft marks used to be stamped out in full at every icon, which the menu
+ * card turned into a hundred and twenty copies of the same eleven drawings —
+ * see the note above <CraftIcon>.
+ */
 export function PaperDefs() {
   return (
     <svg
@@ -20,6 +30,25 @@ export function PaperDefs() {
       style={{ position: "absolute" }}
     >
       <defs>
+        {/* The marks <CraftIcon> points at. Everything that never differs
+            between two instances of a mark is set here, so the instance
+            carries only its size and its stroke weight: a use shadow tree
+            inherits through the element that referenced it, which is how the
+            ink colour still comes from whatever the icon is sitting in. */}
+        {Object.entries(MARKS).map(([name, drawing]) => (
+          <symbol
+            key={name}
+            id={`craft-${name}`}
+            viewBox="0 0 32 32"
+            fill="none"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            {drawing}
+          </symbol>
+        ))}
+
         <filter
           id="deckle-soft"
           x="-12%"
@@ -28,10 +57,20 @@ export function PaperDefs() {
           height="124%"
           colorInterpolationFilters="sRGB"
         >
+          {/* Three octaves, not four. This filter runs over the whole menu
+              card, which on a phone with a full card is something like eight
+              thousand CSS pixels tall, and every octave is another pass of
+              noise over all of it. The fourth octave of a 0.026 base
+              frequency is a five-pixel wavelength — detail the 0.42 pass
+              below is already drawing, at a quarter of this one's amplitude.
+              Rendered side by side at phone width the two are the same edge:
+              163 pixels out of 187,136 differ by more than 8/255, all of them
+              inside the twelve-pixel fringe. If the deckle ever looks wrong to
+              you, this is the character to put back first. */}
           <feTurbulence
             type="fractalNoise"
             baseFrequency="0.026"
-            numOctaves="4"
+            numOctaves="3"
             seed="11"
             result="coarse"
           />

@@ -53,7 +53,7 @@ if (!connectionString) {
 
 // `pg` arrives in the image through @payloadcms/db-postgres and lands in the
 // standalone output's own node_modules, so a bare import from /app resolves it
-// — verified against .next/standalone, where it is pg 8.11.3. It is imported
+// — verified against .next/standalone, where it is pg 8.20.0. It is imported
 // dynamically all the same: if a future build ever traced it away, the right
 // answer is to say so and start the server, not to take the site down over a
 // missing check.

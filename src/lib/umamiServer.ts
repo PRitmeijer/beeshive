@@ -14,11 +14,13 @@ import { getSiteSettings, type SiteSettingsData } from "@/lib/payload";
  * the dashboard in the admin, and the admin is written for two restaurant
  * owners who do not read English error messages and should not have to.
  *
- * Nothing in here ever throws. The caller is a panel that polls every minute in
- * a page the owners keep open all day; an unreachable Umami, an expired key or
- * a field nobody filled in must all come back as "here is why there is no
- * graph", never as a stack trace and never as a red box. `configured: false`
- * plus a reason is the whole error protocol.
+ * Nothing in here ever throws. The caller is /admin/statistieken, which
+ * renders on the server and has one job on the morning something is wrong: to
+ * say what. An unreachable Umami, an expired key or a field nobody filled in
+ * must all come back as "here is why there is no graph", never as a stack
+ * trace and never as a red box. `configured: false` plus a reason is the whole
+ * error protocol, and src/components/admin/StatsView.tsx prints the reason
+ * word for word where the figures would have gone.
  *
  * On authentication, and it differs by flavour. Umami Cloud issues API keys
  * (Settings, then API keys, then Create key) and wants them as
@@ -62,9 +64,12 @@ import { getSiteSettings, type SiteSettingsData } from "@/lib/payload";
 const TIMEOUT_MS = 8_000;
 
 /**
- * The admin polls, so the same minute of the same range must not become one
- * upstream request per poll per open tab. Sixty seconds is about the finest
- * granularity the figures are meaningful at anyway.
+ * One load of the panel is sixteen upstream requests now that the event
+ * properties are read back, and the panel is a page the owners reload,
+ * flip between periods on, and leave open in a second tab. Without this, a
+ * bored afternoon of clicking Vandaag and 7 dagen back and forth would put a
+ * few hundred queries a minute through Umami for figures that had not moved.
+ * Sixty seconds is about the finest granularity they are meaningful at anyway.
  */
 const CACHE_TTL_MS = 60_000;
 
@@ -76,8 +81,20 @@ export type UmamiRange = (typeof RANGES)[number];
  * The only reports a caller may ask for. This is the other half of not being a
  * proxy: the endpoint composes URLs from a closed set of names, so no caller
  * can point our credentials at a path of their choosing.
+ *
+ * "funnel" is the odd one out and is worth the extra name rather than being
+ * folded into "events". It is twelve upstream requests where the others are
+ * one, so anything that only wants a visitor count should be able to say so
+ * and not pay for it.
  */
-export const REPORTS = ["all", "summary", "series", "pages", "events"] as const;
+export const REPORTS = [
+  "all",
+  "summary",
+  "series",
+  "pages",
+  "events",
+  "funnel",
+] as const;
 export type UmamiReport = (typeof REPORTS)[number];
 
 export function isRange(value: unknown): value is UmamiRange {
@@ -106,9 +123,116 @@ export interface UmamiEventCount {
 }
 
 /**
+ * One value of one property on one event, and how often it was seen.
+ *
+ * `metrics?type=event` answers with names and totals and nothing else, which
+ * is why every property the browser so carefully attaches — the refusal code,
+ * the button that was pressed, the language, the funnel step — was collected
+ * for a year and could not be looked at from this side once. A `step` property
+ * nothing can read back is not a funnel; it is a column in a database.
+ *
+ * Umami does answer for them, and in a different shape from everything else:
+ * `[{ value, total }]` where the rest of its API says `[{ x, y }]`.
+ */
+export interface UmamiPropertyValue {
+  value: string;
+  count: number;
+}
+
+/** One request to /event-data/values. */
+interface BreakdownSpec {
+  event: string;
+  property: string;
+  /**
+   * Umami's own session classification. Only Umami 3 honours it; the note
+   * below covers both its vocabulary and that version dependency, and both
+   * have already cost this panel a wrong answer.
+   */
+  device?: "mobile" | "tablet";
+}
+
+/**
+ * Which event properties get read back, and how the telephone split is made.
+ *
+ * The endpoint is `GET {base}/event-data/values`, taking `eventName` and
+ * `propertyName` alongside the usual window. It is **not** in Umami's
+ * published API documentation, which lists `stats`, `pageviews`, `metrics`
+ * and the rest and stops there; the parameter names and the response shape
+ * were read out of their source rather than out of a manual. That makes it
+ * precisely the kind of thing that moves without anyone announcing it —
+ * `type=url` quietly becoming `type=path` already cost this panel its
+ * top-pages list once, and took three unrelated sections down with it. So
+ * every request below goes through the same `optional()` guard as the three
+ * that incident produced: a breakdown Umami will not answer for leaves one
+ * block of the page empty and takes nothing else with it.
+ *
+ * On the telephone-versus-computer split, which is the whole reason the owners
+ * asked for any of this. The browser attaches a `device` property to every
+ * event, but this endpoint breaks down one property at a time and cannot
+ * cross two of them, so "the funnel, on phones" cannot be asked for that way.
+ * What it *will* take is Umami's own session filters, and `device` is one of
+ * them — read off the user agent, which is a sounder answer than a screen
+ * width in any case, because a phone held sideways is still a phone.
+ *
+ * Its vocabulary is the trap. Umami calls anything with a desktop user agent
+ * and a screen of 1920 pixels or less a `laptop`, and keeps `desktop` for the
+ * genuinely large monitors — so asking for `device=desktop` and printing the
+ * answer under "computer" would report perhaps a tenth of the real number and
+ * look like a collapse in desktop bookings. Only the two narrow classes are
+ * asked for here, `mobile` and `tablet`, and the panel arrives at "computer"
+ * by taking them off the total. That is one request fewer, and a device class
+ * some later Umami invents lands in the remainder instead of disappearing.
+ *
+ * All of which is true of Umami 3 and of nothing before it. Read the route in
+ * 2.17.0, 2.18.1, 2.19.0 or 2.20.0 and it assembles its filter by hand as
+ * { startDate, endDate, eventName, propertyName }; it never imports the filter
+ * params at all, and the schema it parses the request with is not strict, so
+ * `device` is dropped on the floor and the answer comes back 200 with every
+ * session in it. That is the worst shape a bug can take: not an error anybody
+ * would notice, but a telephone column and a computer column that are quietly
+ * the same total, drawn as though they were a split. Nothing on this side can
+ * tell the two Umamis apart from one answer, so the noticing happens in
+ * src/components/admin/StatsView.tsx, which holds the two device breakdowns up
+ * against their unfiltered sibling and leaves the columns out rather than draw
+ * a lie. On an Umami 3 that check simply never fires.
+ *
+ * The names on the left of each line are ours. The event names and property
+ * keys on the right belong to src/lib/umami.ts and the two halves have to
+ * agree letter for letter: a property key that does not exist upstream is not
+ * an error, it is an empty list, which reads on the page as "nobody ever did
+ * that". docs/analytics.md carries the one table both sides are written from.
+ */
+const BREAKDOWN_SPECS = {
+  funnelSteps: { event: "reservation_step", property: "step" },
+  funnelStepsPhone: { event: "reservation_step", property: "step", device: "mobile" },
+  funnelStepsTablet: { event: "reservation_step", property: "step", device: "tablet" },
+  abandonedAtStep: { event: "reservation_abandoned", property: "last_step" },
+  abandonedHow: { event: "reservation_abandoned", property: "exit" },
+  failureReasons: { event: "reservation_failed", property: "reason" },
+  failureReasonsPhone: {
+    event: "reservation_failed",
+    property: "reason",
+    device: "mobile",
+  },
+  failurePartySize: { event: "reservation_failed", property: "party_bucket" },
+  failureLeadTime: { event: "reservation_failed", property: "lead_bucket" },
+  blockedFields: { event: "reservation_blocked", property: "field" },
+  availabilityOutcome: { event: "availability_checked", property: "outcome" },
+  reserveButtonSource: { event: "reserve_clicked", property: "source" },
+} as const satisfies Record<string, BreakdownSpec>;
+
+export type UmamiBreakdown = keyof typeof BREAKDOWN_SPECS;
+
+/** Fixed order, because the answers are put back onto the names by position. */
+const BREAKDOWN_NAMES = Object.keys(BREAKDOWN_SPECS) as UmamiBreakdown[];
+
+export type UmamiBreakdowns = Record<UmamiBreakdown, UmamiPropertyValue[] | null>;
+
+/**
  * One flat shape whatever was asked for. A report the caller did not request
- * comes back as zero or an empty list rather than as a missing key, so the
- * dashboard can render the same component tree for every range.
+ * comes back as zero or as an empty list rather than as a missing key, so the
+ * dashboard can render the same component tree for every range. Null is no
+ * part of that; it is spoken for, and `breakdowns` below says by what.
  */
 export interface UmamiStats {
   configured: true;
@@ -123,6 +247,24 @@ export interface UmamiStats {
   series: UmamiSeriesPoint[];
   topPages: UmamiCount[];
   events: UmamiEventCount[];
+  /**
+   * The event properties, commonest value first, as Umami sorted them.
+   *
+   * `null` and `[]` mean different things here and the panel prints a
+   * different Dutch sentence for each, so nothing may flatten one into the
+   * other on the way out. `[]` is Umami answering that nothing of the kind has
+   * happened yet, which is the ordinary state of a report on the day it ships.
+   * `null` is Umami declining to answer at all — an install too old to have
+   * /event-data, or an endpoint that has moved again — and that is a thing for
+   * a developer to go and look at rather than a thing to wait out.
+   *
+   * That is the whole of what null means, which is why a caller who asked for
+   * `summary` and not for `funnel` gets `[]` for all twelve rather than null.
+   * It read nothing, so nothing refused it, and a null there would hang the
+   * developer's sentence on a page that never wanted the breakdowns in the
+   * first place. The construction at the bottom of load() keeps that line.
+   */
+  breakdowns: UmamiBreakdowns;
 }
 
 export interface UmamiUnavailable {
@@ -308,10 +450,10 @@ function credentialFrom(fieldValue: string | null | undefined): Credential | nul
 let session: { key: string; token: string } | null = null;
 
 /**
- * A login already on its way. The panel polls every minute and the owners
- * leave tabs open, so a token that expires overnight is noticed by several
- * tabs within the same second. Whoever arrives while a login is in flight
- * waits for its answer instead of starting another one.
+ * A login already on its way. One load of the panel is sixteen requests and
+ * the owners leave tabs open, so a token that expired overnight is noticed by
+ * a dozen of them within the same second. Whoever arrives while a login is in
+ * flight waits for its answer instead of starting another one.
  */
 let pendingLogin: { key: string; promise: Promise<string> } | null = null;
 
@@ -399,7 +541,8 @@ async function getJson(url: string, key: string): Promise<unknown> {
   const res = await fetch(url, {
     headers: { Accept: "application/json", ...authHeaders(key) },
     // These figures are a minute stale by design; Next's own cache would make
-    // that indefinite and the module cache below already covers the polling.
+    // that indefinite, and the module cache below is what keeps a reload from
+    // costing sixteen upstream requests.
     cache: "no-store",
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
@@ -427,6 +570,35 @@ function points(source: unknown): { x: string; y: number }[] {
       y: typeof row.y === "number" && Number.isFinite(row.y) ? row.y : 0,
     }))
     .filter((row) => row.x !== "");
+}
+
+/**
+ * The `[{ value, total }]` lists /event-data/values hands back.
+ *
+ * `total` is a `count(*)` out of Postgres, which is a bigint, and whether that
+ * survives the trip as a JSON number or as a JSON string is a property of
+ * whichever serialiser the running Umami happens to use. Both are read here
+ * rather than picking one and finding out in production which it was.
+ *
+ * A value of "" is dropped for the same reason the sibling above drops an
+ * empty label: it is a row nothing can be said about, and printing a blank
+ * line beside a count invites the owners to wonder what they did.
+ */
+function propertyValues(source: unknown): UmamiPropertyValue[] {
+  if (!Array.isArray(source)) return [];
+  return source
+    .filter(
+      (row): row is { value: unknown; total: unknown } =>
+        !!row && typeof row === "object",
+    )
+    .map((row) => {
+      const count = Number(row.total);
+      return {
+        value: typeof row.value === "string" ? row.value : String(row.value ?? ""),
+        count: Number.isFinite(count) ? count : 0,
+      };
+    })
+    .filter((row) => row.value !== "");
 }
 
 /* ------------------------------------------------------------------ cache -- */
@@ -535,29 +707,48 @@ async function load(
   /**
    * The totals are the report. Everything else is a garnish on it.
    *
-   * These four used to be one `Promise.all`, which made them all-or-nothing:
-   * any one of them failing threw, and the panel said Umami was unreachable
-   * while Umami sat there perfectly reachable. That is exactly what happened.
-   * `type=url` on the metrics endpoint became `type=path` in a later Umami, so
-   * a request for the top pages started answering 400 and took the visitor
-   * count, the graph and the events down with it, none of which had anything
-   * wrong with them.
+   * The four this started as used to be one `Promise.all`, which made them
+   * all-or-nothing: any one of them failing threw, and the panel said Umami was
+   * unreachable while Umami sat there perfectly reachable. That is exactly what
+   * happened. `type=url` on the metrics endpoint became `type=path` in a later
+   * Umami, so a request for the top pages started answering 400 and took the
+   * visitor count, the graph and the events down with it, none of which had
+   * anything wrong with them.
    *
    * So only `stats` is allowed to fail the batch, because without it there is
-   * genuinely nothing to show. The other three resolve to null on their own
-   * account and the panel simply leaves that section empty. Umami's API has
-   * moved once and will move again, and when it does it should cost one graph
-   * rather than the page.
+   * genuinely nothing to show. Every other request in here — the graph, the top
+   * pages, the event totals and the twelve property breakdowns below — resolves
+   * to null on its own account and the panel simply leaves that block empty.
+   * Umami's API has moved once and will move again, and when it does it should
+   * cost one block rather than the page.
    *
    * The one thing that must NOT be swallowed here is a 401, or the retry
-   * below never fires and an expired token quietly becomes three empty
-   * sections. `optional` re-throws those and eats everything else.
+   * below never fires and an expired token quietly becomes a page of empty
+   * blocks. `optional` re-throws those and eats everything else.
    */
   const optional = (promise: Promise<unknown>) =>
     promise.catch((error) => {
       if (isUnauthorized(error)) throw error;
       return null;
     });
+
+  /**
+   * Twelve more requests, in the fixed order of BREAKDOWN_NAMES so the answers
+   * can be put back onto their names by position further down. They are only
+   * composed when they are wanted: a caller asking for `summary` is asking for
+   * one number and should not pay for a dozen property queries to get it.
+   */
+  const breakdownUrls = wants("funnel")
+    ? BREAKDOWN_NAMES.map((name) => {
+        const spec: BreakdownSpec = BREAKDOWN_SPECS[name];
+        return (
+          `${base}/event-data/values?${period}`
+          + `&eventName=${encodeURIComponent(spec.event)}`
+          + `&propertyName=${encodeURIComponent(spec.property)}`
+          + (spec.device ? `&device=${spec.device}` : "")
+        );
+      })
+    : [];
 
   const batch = (key: string) =>
     Promise.all([
@@ -577,12 +768,13 @@ async function load(
         ? optional(getJson(`${base}/metrics?${period}&type=path&limit=10`, key))
         : null,
       wants("events")
-        ? optional(getJson(`${base}/metrics?${period}&type=event&limit=20`, key))
+        ? optional(getJson(`${base}/metrics?${period}&type=event&limit=40`, key))
         : null,
+      ...breakdownUrls.map((url) => optional(getJson(url, key))),
     ]);
 
   try {
-    const [stats, series, pages, events] = await (async () => {
+    const [stats, series, pages, events, ...breakdownAnswers] = await (async () => {
       if (credential.kind === "key") return batch(credential.value);
 
       const { username, password } = credential;
@@ -636,6 +828,16 @@ async function load(
       events: wants("events")
         ? points(events).map((point) => ({ name: point.x, count: point.y }))
         : [],
+      // A caller who did not ask for the funnel gets empty lists, never nulls.
+      // Null is reserved for Umami turning a request down, as the interface
+      // above promises, and there were no requests here to turn down.
+      breakdowns: Object.fromEntries(
+        BREAKDOWN_NAMES.map((name, i) => {
+          if (!wants("funnel")) return [name, []];
+          const answer = breakdownAnswers[i];
+          return [name, answer == null ? null : propertyValues(answer)];
+        }),
+      ) as UmamiBreakdowns,
     };
   } catch (error) {
     // Which of these the owners get is the whole point of the exercise. Every

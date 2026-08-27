@@ -19,7 +19,7 @@ import styles from "./agenda.module.scss";
  * three zoom levels, and lets the calendar itself write the exception that
  * shuts the day.
  *
- * It is a server component for a reason that is easy to trip over. Payload 3.10
+ * It is a server component for a reason that is easy to trip over. Payload 3.88
  * only wraps *its own* views in the admin chrome: getViewFromConfig leaves
  * `templateType` undefined for anything registered under
  * `admin.components.views`, so a custom view that does not render

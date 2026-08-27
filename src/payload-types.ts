@@ -6,10 +6,66 @@
  * and re-run `payload generate:types` to regenerate this file.
  */
 
+/**
+ * Supported timezones in IANA format.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "supportedTimezones".
+ */
+export type SupportedTimezones =
+  | 'Pacific/Midway'
+  | 'Pacific/Niue'
+  | 'Pacific/Honolulu'
+  | 'Pacific/Rarotonga'
+  | 'America/Anchorage'
+  | 'Pacific/Gambier'
+  | 'America/Los_Angeles'
+  | 'America/Tijuana'
+  | 'America/Denver'
+  | 'America/Phoenix'
+  | 'America/Chicago'
+  | 'America/Guatemala'
+  | 'America/New_York'
+  | 'America/Bogota'
+  | 'America/Caracas'
+  | 'America/Santiago'
+  | 'America/Buenos_Aires'
+  | 'America/Sao_Paulo'
+  | 'Atlantic/South_Georgia'
+  | 'Atlantic/Azores'
+  | 'Atlantic/Cape_Verde'
+  | 'Europe/London'
+  | 'Europe/Berlin'
+  | 'Africa/Lagos'
+  | 'Europe/Athens'
+  | 'Africa/Cairo'
+  | 'Europe/Moscow'
+  | 'Asia/Riyadh'
+  | 'Asia/Dubai'
+  | 'Asia/Baku'
+  | 'Asia/Karachi'
+  | 'Asia/Tashkent'
+  | 'Asia/Calcutta'
+  | 'Asia/Dhaka'
+  | 'Asia/Almaty'
+  | 'Asia/Jakarta'
+  | 'Asia/Bangkok'
+  | 'Asia/Shanghai'
+  | 'Asia/Singapore'
+  | 'Asia/Tokyo'
+  | 'Asia/Seoul'
+  | 'Australia/Brisbane'
+  | 'Australia/Sydney'
+  | 'Pacific/Guam'
+  | 'Pacific/Noumea'
+  | 'Pacific/Auckland'
+  | 'Pacific/Fiji';
+
 export interface Config {
   auth: {
     users: UserAuthOperations;
   };
+  blocks: {};
   collections: {
     users: User;
     media: Media;
@@ -24,6 +80,7 @@ export interface Config {
     reservations: Reservation;
     'contact-messages': ContactMessage;
     'opening-exceptions': OpeningException;
+    'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -43,6 +100,7 @@ export interface Config {
     reservations: ReservationsSelect<false> | ReservationsSelect<true>;
     'contact-messages': ContactMessagesSelect<false> | ContactMessagesSelect<true>;
     'opening-exceptions': OpeningExceptionsSelect<false> | OpeningExceptionsSelect<true>;
+    'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -50,6 +108,7 @@ export interface Config {
   db: {
     defaultIDType: number;
   };
+  fallbackLocale: ('false' | 'none' | 'null') | false | null | ('nl' | 'en') | ('nl' | 'en')[];
   globals: {
     'site-settings': SiteSetting;
   };
@@ -57,9 +116,10 @@ export interface Config {
     'site-settings': SiteSettingsSelect<false> | SiteSettingsSelect<true>;
   };
   locale: 'nl' | 'en';
-  user: User & {
-    collection: 'users';
+  widgets: {
+    collections: CollectionsWidget;
   };
+  user: User;
   jobs: {
     tasks: unknown;
     workflows: unknown;
@@ -106,7 +166,15 @@ export interface User {
   hash?: string | null;
   loginAttempts?: number | null;
   lockUntil?: string | null;
+  sessions?:
+    | {
+        id: string;
+        createdAt?: string | null;
+        expiresAt: string;
+      }[]
+    | null;
   password?: string | null;
+  collection: 'users';
 }
 /**
  * Upload afbeeldingen die je kunt gebruiken in blogposts, de galerij, menukaart en andere plekken op de website.
@@ -195,7 +263,7 @@ export interface BlogPost {
     root: {
       type: string;
       children: {
-        type: string;
+        type: any;
         version: number;
         [k: string]: unknown;
       }[];
@@ -260,7 +328,7 @@ export interface Event {
     root: {
       type: string;
       children: {
-        type: string;
+        type: any;
         version: number;
         [k: string]: unknown;
       }[];
@@ -566,7 +634,7 @@ export interface MailingList {
   createdAt: string;
 }
 /**
- * Aanvragen die via het reserveringsformulier binnenkomen. Een aanvraag is nog geen bevestiging: bel of mail de gast en zet daarna de status.
+ * Aanvragen die via het reserveringsformulier binnenkomen. Een aanvraag is nog geen bevestiging: bel of mail de gast en zet daarna de status. Staat de bevestigingsmail bij Site Instellingen op meteen versturen, dan bevestigen aanvragen zichzelf en komen ze al op Bevestigd binnen.
  *
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "reservations".
@@ -594,10 +662,6 @@ export interface Reservation {
    * Komt op de gedeelde gastenpagina te staan, dus iedereen die de link krijgt leest dit mee. Schrijf het aan het gezelschap zelf, bijvoorbeeld: "we houden de grote tafel bij het raam voor jullie vrij". Laat leeg als er niets te melden is.
    */
   guestNote?: string | null;
-  /**
-   * Het formulier vraagt hier niet meer naar; de gasten vonden het een vreemde vraag. Wat een gast nu doorgeeft staat bij Opmerkingen. Oude aanvragen houden hun antwoord.
-   */
-  occasion?: string | null;
   /**
    * Wat het gezelschap zelf heeft doorgegeven via de gedeelde link.
    */
@@ -630,6 +694,19 @@ export interface Reservation {
    */
   emailError?: string | null;
   emailSentAt?: string | null;
+  /**
+   * In welke taal deze gast het formulier invulde, en dus in welke taal de bevestigingsmail en de gastenpagina geschreven zijn. Klopt het niet, zet het dan hier goed vóór je op Bevestigd zet.
+   */
+  locale?: ('nl' | 'en') | null;
+  /**
+   * Het mailtje dat de gast krijgt als zijn tafel klaarstaat. Wanneer dat gebeurt, stellen jullie zelf in bij Site Instellingen, tabblad Reserveren, onder Bevestigingsmail aan de gast: pas als jullie de reservering op Bevestigd zetten en opslaan, meteen als de gast boekt, of helemaal niet. Wil je hem nog een keer sturen, zet dit dan op "In de wachtrij" en sla op.
+   */
+  confirmationEmailStatus?: ('pending' | 'sent' | 'failed' | 'skipped') | null;
+  /**
+   * Wat de mailserver terugmeldde. Handig om door te sturen als het blijft misgaan.
+   */
+  confirmationEmailError?: string | null;
+  confirmationEmailSentAt?: string | null;
   /**
    * Het geheime deel van de deelbare link naar de gastenpagina. Iedereen met die link kan de reservering zien en aanvullen, dus deel hem alleen met het gezelschap. Wordt er een nieuwe sleutel gemaakt, dan werkt de oude link niet meer.
    */
@@ -713,6 +790,23 @@ export interface OpeningException {
   showOnSite?: boolean | null;
   updatedAt: string;
   createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-kv".
+ */
+export interface PayloadKv {
+  id: number;
+  key: string;
+  data:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -832,6 +926,13 @@ export interface UsersSelect<T extends boolean = true> {
   hash?: T;
   loginAttempts?: T;
   lockUntil?: T;
+  sessions?:
+    | T
+    | {
+        id?: T;
+        createdAt?: T;
+        expiresAt?: T;
+      };
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -1067,7 +1168,6 @@ export interface ReservationsSelect<T extends boolean = true> {
   duration?: T;
   notes?: T;
   guestNote?: T;
-  occasion?: T;
   guestResponses?:
     | T
     | {
@@ -1082,6 +1182,10 @@ export interface ReservationsSelect<T extends boolean = true> {
   emailStatus?: T;
   emailError?: T;
   emailSentAt?: T;
+  locale?: T;
+  confirmationEmailStatus?: T;
+  confirmationEmailError?: T;
+  confirmationEmailSentAt?: T;
   guestToken?: T;
   source?: T;
   updatedAt?: T;
@@ -1117,6 +1221,14 @@ export interface OpeningExceptionsSelect<T extends boolean = true> {
   showOnSite?: T;
   updatedAt?: T;
   createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-kv_select".
+ */
+export interface PayloadKvSelect<T extends boolean = true> {
+  key?: T;
+  data?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -1222,7 +1334,7 @@ export interface SiteSetting {
    */
   googleMapsEmbedUrl?: string | null;
   /**
-   * Link naar jullie Google-vermelding, waar gasten de beoordelingen lezen en er zelf een achterlaten. Ga naar Google Maps → jullie zaak → Delen → Link kopiëren. Laat leeg als je dit blok niet op de contactpagina wilt.
+   * Link naar jullie Google-vermelding, waar gasten de beoordelingen lezen en er zelf een achterlaten. Ga naar Google Maps → jullie zaak → Delen → Link kopiëren. Deze link staat op twee plekken: op de contactpagina, en onder het bedankje op de reserveringspagina dat gasten te zien krijgen als hun avond geweest is. Laat leeg als je er niet om wilt vragen; dan verdwijnt hij op allebei die plekken.
    */
   googleReviewUrl?: string | null;
   socialMedia?: {
@@ -1274,7 +1386,7 @@ export interface SiteSetting {
     root: {
       type: string;
       children: {
-        type: string;
+        type: any;
         version: number;
         [k: string]: unknown;
       }[];
@@ -1302,6 +1414,10 @@ export interface SiteSetting {
    */
   reservationsEnabled?: boolean | null;
   /**
+   * Wanneer de gast een mailtje krijgt dat zijn tafel klaarstaat. Bevestigen jullie zelf, dan gaat de mail weg op het moment dat je de reservering op Bevestigd zet en opslaat — dat is hoe het nu werkt. Kies je Meteen versturen, dan bevestigt een aanvraag zichzelf: de gast krijgt de mail direct na het boeken en hoeft niet te wachten. Te vol kan het daarmee niet worden — het formulier telt de plaatsen al voordat een reservering wordt opgeslagen, dus een tijdstip dat vol zit is niet te kiezen, ook niet 's nachts. Het enige dat wegvalt is dat er nog iemand naar kijkt voordat de tafel vastligt. Helemaal niet versturen betekent dat de gast niets van de site hoort en jullie hem zelf bellen. Jullie eigen mailtje over een nieuwe aanvraag blijft in alle drie de gevallen gewoon komen.
+   */
+  reservationConfirmationMode?: ('approval' | 'auto' | 'off') | null;
+  /**
    * Hoe lang een tafel gemiddeld bezet is.
    */
   reservationDurationMinutes?: number | null;
@@ -1317,6 +1433,14 @@ export interface SiteSetting {
    * Hoe kort van tevoren iemand nog online mag boeken.
    */
   reservationLeadMinutes?: number | null;
+  /**
+   * Hoeveel minuten vóór sluitingstijd een gast nog een tafel kan boeken. Sluiten jullie om 21:00 en staat hier 90, dan is 19:30 het laatste tijdstip dat een gast kan kiezen. Let op: dit is het laatste moment waarop een tafel geboekt kan worden, niet het laatste moment dat er iemand zit. Rekenen jullie twee uur per tafel, dan zit een gezelschap dat om 19:30 begint er nog een half uur nadat de deur dicht is — dat mag, maar kies het bewust. Vul je hier 0 in, dan kan er tot precies sluitingstijd geboekt worden. Houd het getal wel ruim onder de tijd dat jullie op je kortste dag open zijn, want anders blijven er die dag helemaal geen tijden over om uit te kiezen.
+   */
+  reservationLastSittingMinutes?: number | null;
+  /**
+   * Om de hoeveel tijd een gast een tafel kan kiezen. Per kwartier komen gasten meer verspreid binnen, wat op een drukke zaterdag een stuk rustiger werkt in de keuken. Per half uur geeft een kortere lijst met tijden. Reserveringen die er al staan blijven gewoon staan: die vallen bij allebei de keuzes precies op een tijdstip.
+   */
+  reservationSlotMinutes?: ('15' | '30') | null;
   /**
    * Verder dan dit aantal dagen vooruit staat de agenda dicht. Zo krijg je geen reservering binnen voor een datum waarvan je nog niets weet.
    */
@@ -1370,7 +1494,7 @@ export interface SiteSetting {
    */
   shareImageAuto?: boolean | null;
   /**
-   * Zet het meetscript op de site. Staat dit uit, dan wordt er niets gemeten en blijven de grafieken leeg.
+   * Zet het meetscript op de site. Staat dit uit, dan wordt er niets gemeten en blijven de grafieken leeg. We meten wat mensen op de site doen, nooit wie ze zijn: geen namen, geen e-mailadressen, geen telefoonnummers, en niets van wat iemand in een veld typt. Kiest iemand in het reserveringsformulier een datum, dan slaan we wel op hoe ver vooruit die datum ligt — vandaag of morgen, 2 tot 6 dagen, en zo verder — en welke dag van de week het is. Dat gebeurt bij elke datum die iemand aanklikt: ook als de reservering gewoon doorgaat, en ook als iemand halverwege stopt. Lukt een reservering niet, dan komt daar nog bij of het om een kleine of een grote tafel ging (bijvoorbeeld "5-6") — anders kunnen jullie niet zien wáár het misgaat. Het precieze aantal personen en de precieze avond gaan er nooit in, want daarmee zou een reservering terug te vinden zijn.
    */
   umamiEnabled?: boolean | null;
   /**
@@ -1468,10 +1592,13 @@ export interface SiteSettingsSelect<T extends boolean = true> {
   aboutVideoUrl?: T;
   aboutMediaCaption?: T;
   reservationsEnabled?: T;
+  reservationConfirmationMode?: T;
   reservationDurationMinutes?: T;
   reservationCapacity?: T;
   reservationMaxPartySize?: T;
   reservationLeadMinutes?: T;
+  reservationLastSittingMinutes?: T;
+  reservationSlotMinutes?: T;
   reservationHorizonDays?: T;
   guestPassEnabled?: T;
   guestPassWelcome?: T;
@@ -1501,6 +1628,16 @@ export interface SiteSettingsSelect<T extends boolean = true> {
   updatedAt?: T;
   createdAt?: T;
   globalType?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "collections_widget".
+ */
+export interface CollectionsWidget {
+  data?: {
+    [k: string]: unknown;
+  };
+  width: 'full';
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

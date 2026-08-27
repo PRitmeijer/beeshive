@@ -18,6 +18,7 @@ import {
   type EventOccurrence,
 } from "@/lib/events";
 import { googleCalendarUrl, outlookCalendarUrl } from "@/lib/ics";
+import { jsonLdHtml } from "@/lib/jsonLd";
 import { EventClient } from "./EventClient";
 
 /**
@@ -221,7 +222,7 @@ export default async function EventPage({ params }: PageProps) {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }}
       />
       <EventClient
         locale={locale}

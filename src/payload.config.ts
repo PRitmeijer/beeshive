@@ -183,12 +183,37 @@ function trimTo(value: string, max: number) {
  * schema, so at this exact moment there is nothing to migrate. Anyone changing
  * this again after the first migration ships does owe that copy step.
  */
+/*
+ * Payload 3.88 split the old single `UploadField` into a polymorphic member
+ * (`relationTo` is a list of collections) and a single member (`relationTo` is
+ * one collection), and the two disagree about the type of `admin.sortOptions`.
+ * Payload exports the equivalent pair for relationship fields by name but not
+ * this one, so the two halves are recovered from the `Field` union here.
+ */
+type UploadFieldMember = Extract<Field, { type: "upload" }>;
+type PolymorphicUploadFieldMember = Extract<
+  UploadFieldMember,
+  { relationTo: readonly unknown[] }
+>;
+
+const isPolymorphicUpload = (
+  field: UploadFieldMember,
+): field is PolymorphicUploadFieldMember => Array.isArray(field.relationTo);
+
 function dutchify(field: Field): Field {
   // Narrowed on `type` rather than on `name` alone. `Field` is a discriminated
   // union, and spreading a value still typed as the whole union loses the
   // discriminant — TypeScript then has to prove the rebuilt `admin` object is
   // valid for an array field and a blocks field too, which it is not. Matching
   // the type first collapses the union to one member and the spread is exact.
+  //
+  // For `upload` that is no longer the whole story. Payload 3.88 split the old
+  // single `UploadField` in two, so `type === "upload"` narrows to two members
+  // rather than one, and they disagree about `admin.sortOptions`: keyed by
+  // collection when `relationTo` is a list, a bare string when it is one slug.
+  // Spreading `field.admin` across that union widens `sortOptions` to the union
+  // of both, which fits neither member, so the upload branch below narrows a
+  // second time through `isPolymorphicUpload`.
   if (field.type === "text" && field.name === "title") {
     return {
       ...field,
@@ -214,17 +239,37 @@ function dutchify(field: Field): Field {
   }
 
   if (field.type === "upload" && field.name === "image") {
-    return {
-      ...field,
-      label: "Afbeelding bij delen",
-      // The whole point of this override; see the note above.
-      localized: false,
-      admin: {
-        ...field.admin,
-        description:
-          "De foto die verschijnt als iemand deze pagina deelt op WhatsApp, Facebook of LinkedIn. Eén foto voor beide talen. Je hoeft hem niet apart in het Engels te kiezen. Liefst liggend; hij wordt automatisch bijgesneden naar 1200 bij 630 pixels.",
-      },
-    };
+    const label = "Afbeelding bij delen";
+    const description =
+      "De foto die verschijnt als iemand deze pagina deelt op WhatsApp, Facebook of LinkedIn. Eén foto voor beide talen. Je hoeft hem niet apart in het Engels te kiezen. Liefst liggend; hij wordt automatisch bijgesneden naar 1200 bij 630 pixels.";
+
+    // The two arms are identical apart from which member of the upload union
+    // `field` is known to be inside them, and that knowledge is what makes
+    // `...field.admin` a spread of one concrete shape instead of two. The
+    // narrowing has to go through `isPolymorphicUpload` rather than a bare
+    // `Array.isArray(field.relationTo)`: narrowing a whole object by a check
+    // on one of its properties only works when that property is a literal
+    // discriminant, and `CollectionSlug[]` is not one, so the inline form
+    // narrows `relationTo` alone and leaves `field.admin` the union it was.
+    //
+    // plugin-seo declares this field with a single `relationTo`, so only the
+    // second arm runs today. It is written out anyway instead of asserting the
+    // result, because an assertion would go on compiling if that ever changed.
+    return isPolymorphicUpload(field)
+      ? {
+          ...field,
+          label,
+          // The whole point of this override; see the note above.
+          localized: false,
+          admin: { ...field.admin, description },
+        }
+      : {
+          ...field,
+          label,
+          // The whole point of this override; see the note above.
+          localized: false,
+          admin: { ...field.admin, description },
+        };
   }
 
   return field;
@@ -336,7 +381,7 @@ function devPushAllowed(): boolean {
  * to start the container at all; this is what catches the run that skipped it
  * — PREFLIGHT=off, a bare `node server.js`, `npm start` on a laptop.
  *
- * There is no supported flag for this. `migrate` in payload 3.10.0 takes
+ * There is no supported flag for this. `migrate` in payload 3.88.0 takes
  * `{ migrations }` and nothing else (payload/dist/database/types.d.ts) and
  * reads no environment variable; `forceAcceptWarning` exists, but only on
  * `migrateFresh` and `createMigration`, neither of which is on this path. So
@@ -350,13 +395,20 @@ function devPushAllowed(): boolean {
 /**
  * Let `next build` finish when there is no database to prerender against.
  *
- * The adapter's own `connect` ends its failure path with `process.exit(1)`
- * (node_modules/@payloadcms/db-postgres/dist/connect.js). That is right for a
- * server — a site that cannot reach its database should not pretend to be up —
- * but during a build it kills the static worker outright, and it does so before
- * any page code runs. Every frontend page wraps its CMS read in a try/catch so
- * that an unreachable CMS costs placeholder copy rather than a failed build;
- * none of that can help, because the process is gone before the catch exists.
+ * The adapter's own `connect` ends its failure path by giving up on the whole
+ * process (node_modules/@payloadcms/db-postgres/dist/connect.js). That is right
+ * for a server — a site that cannot reach its database should not pretend to be
+ * up — but during a build it takes the static worker down with it, and it does
+ * so before any page code runs. Every frontend page wraps its CMS read in a
+ * try/catch so that an unreachable CMS costs placeholder copy rather than a
+ * failed build; none of that can help, because the failure happens while the
+ * adapter is still connecting, upstream of every catch.
+ *
+ * Payload 3.88 changed how that giving-up is spelled — `connect` now throws
+ * `Error: cannot connect to Postgres: …` where it used to call
+ * `process.exit(1)` — which changes what an operator sees in the log but not
+ * the reason this wrapper exists. A throw out of `connect` fails the build just
+ * as fatally, and just as far above the page-level try/catch.
  *
  * Which made `docker compose build` fail on a clean machine, since the builder
  * is not on the network the `postgres` service lives on and there is nothing on
@@ -408,12 +460,21 @@ function surviveABuildWithoutADatabase(
             `  pointing at a database this builder can reach.\n`,
         );
 
-        // Assemble the one field the adapter builds for itself in connect, and
-        // release whatever is waiting on initialisation. No pool and no drizzle
+        // Release whatever is waiting on initialisation. No pool and no drizzle
         // client: there is nothing to point them at, and leaving them unset is
         // what makes the first query throw somewhere a page can catch it rather
         // than hang. Extensions, push and migrations are all skipped simply by
         // never calling the real connect.
+        //
+        // The `schema` assignment is belt and braces as of Payload 3.88 rather
+        // than the substitute it once was. The adapter used to assemble that
+        // field at the top of `connect`, which this replaces and so had to redo;
+        // it now assembles it in `init` (@payloadcms/drizzle/dist/postgres/init.js),
+        // and Payload awaits `db.init()` before `db.connect()`, so by this point
+        // the field is already correct and this writes the same object again.
+        // Left in place deliberately: it is cheap, it keeps this branch honest
+        // if that assembly ever moves back, and removing it would make the
+        // no-database build depend on ordering it does not control.
         const self = adapter as unknown as Record<string, unknown>;
         self.schema = {
           pgSchema: self.pgSchema,
@@ -510,9 +571,13 @@ function refuseToPromptWithoutATerminal(
                   `  Draai node ops/preflight.mjs voor de volledige uitleg en de twee\n` +
                   `  uitwegen, of zie DEPLOY.md.\n`,
               );
-              // The same exit the adapter itself takes when it cannot connect.
-              // Under compose this is a restart, with the reason in the log,
-              // rather than a container that is up and useless.
+              // Exiting rather than throwing, deliberately. As of Payload 3.88
+              // the adapter throws on an unreachable database where it used to
+              // exit, so this is no longer an echo of what it does; a throw
+              // from here would surface as a migration error and could be
+              // caught and logged on the way past. Under compose the exit is a
+              // restart, with the reason in the log, rather than a container
+              // that is up and useless.
               process.exit(1);
             }
           }
@@ -539,7 +604,7 @@ export default buildConfig({
      * and were three lists; the question the owners actually ask — "wat
      * gebeurt er donderdag" — needs all three at once, so there is one page
      * that puts them on a calendar. src/components/admin/AgendaView.tsx has
-     * the details, including the two things about Payload 3.10 that make it
+     * the details, including the two things about Payload 3.88 that make it
      * look more elaborate than it is: a custom view has to render the admin
      * chrome itself, and Payload does not treat one as a page that requires a
      * login, so the view guards itself.
@@ -555,11 +620,13 @@ export default buildConfig({
     components: {
       beforeNavLinks: ["@/components/admin/AgendaView#AgendaNavLink"],
       /**
-       * Below the collections rather than above them: the backup page is
-       * something you open when you are worried, not every morning, and the
-       * translation counter is a nudge rather than a destination.
+       * Below the collections rather than above them: the statistics and the
+       * backup page are things you open when you are wondering or worried, not
+       * every morning, and the translation counter is a nudge rather than a
+       * destination.
        */
       afterNavLinks: [
+        "@/components/admin/StatsView#StatsNavLink",
         "@/components/admin/BackupsView#BackupsNavLink",
         "@/components/admin/LocaleAssist#LocaleAssist",
       ],
@@ -575,7 +642,7 @@ export default buildConfig({
           },
         },
         /**
-         * The backups at /admin/backups. Same two Payload 3.10 facts as the
+         * The backups at /admin/backups. Same two Payload 3.88 facts as the
          * agenda: the view renders the admin chrome itself and guards its own
          * login, because a registered custom view is a public route as far as
          * Payload is concerned. See src/components/admin/BackupsView.tsx and
@@ -587,6 +654,24 @@ export default buildConfig({
           exact: true,
           meta: {
             title: "Backups",
+          },
+        },
+        /**
+         * The figures at /admin/statistieken. Same two Payload 3.88 facts
+         * again, and one piece of history worth recording here rather than
+         * only in the component: src/lib/umamiServer.ts, the Statistieken tab
+         * in Instellingen and docs/analytics.md all described this page for a
+         * long time before anything registered it, so the owners were being
+         * told about a panel that did not exist and the module's eight Dutch
+         * failure sentences had never been shown to anyone. See
+         * src/components/admin/StatsView.tsx.
+         */
+        statistieken: {
+          Component: "@/components/admin/StatsView#StatsView",
+          path: "/statistieken",
+          exact: true,
+          meta: {
+            title: "Statistieken",
           },
         },
       },

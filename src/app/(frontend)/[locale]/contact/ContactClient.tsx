@@ -105,14 +105,22 @@ export function ContactClient({
         body: JSON.stringify({ ...form, locale, website }),
       });
       if (res.ok) {
-        track(EVENTS.contactSubmitted);
+        track(EVENTS.contactSubmitted, { outcome: "sent" });
         setStatus("sent");
         setForm({ name: "", email: "", message: "" });
         return;
       }
+      // The two endings that used to be silent. A success count with no
+      // failure count beside it has no denominator, so the rate at which this
+      // form works cannot be known — and a contact endpoint that had broken
+      // would show up as a quiet decline, which reads exactly like a quiet
+      // month. Never what was typed, and not even which field: only that the
+      // message did not get through, and on which of the two ways.
+      track(EVENTS.contactSubmitted, { outcome: "refused" });
       setError(messageFrom(await res.json().catch(() => null)));
       setStatus("error");
     } catch {
+      track(EVENTS.contactSubmitted, { outcome: "network" });
       setError(t.contact.genericError);
       setStatus("error");
     }
@@ -391,7 +399,12 @@ export function ContactClient({
                   {s.phone && (
                     <a
                       href={`tel:${s.phone.replace(/\s/g, "")}`}
-                      onClick={() => track(EVENTS.phoneClicked)}
+                      onClick={() =>
+                        track(EVENTS.outboundClicked, {
+                          kind: "phone",
+                          surface: "contact",
+                        })
+                      }
                       className="ink-link figures-old"
                     >
                       {s.phone}
@@ -464,7 +477,10 @@ export function ContactClient({
                        carries where it was fired from rather than pretending
                        to know which of the two the reader wanted. */
                     onClick={() =>
-                      track(EVENTS.directionsClicked, { source: "google-listing" })
+                      track(EVENTS.outboundClicked, {
+                        kind: "google_listing",
+                        surface: "contact",
+                      })
                     }
                     target="_blank"
                     rel="noopener noreferrer"

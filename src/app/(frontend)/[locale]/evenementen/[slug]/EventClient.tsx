@@ -223,15 +223,22 @@ export function EventClient({
 }: Props) {
   const t = getDict(locale);
 
-  // Which evening was read, and which calendar it was taken away in. The
-  // title and nothing else — that is a fact about the programme, not about
-  // whoever is reading it. `track()` swallows everything it touches, so
-  // neither of these can interfere with the link the reader just followed.
+  // Which evening was read, and which calendar it was taken away in. The slug
+  // rather than the title — a fact about the programme either way, but the slug
+  // survives a retitle in the CMS instead of splitting one evening's figures
+  // across two rows. The calendar link carries no slug of its own: which of the
+  // four ways out was taken is the interesting half there, and the page the tap
+  // happened on is already counted a line above. `track()` swallows everything
+  // it touches, so neither of these can interfere with the link just followed.
   useEffect(() => {
-    track(EVENTS.eventViewed, { title: event.title });
-  }, [event.title]);
+    track(EVENTS.contentViewed, { kind: "event", ref: event.slug });
+  }, [event.slug]);
   const takeAway = (target: string) => () =>
-    track(EVENTS.addToCalendar, { title: event.title, target });
+    track(EVENTS.outboundClicked, {
+      kind: "calendar",
+      target,
+      surface: "event",
+    });
 
   // Fixed timezone so the server and the browser print the same date; without
   // it the two can land on different days around midnight.

@@ -2,20 +2,29 @@
 
 import { Fragment } from "react";
 import Link from "next/link";
-import { ReservationForm } from "@/components/ReservationForm";
+import { BookingFlow } from "@/components/booking/BookingFlow";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { TornEdge } from "@/components/TornEdge";
 import { getDict } from "@/i18n/dictionaries";
 import { localeHref, locales, type Locale } from "@/i18n/config";
 import type { SiteSettingsData } from "@/lib/payload";
-import type { ScheduledDay } from "@/lib/openingHours";
+import { EVENTS, track } from "@/lib/umami";
+import type { BookingRules, ScheduledDay } from "@/lib/openingHours";
 
 interface Props {
   locale: Locale;
   settings: SiteSettingsData;
-  today: string;
+  /**
+   * Online reserveren is switched off in Site Instellingen. The form is not
+   * rendered at all then — the owners' own description of that switch promises
+   * the guest is left with the telephone number, and a form that takes eight
+   * fields and then says "bel ons" is not that. The three props below are
+   * absent in that case, because nothing resolved them.
+   */
+  closed?: boolean;
+  today?: string;
   /** Minutes past midnight in Amsterdam at render time. */
-  nowMinutes: number;
+  nowMinutes?: number;
   /**
    * The days the page resolved on the server, with the repeating rules and the
    * afwijkende dagen already folded in. Forwarded straight to the form, which
@@ -25,6 +34,8 @@ interface Props {
    * src/lib/schedule.ts, which imports Payload.
    */
   schedule?: ScheduledDay[];
+  /** The lead time, horizon and largest party, as the page read them. */
+  rules?: BookingRules;
 }
 
 // Must stay in step with `bg-paper-deep` in tailwind.config.ts, since a torn
@@ -58,9 +69,11 @@ function localiseHours(hours: string, locale: Locale): string {
 export function ReserverenClient({
   locale,
   settings: s,
+  closed = false,
   today,
   nowMinutes,
   schedule = [],
+  rules,
 }: Props) {
   const t = getDict(locale);
   const openingHours = (s.openingHours || []) as {
@@ -91,13 +104,40 @@ export function ReserverenClient({
       <section className="section-padding relative overflow-hidden bg-paper-deep">
         <div className="mx-auto grid max-w-6xl gap-y-14 md:grid-cols-12 md:gap-x-12 lg:gap-x-16">
           <ScrollReveal className="md:col-span-7">
-            <ReservationForm
-              locale={locale}
-              minDate={today}
-              nowMinutes={nowMinutes}
-              openingHours={openingHours}
-              schedule={schedule}
-            />
+            {closed ? (
+              /* Where the form was. The rail beside it still carries the
+                 number and the address, so this says what has changed and
+                 leaves the reader to look one column right rather than
+                 printing the same two links twice. */
+              <div>
+                <h2 className="font-display text-2xl text-hive-800">
+                  {t.reservationForm.closedHeading}
+                </h2>
+                <p className="mt-4 max-w-prose leading-relaxed text-hive-500">
+                  {t.reservationForm.errors.reservationsClosed}
+                </p>
+              </div>
+            ) : (
+              <BookingFlow
+                locale={locale}
+                minDate={today}
+                nowMinutes={nowMinutes}
+                openingHours={openingHours}
+                schedule={schedule}
+                rules={rules}
+                /* For the two dead ends, where ringing beats filling anything
+                   in, and for the branch that appears if the owners switch
+                   online booking off while this cached page is open. */
+                phone={s.phone ?? undefined}
+                email={s.contactEmail}
+                /* The page, as opposed to the sheet on phones. `entry` is left
+                   at its default: whoever pressed a Reserveren button
+                   elsewhere on the site was carried here by a navigation, and
+                   this page cannot tell them apart from somebody who arrived
+                   on the URL, so it does not pretend to. */
+                surface="page"
+              />
+            )}
           </ScrollReveal>
 
           <ScrollReveal delay={0.12} className="md:col-span-4 md:col-start-9">
@@ -109,6 +149,12 @@ export function ReserverenClient({
                   {s.phone && (
                     <a
                       href={`tel:${s.phone.replace(/\s/g, "")}`}
+                      onClick={() =>
+                        track(EVENTS.outboundClicked, {
+                          kind: "phone",
+                          surface: "reserveren",
+                        })
+                      }
                       className="ink-link block"
                     >
                       {s.phone}

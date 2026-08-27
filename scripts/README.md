@@ -9,9 +9,50 @@ database directly, so they follow the collections instead of the tables.
 | `import-content.ts` | `npm run db:import` | Read that dump back into whatever database Payload is pointed at. |
 | `verify-import.ts` | `npm run db:verify` | Re-export and compare, field by field and locale by locale, against the dump. |
 | `seed.ts` / `seed-en.ts` | `npm run seed`, `npm run seed:en` | Fill an empty install with example content. |
+| `blog-articles.ts` | — | The words of those five articles. Data only; both scripts below read it. |
+| `publish-blog-posts.ts` | `npm run blog:publish` | Write them into whatever database Payload is pointed at. Replaces the three placeholder posts `seed.ts` writes. |
+| `export-blog-html.ts` | `npm run blog:html` | Write them out as HTML instead, for pasting into a CMS this machine cannot reach. |
 | `import-subscribers.ts` | `npm run import:subscribers` | The old site's newsletter table, from CSV. See the main README. |
 | `clear-en-echo.ts` | — | Clear English fields that only hold a copy of the Dutch text, so the English defaults take over again. |
 | `backfill-nl-locale.ts` | — | One-time repair from the move to two languages. Kept for reference. |
+
+## The blog's opening articles
+
+`npm run blog:publish` is idempotent and matched on slug, so it is safe to
+re-run after fixing a typo. It deletes the three posts `seed.ts` writes, but
+only while their body is still identical to their own summary — the signature
+of an untouched placeholder. Once somebody has written in one, it stays.
+
+Each article carries a photograph from the old site's backup, which is not in
+the repository. The script looks for them under `~/download/DBH/img/gallery`;
+point `BLOG_PHOTO_DIR` somewhere else if that is not where they are. A missing
+file is not an error: the post is created without one and both the listing and
+the article fall back to their drawn placeholder.
+
+```bash
+BLOG_PHOTO_DIR=/path/to/old-site/img/gallery npm run blog:publish
+```
+
+### Getting them into a database you cannot reach
+
+`npm run blog:html` writes `blog-export/` instead of touching a database:
+`index.html` to read and copy from, one bare HTML fragment per article per
+language, and `fotos/` with the five photographs and their alt text. Open
+`index.html`, press Kopieer, paste into the rich text box in the admin panel.
+
+What the button puts on the clipboard is rich text rather than source, which
+is the part that matters: Lexical reads `text/html` off the clipboard and
+rebuilds the headings, the quote, the bullets and the links as real nodes.
+Copying the raw markup out of the `<pre>` instead would paste angle brackets
+as words.
+
+Both scripts read `blog-articles.ts`, so the pasted version and the written
+version are the same document. A fix made to one is a fix made to both, and
+that is the whole reason the copy lives in a module rather than inside either
+script.
+
+`/blog-export/` is gitignored — it is generated, and it holds copies of
+photographs that are already accounted for elsewhere.
 
 ## English pages that are still in Dutch
 

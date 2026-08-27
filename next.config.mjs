@@ -59,6 +59,17 @@ const nextConfig = {
    * the bare path and English under /en, and `:token*` rather than `:token`
    * so a mangled link with a trailing segment is covered too.
    *
+   * The `Referrer-Policy` beside it is belt and braces, and worth being honest
+   * about: every browser in current use already defaults to
+   * `strict-origin-when-cross-origin`, which truncates an outgoing referrer to
+   * `https://debeeshive.nl` and leaves the token behind. So this header fixes
+   * nothing known to be broken. What it does is stop the one URL on this site
+   * that is a secret rather than an address from depending on a default that
+   * is not universal and that the site does not control — an in-app browser in
+   * a chat client, an older build, a policy somebody relaxes upstream. The
+   * links out of the page carry `rel="noreferrer"` of their own; this covers
+   * the request nobody remembered to put it on. One line, one route.
+   *
    * The fonts and the paper tiles are the other entry here. They are
    * content-addressed by hand rather than by a build hash — /fonts/jost-latin
    * .woff2 is that file for as long as the site uses Jost — so they can be
@@ -71,6 +82,7 @@ const nextConfig = {
         source: "/:locale(en)?/reservering/:token*",
         headers: [
           { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+          { key: "Referrer-Policy", value: "no-referrer" },
         ],
       },
       {

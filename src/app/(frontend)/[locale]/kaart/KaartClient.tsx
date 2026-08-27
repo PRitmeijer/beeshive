@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { m, AnimatePresence, useReducedMotion } from "@/components/motion";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useReducedMotion } from "@/components/motion";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { TornEdge } from "@/components/TornEdge";
 import { Sheet } from "@/components/Sheet";
@@ -11,23 +11,29 @@ import { getDict, type Dict } from "@/i18n/dictionaries";
 import type { Locale } from "@/i18n/config";
 import { EVENTS, track } from "@/lib/umami";
 
-interface MenuItem {
-  id: string;
+/** Postgres hands out numbers; the sample card below is written with strings. */
+type CardId = string | number;
+
+export interface MenuItem {
+  id: CardId;
   name: string;
-  description?: string;
+  description?: string | null;
   price: number;
-  category: any;
-  dietary?: string[];
-  featured?: boolean;
+  /**
+   * The record when something populated it, the bare row id when nothing did.
+   * The page asks the CMS for depth 0, so from the CMS it is always the id;
+   * the sample card writes it out longhand. `catIdOf` reads either.
+   */
+  category?: CardId | { id: CardId } | null;
+  dietary?: string[] | null;
+  featured?: boolean | null;
 }
 
-interface Category {
-  id: string;
+export interface Category {
+  id: CardId;
   name: string;
-  description?: string;
+  description?: string | null;
 }
-
-const EASE: [number, number, number, number] = [0.16, 0.84, 0.28, 1];
 
 // The mark is drawn here, the wording comes from the dictionary: an icon reads
 // the same in both languages, a label does not, and neither may be an emoji.
@@ -42,6 +48,12 @@ const dietaryIcons: Record<string, CraftIconName> = {
 function dietaryLabel(t: Dict, key: string): string {
   return (t.dietary as Record<string, string>)[key] || key;
 }
+
+/** Stands in for the sample card on a site whose CMS has a card of its own. */
+const NO_SAMPLE: { categories: Category[]; items: MenuItem[] } = {
+  categories: [],
+  items: [],
+};
 
 /**
  * The sample card, shown until the CMS holds one of its own. Names and notes
@@ -73,15 +85,28 @@ function sampleCard(t: Dict): { categories: Category[]; items: MenuItem[] } {
   };
 }
 
-const catIdOf = (item: MenuItem) =>
+const catIdOf = (item: MenuItem): CardId | undefined =>
   typeof item.category === "object" ? item.category?.id : item.category;
 
 /**
  * One printed menu line. Name and note occupy the measure, the price sits in
  * its own right-hand column, and nothing leads the eye across with dots:
  * the printed card doesn't use them.
+ *
+ * Memoised because the card no longer gets thrown away when the rank changes,
+ * and this is what makes that worth anything: sixty dishes stay exactly as
+ * they were rendered while React works out which sections are now hidden.
+ * `item` comes straight off the props the page was given and `t` is a module
+ * object, so both are the same value on every render and the comparison
+ * genuinely holds.
  */
-function MenuLine({ item, t }: { item: MenuItem; t: Dict }) {
+const MenuLine = memo(function MenuLine({
+  item,
+  t,
+}: {
+  item: MenuItem;
+  t: Dict;
+}) {
   return (
     <li className="menu-row">
       <div>
@@ -117,7 +142,7 @@ function MenuLine({ item, t }: { item: MenuItem; t: Dict }) {
       </span>
     </li>
   );
-}
+});
 
 export function KaartClient({
   locale,
@@ -130,37 +155,188 @@ export function KaartClient({
   items: MenuItem[];
 }) {
   const t = getDict(locale);
-  // "Somebody read the card." Fired once on mount rather than on a scroll
-  // depth: the whole menu is one page, and arriving on it is the interesting
-  // fact. `track()` swallows everything, so the effect cannot fail.
+  /**
+   * "Somebody read the card", and then which rank of it they asked for.
+   *
+   * The arrival on its own barely earns an event — Umami counts the pageview
+   * of /kaart already, and this used to be strictly worse than that count,
+   * because it was fired from a mount effect and lost the race with the
+   * deferred script often enough to read lower than the pageview it was
+   * shadowing. That race is fixed in src/lib/umami.ts now, and what makes the
+   * event worth keeping is the second half: which rank was chosen is a real
+   * fact about this page that its URL does not carry at all, since filtering
+   * the card is a state change and never a navigation.
+   *
+   * The rank's name rather than its row id, because the id is a number out of
+   * Postgres that means nothing in a chart, and the name is our own published
+   * menu. `all` is the whole card, which is both where every reader starts and
+   * a real thing to tap back to.
+   */
   useEffect(() => {
-    track(EVENTS.menuViewed);
+    track(EVENTS.contentViewed, { kind: "menu", ref: "all" });
   }, []);
   const reduce = useReducedMotion();
-  const sample = sampleCard(t);
+
+  // Built only on a site that still needs it, and then only once. Ten fresh
+  // objects on every render would be a small waste on their own; what they
+  // would really cost is the memo on <MenuLine>, which cannot bail out of
+  // re-rendering a dish whose object is new every time.
+  const needSample = cmsCategories.length === 0 || cmsItems.length === 0;
+  const sample = useMemo(
+    () => (needSample ? sampleCard(t) : NO_SAMPLE),
+    [needSample, t],
+  );
   const categories = cmsCategories.length > 0 ? cmsCategories : sample.categories;
   const items = cmsItems.length > 0 ? cmsItems : sample.items;
 
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState<CardId | null>(null);
 
-  const filtered = activeCategory
-    ? items.filter((item) => {
-        const catId = typeof item.category === "object" ? item.category?.id : item.category;
-        return catId === activeCategory;
-      })
-    : items;
+  /**
+   * Changing rank, in two phases.
+   *
+   * The card used to be handed to AnimatePresence under a key made of the
+   * selected category, so choosing one threw the whole sheet away and built a
+   * new one: every dish, every price, every dietary mark, thirteen hundred
+   * elements on a full card, with the deckle filter re-rendering the lot at a
+   * new height afterwards. That is the stall people felt on the tap.
+   *
+   * Nothing is unmounted now. The sections that do not match simply carry
+   * `hidden`, and the fade lives in `.menu-swap` in globals.css. All that is
+   * left here is the part CSS cannot know: that the new rank must not appear
+   * until the old one has finished leaving, which is what `mode="wait"` used
+   * to arrange. `out` is a transition so it can be waited on; `wanted` holds
+   * the rank the reader asked for while it runs, so a second tap mid-fade
+   * replaces the answer rather than starting anything over.
+   */
+  const [swap, setSwap] = useState<"out" | "in" | null>(null);
+  const wanted = useRef<CardId | null>(null);
 
-  // Unfiltered, the flat list is set back into its printed sections; with a
-  // category selected only that section survives the filter above.
+  /**
+   * The same rank as `wanted.current`, kept a second time in state.
+   *
+   * The ref is the copy that commits, and it has to be a ref: `applyWanted`
+   * is reached from a timeout and from a transitionend, so it must keep the
+   * same identity across renders or the backstop below would be torn down and
+   * started again every time somebody taps. But a ref cannot ask for
+   * a render, and the filter row has to light up on the tap — including on a
+   * second tap inside the fade, which changes nothing else about the state
+   * and would otherwise leave the reader looking at the rank they had just
+   * tapped away from. So the rank is written twice, and the two writes belong
+   * together on the same two lines.
+   */
+  const [wantedCategory, setWantedCategory] = useState<CardId | null>(null);
+
+  const applyWanted = useCallback(() => {
+    setActiveCategory(wanted.current);
+    setSwap("in");
+  }, []);
+
+  /**
+   * The rank the reader asked for, which for a quarter of a second is not yet
+   * the rank the card is printing. The filter buttons take all of their state
+   * from this; the sections take theirs from `activeCategory`.
+   *
+   * Both used to read `activeCategory`, and since that is only committed once
+   * the out phase has run, the tap on the one control this page has did
+   * nothing at all for that whole time — no colour,
+   * no underline, and `aria-pressed` still naming the old rank, which is a
+   * stale answer read out to somebody who has no fade to explain it. The
+   * underline keeps its own 500ms transition, so it still draws itself on
+   * rather than snapping.
+   */
+  const pending = swap === "out" ? wantedCategory : activeCategory;
+
+  function chooseCategory(id: CardId | null) {
+    // Reported from the tap and never from the commit. The rank the card is
+    // printing lands a quarter of a second later, after the fade, and it can
+    // still be overtaken by a second tap on the way — so measuring there would
+    // count what the reader ended up with rather than what they asked for, and
+    // would miss every change of mind entirely.
+    track(EVENTS.contentViewed, {
+      kind: "menu",
+      ref: id === null
+        ? "all"
+        : (categories.find((cat) => cat.id === id)?.name ?? String(id)),
+    });
+    // Measured against the rank in flight rather than the one on the card.
+    // During the out phase `activeCategory` is still the rank on its way off,
+    // so a reader who tapped Desserts and changed their mind back to the
+    // whole card mid-fade was comparing null against null, being sent home
+    // before `wanted` could be updated, and getting Desserts anyway when the
+    // fade landed. Tapping back to what is still on screen is therefore a
+    // real request now: it re-commits that rank and plays the enter phase.
+    const inFlight = swap === "out" ? wanted.current : activeCategory;
+    wanted.current = id;
+    setWantedCategory(id);
+    if (id === inFlight) return;
+    // Reduced motion has nothing to wait for, and waiting on a transition
+    // that has been told not to run is waiting forever.
+    if (reduce) {
+      setActiveCategory(id);
+      setSwap(null);
+      return;
+    }
+    setSwap("out");
+  }
+
+  useEffect(() => {
+    if (swap !== "out") return;
+    // The swap turns on one transitionend, and a transition that is
+    // interrupted sends a cancel instead. The card must never be left sitting
+    // at opacity 0 with the old dishes still on it, so this is the floor,
+    // cleared the moment the real event arrives.
+    //
+    // The number is the fade plus a hundred milliseconds, and it has to be
+    // worked out rather than picked: shorter than the fade and this commits
+    // the new rank halfway through the old one leaving, which is the swap
+    // happening in full view and worse than the stall it replaced. The fade is
+    // 0.25s in `.menu-swap`, so 350. The cushion stays a hundred rather than
+    // becoming a proportion of the duration, because what it covers — the
+    // frame or two between the attribute landing and the browser starting the
+    // transition — is the same length whatever the transition is.
+    const timer = window.setTimeout(applyWanted, 350);
+    return () => window.clearTimeout(timer);
+  }, [swap, applyWanted]);
+
+  function finishExit(event: React.TransitionEvent<HTMLDivElement>) {
+    if (swap !== "out") return;
+    // Two guards for two different mistakes. The fade animates opacity and
+    // transform, so it reports finished twice and the card would be swapped
+    // over twice; and transitionend bubbles, so anything inside the sheet
+    // that ever gets a transition of its own would otherwise be able to end
+    // this phase on the card's behalf.
+    if (event.target !== event.currentTarget) return;
+    if (event.propertyName !== "opacity") return;
+    applyWanted();
+  }
+
+  function finishEnter(event: React.AnimationEvent<HTMLDivElement>) {
+    if (swap !== "in" || event.target !== event.currentTarget) return;
+    setSwap(null);
+  }
+
+  // Every rank the card prints, always. A section that is not the selected
+  // one is `hidden`, which takes it out of the flow entirely — and Tailwind's
+  // `space-y-*` skips hidden siblings when it hands out the margins, so the
+  // sheet is laid out exactly as it was when the other ranks were not there
+  // at all.
   const groups = categories
     .map((cat) => ({
       cat,
-      lines: filtered.filter((item) => catIdOf(item) === cat.id),
+      lines: items.filter((item) => catIdOf(item) === cat.id),
     }))
     .filter((g) => g.lines.length > 0);
 
-  const knownIds = new Set(categories.map((c) => c.id));
-  const ungrouped = filtered.filter((item) => !knownIds.has(catIdOf(item)));
+  const knownIds = new Set<CardId | undefined>(categories.map((c) => c.id));
+  const ungrouped = items.filter((item) => !knownIds.has(catIdOf(item)));
+
+  // What the reader can currently see, which is the whole card until a rank
+  // is chosen and that rank's dishes afterwards. Only the count is wanted, and
+  // the grouping above has already done the work of counting it.
+  const shown =
+    activeCategory === null
+      ? items.length
+      : (groups.find((g) => g.cat.id === activeCategory)?.lines.length ?? 0);
 
   return (
     <>
@@ -198,13 +374,13 @@ export function KaartClient({
               <div className="flex flex-wrap items-start gap-x-8 gap-y-5 md:col-span-8">
                 <button
                   type="button"
-                  onClick={() => setActiveCategory(null)}
-                  aria-pressed={activeCategory === null}
+                  onClick={() => chooseCategory(null)}
+                  aria-pressed={pending === null}
                   className="group text-left"
                 >
                   <span
                     className={`label block transition-colors duration-500 ease-settle ${
-                      activeCategory === null
+                      pending === null
                         ? "text-honey-600"
                         : "text-hive-400 group-hover:text-honey-600"
                     }`}
@@ -214,7 +390,7 @@ export function KaartClient({
                   <span
                     aria-hidden="true"
                     className={`rule-ink mt-2 block w-full transition-opacity duration-500 ease-settle ${
-                      activeCategory === null ? "opacity-100" : "opacity-0"
+                      pending === null ? "opacity-100" : "opacity-0"
                     }`}
                   />
                 </button>
@@ -223,13 +399,13 @@ export function KaartClient({
                   <button
                     key={cat.id}
                     type="button"
-                    onClick={() => setActiveCategory(cat.id)}
-                    aria-pressed={activeCategory === cat.id}
+                    onClick={() => chooseCategory(cat.id)}
+                    aria-pressed={pending === cat.id}
                     className="group text-left"
                   >
                     <span
                       className={`label block transition-colors duration-500 ease-settle ${
-                        activeCategory === cat.id
+                        pending === cat.id
                           ? "text-honey-600"
                           : "text-hive-400 group-hover:text-honey-600"
                       }`}
@@ -239,7 +415,7 @@ export function KaartClient({
                     <span
                       aria-hidden="true"
                       className={`rule-ink mt-2 block w-full transition-opacity duration-500 ease-settle ${
-                        activeCategory === cat.id ? "opacity-100" : "opacity-0"
+                        pending === cat.id ? "opacity-100" : "opacity-0"
                       }`}
                     />
                   </button>
@@ -255,78 +431,101 @@ export function KaartClient({
             </div>
           </ScrollReveal>
 
-          <AnimatePresence mode="wait">
-            <m.div
-              key={activeCategory || "all"}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={reduce ? { duration: 0 } : { duration: 0.7, ease: EASE }}
-              // Was mt-16/mt-24. The filters and the card are one thing, and
-              // ninety-six points of nothing between them read as the end of
-              // the page rather than as a pause.
-              className="mt-8 md:mt-12"
+          {/* The card's own arrival, off the stylesheet.
+
+              This was a framer-motion element opening from `opacity: 0`, and
+              the price of that was the whole page: the server sent the entire
+              card — every rank, every dish, every price — wrapped in an inline
+              opacity of nought, so none of it could paint until thirty-one
+              kilobytes of animation library had been fetched, parsed and
+              hydrated. On a mid-range phone on 4G that is a second and a half
+              of blank paper, and the card is the largest thing on the screen,
+              so it is also what Chrome was timing the page by. The hero had
+              exactly this incident and .hero-rise is the fix it got; see the
+              note above the rule in globals.css.
+
+              The movement is unchanged and deliberately so: ten pixels, seven
+              tenths of a second, the settle curve. It simply starts when the
+              paper does.
+
+              The mt was mt-16/mt-24. The filters and the card are one thing,
+              and ninety-six points of nothing between them read as the end of
+              the page rather than as a pause. */}
+          <div className="hero-rise mt-8 md:mt-12 [--rise-delay:0s] [--rise-duration:0.7s] [--rise-travel:10px]">
+            <div
+              className="menu-swap grid md:grid-cols-12 md:gap-x-10"
+              data-swap={swap ?? undefined}
+              onTransitionEnd={finishExit}
+              onAnimationEnd={finishEnter}
             >
-              <div className="grid md:grid-cols-12 md:gap-x-10">
-                {/* The marginal bee, as it is drawn in the gutter of the card. */}
-                <div className="hidden md:col-span-2 md:block" aria-hidden="true">
-                  <SketchBee
-                    size={38}
-                    variant={0}
-                    strokeWidth={1.05}
-                    className="text-sage-400"
-                  />
-                  <div className="rule-ink mt-6 w-10" />
-                </div>
-
-                {/* The card itself: a cut sheet laid on the heavier stock. */}
-                <div className="md:col-span-10 md:col-start-3">
-                  <Sheet tone="paper" edge="soft">
-                    <div className="px-6 pb-12 pt-8 md:px-12 md:pb-16 md:pt-10">
-                      <div className="space-y-14 md:space-y-20">
-                        {groups.map(({ cat, lines }) => (
-                          <section key={cat.id} aria-labelledby={`categorie-${cat.id}`}>
-                            <h2 id={`categorie-${cat.id}`} className="section-bar">
-                              <span>{cat.name}</span>
-                            </h2>
-
-                            {cat.description && (
-                              <p className="mt-4 font-display text-[0.8rem] font-light italic leading-relaxed text-hive-300">
-                                {cat.description}
-                              </p>
-                            )}
-
-                            <ul className="mt-8 space-y-7 md:space-y-8">
-                              {lines.map((item) => (
-                                <MenuLine key={item.id} item={item} t={t} />
-                              ))}
-                            </ul>
-                          </section>
-                        ))}
-
-                        {ungrouped.length > 0 && (
-                          <div>
-                            <div className="rule-ink w-full" aria-hidden="true" />
-                            <ul className="mt-8 space-y-7 md:space-y-8">
-                              {ungrouped.map((item) => (
-                                <MenuLine key={item.id} item={item} t={t} />
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-
-                        {filtered.length === 0 && (
-                          <p className="font-display text-lg italic text-hive-300">
-                            {t.menuPage.empty}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </Sheet>
-                </div>
+              {/* The marginal bee, as it is drawn in the gutter of the card. */}
+              <div className="hidden md:col-span-2 md:block" aria-hidden="true">
+                <SketchBee
+                  size={38}
+                  variant={0}
+                  strokeWidth={1.05}
+                  className="text-sage-400"
+                />
+                <div className="rule-ink mt-6 w-10" />
               </div>
-            </m.div>
-          </AnimatePresence>
+
+              {/* The card itself: a cut sheet laid on the heavier stock. */}
+              <div className="md:col-span-10 md:col-start-3">
+                <Sheet tone="paper" edge="soft">
+                  <div className="px-6 pb-12 pt-8 md:px-12 md:pb-16 md:pt-10">
+                    <div className="space-y-14 md:space-y-20">
+                      {groups.map(({ cat, lines }) => (
+                        <section
+                          key={cat.id}
+                          className="menu-section"
+                          hidden={
+                            activeCategory !== null && activeCategory !== cat.id
+                          }
+                          aria-labelledby={`categorie-${cat.id}`}
+                        >
+                          <h2 id={`categorie-${cat.id}`} className="section-bar">
+                            <span>{cat.name}</span>
+                          </h2>
+
+                          {cat.description && (
+                            <p className="mt-4 font-display text-[0.8rem] font-light italic leading-relaxed text-hive-300">
+                              {cat.description}
+                            </p>
+                          )}
+
+                          <ul className="mt-8 space-y-7 md:space-y-8">
+                            {lines.map((item) => (
+                              <MenuLine key={item.id} item={item} t={t} />
+                            ))}
+                          </ul>
+                        </section>
+                      ))}
+
+                      {/* Dishes whose category was deleted out from under
+                          them. They belong to no rank, so they are only ever
+                          part of the whole card. */}
+                      {ungrouped.length > 0 && (
+                        <div hidden={activeCategory !== null}>
+                          <div className="rule-ink w-full" aria-hidden="true" />
+                          <ul className="mt-8 space-y-7 md:space-y-8">
+                            {ungrouped.map((item) => (
+                              <MenuLine key={item.id} item={item} t={t} />
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {shown === 0 && (
+                        <p className="font-display text-lg italic text-hive-300">
+                          {t.menuPage.empty}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </Sheet>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
     </>

@@ -22,18 +22,27 @@ import {
  * against once that check is in place.
  *
  * And it is not a proxy. The query string chooses between four date windows and
- * five report names, all of them checked against a fixed list before anything
+ * six report names, all of them checked against a fixed list before anything
  * is composed; nothing a caller sends ever becomes part of an upstream URL. The
  * shape to avoid is the obvious convenience one — `?path=/websites/...` — which
  * would turn a logged-in editor account into a way to send our key at any host
  * that answers.
  *
  * Failures answer 200 with `{ configured: false, reason }`. That looks wrong
- * until you consider who reads it: this is a panel the owners keep open, and
- * "Umami is nu niet bereikbaar" in the place where a graph goes is a great deal
- * more useful than a component that has to guess what a 502 meant. The one
- * exception is the login check below, which really is an error about the
- * caller rather than about the configuration.
+ * until you consider who reads it: the answer is a finished Dutch sentence
+ * meant to be printed where a graph would have gone, and "Umami is nu niet
+ * bereikbaar" is a great deal more useful than a caller left to guess what a
+ * 502 meant. The one exception is the login check below, which really is an
+ * error about the caller rather than about the configuration.
+ *
+ * Who calls this, honestly. Not the panel: /admin/statistieken renders on the
+ * server and calls getUmamiStats directly, because a page that already runs in
+ * a Node process has no reason to ask itself over HTTP and no reason to make
+ * the failure sentences wait for a second round trip. What this route is for is
+ * the morning the panel is empty and somebody wants to see the refusal with
+ * their own eyes, from a terminal, with an admin cookie — which is exactly when
+ * an endpoint that answers in plain JSON is worth having. docs/analytics.md
+ * documents it as such.
  */
 
 const DEFAULT_RANGE: UmamiRange = "7d";

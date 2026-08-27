@@ -24,9 +24,33 @@ limitation:
 - No cookies of any kind, and nothing written to local storage.
 - No IP addresses stored — the address is hashed and discarded.
 - No cross-site or cross-day tracking, no advertising identifiers, no profiles.
-- No names, no email addresses, no reservation contents. The reservation events
-  below record *that* a booking was submitted, never *who* submitted it or for
-  how many people.
+- No names, no email addresses, no telephone numbers, no notes — nothing anybody
+  typed into a form, in any event, ever.
+- Nothing that identifies a booking. Never *who* booked, never *exactly* how many
+  people, and never *which evening*. What does travel is a lead-time band
+  (`0-1_days`) and the weekday, from the moment a date is picked, plus a party
+  size band (`5-6`) when a booking is refused — because "are we turning large
+  parties away, and always at the last minute" is a real question the owners ask
+  and could not answer. Be exact about *when*, because this bullet and the Dutch
+  in the admin both used to scope all three to refusals and neither was true: the
+  lead-time band and the weekday ride on `availability_checked`, which the form
+  fires for **every** settled date — bookings that go through, bookings that are
+  abandoned at the time picker, and dates somebody clicked and thought better of.
+  Only the size band is refusals-only.
+  All three are deliberately lossy: dozens of bookings share `3-4` and a
+  Saturday, so none of them can be turned back into a table. That is also why the
+  lead-time bands begin at `0-1_days` instead of separating today from tomorrow.
+  Umami stamps every event with the day it recorded it, so a band that names one
+  exact number of days *is* the booked evening, written down in two pieces — a
+  lossless reconstruction wearing the clothes of a band, which is precisely what
+  the rest of this section promises does not happen. Two days at once is the
+  narrowest band that still answers "do people book at the last minute".
+  The exact size beside the exact evening would have been very nearly a primary
+  key into the reservations table, and both datasets live in the same PostgreSQL
+  cluster — see "Where it runs" below — so that is a re-identification path
+  rather than a theoretical one. The reasoning is written out at length above
+  `partyBucket()` in `src/lib/bookingTelemetry.ts`, which is the only
+  place in the codebase allowed to derive any of it.
 - No third-party script other than the Umami one; nothing is shared onward.
 
 ## Where it runs
@@ -147,15 +171,18 @@ symptom is a panel saying the figures are unavailable.
 
 ### When only part of the panel is empty
 
-The totals are one request and the graph, the top pages and the events are
-three more. Only the totals can fail the whole panel; the other three are
-allowed to come back empty on their own, so a section that is blank while the
-visitor count is fine means Umami refused that one request and nothing else.
+The totals are one request. The graph, the top pages, the event totals and the
+twelve property breakdowns are fifteen more. Only the totals can fail the whole
+panel; every other request is allowed to come back empty on its own, so a block
+that is blank while the visitor count is fine means Umami refused that one
+request and nothing else.
 
 That is not hypothetical. Umami renamed the top-pages report from `type=url` to
 `type=path`, and while all four requests were tied together a 400 on that one
 made the panel announce that Umami was unreachable while Umami was sitting there
-answering everything else perfectly. Their API will move again.
+answering everything else perfectly. Their API will move again — and the twelve
+new requests are the likeliest place for it to happen next, because they go to
+an endpoint Umami does not document at all.
 
 ## Settings to fill in
 
@@ -188,101 +215,452 @@ URL already tells the two languages apart and no tag attribute is needed for it.
 Custom events are fired by hand from `src/lib/umami.ts`:
 
 ```ts
-import { EVENTS, track } from "@/lib/umami";
-track(EVENTS.reservationSubmitted);
+import { EVENTS, STEPS, track } from "@/lib/umami";
+track(EVENTS.reservationStep, { step: STEPS.timePicked, surface: "sheet", entry: "mobile_fab" });
 ```
 
-`track()` never throws, never rejects, and does nothing at all when the script is
-absent — blocked, not configured, or still loading. That matters most on the
-reservation form: a guest must never lose a filled-in booking because a counter
-was unavailable. Always import `EVENTS`, never the literal string; the names are
-the join key with the dashboard and a typo shows up weeks later as a graph that
-simply stops.
+`track()` never throws, never rejects, and does nothing a caller has to check —
+blocked, not configured, or still loading. That matters most on the reservation
+form: a guest must never lose a filled-in booking because a counter was
+unavailable. Always import `EVENTS`, never the literal string; the names are the
+join key with the dashboard and a typo shows up weeks later as a graph that
+simply stops. The same goes for `STEPS`, because the funnel is read back by
+asking Umami for the values of one property, so a stage renamed in one place and
+not the other quietly falls out of the chart rather than failing anywhere.
 
-Every event automatically carries a `locale` property, read from `<html lang>`.
+Two properties are attached centrally, in `track()`, and no call site ever
+passes them:
+
+- **`locale`**, read from `<html lang>`.
+- **`device`** — `phone`, `tablet` or `desktop` — decided by `window.matchMedia`
+  at 1280px and 640px. The viewport rather than the user agent, on purpose: a
+  user agent string is a guess that needs a table of exceptions, and the question
+  being asked is whether the form behaves differently when it is *narrow*.
+  1280px is the same breakpoint `MobileReserveButton` uses for `xl:hidden`, so
+  "this is a phone" and "the booking sheet exists" cannot drift apart. Umami does
+  record a device class of its own, but only for pageviews — it will not segment
+  a custom event by it, which is why this has to ride along.
+
+### The script is not there when the page mounts
+
+`<Analytics>` loads Umami with `strategy="afterInteractive"`, so `window.umami`
+appears *after* hydration. `track()` used to look for it, find nothing and return
+silently, which meant every event fired from a mount effect raced the script — 
+and on a phone on 4G in a café, usually lost. The figures were not merely thinner
+on phones, they were biased downward on exactly the device the owners said they
+were blind on.
+
+So a miss is now held in a small queue and flushed when the script arrives. It is
+capped at 20 events and abandoned after 10 seconds, both deliberately: a visitor
+with the script blocked would otherwise accumulate one event per tap for as long
+as the tab is open. Past the deadline the held events are dropped and the file
+goes back to being silent, which is the right answer for a page where measuring
+was never going to work.
+
+The ten seconds are counted **once per page**, from the first event that had to
+wait, and not once per batch. That distinction is the whole of it: while the
+deadline belonged to the batch, giving up cleared the queue and the timer and
+left no trace that it had happened, so the next tap started a fresh ten seconds
+of 200ms polling — one new poll per tap, for the life of a tab on which the
+script was never going to load. Nothing leaked and nothing showed up in the
+figures; what it cost was battery, on the phones the queue exists to stop
+under-counting. Once the deadline has passed, `src/lib/umami.ts` holds nothing
+again for the rest of the page.
 
 ### Event table
 
-| Constant | Name in Umami | Meaning |
+| Constant | Name in Umami | Properties beyond `locale`/`device` | Meaning |
+| --- | --- | --- | --- |
+| `EVENTS.reserveButtonClicked` | `reserve_clicked` | `source`: `mobile_fab` \| `mobile_external` \| `nav` \| `nav_sheet` | One of our Reserveren controls was pressed. The denominator for the whole funnel — it is the only signal that exists before a form is mounted. |
+| `EVENTS.reservationStep` | `reservation_step` | `step`, `surface`, `entry`, and `via` on `2_date_picked` | One stage of the booking flow reached. See below. |
+| `EVENTS.reservationAbandoned` | `reservation_abandoned` | `last_step`, `exit`, `surface`, `entry` | Somebody left without booking, and how far they had got. |
+| `EVENTS.reservationFailed` | `reservation_failed` | `reason`, `step`, `surface`, `entry`, `party_bucket`, `lead_bucket`, `weekday`, `ms_bucket` | `/api/reserve` refused the booking, or never answered. |
+| `EVENTS.reservationBlocked` | `reservation_blocked` | `field`, `surface` | The *browser* refused the submit, before our handler ran. |
+| `EVENTS.availabilityChecked` | `availability_checked` | `scope`, `outcome`, `ms_bucket`, `surface`, and `weekday`/`lead_bucket` on `scope: "day"` | `/api/availability` answered one of its two questions — or did not. |
+| `EVENTS.outboundClicked` | `outbound_clicked` | `kind`, `target`, `surface` | Somebody left us for something useful: ringing, routing, a calendar. |
+| `EVENTS.guestPassStep` | `guest_pass_step` | `step`, and `context` on `shared` | The guest pass being opened, forwarded, or filled in by a companion. |
+| `EVENTS.contentViewed` | `content_viewed` | `kind`, `ref` | A page of ours was read, or a rank of the menu card was chosen. |
+| `EVENTS.contactSubmitted` | `contact_submitted` | `outcome`: `sent` \| `refused` \| `network` | A contact message, and whether it got through. |
+| `EVENTS.newsletterSubscribed` | `newsletter_subscribed` | `outcome`, same three | A mailing list sign-up, and whether it got through. |
+| `EVENTS.reservationSubmitted` | `reservation_submitted` | none | **Legacy.** Duplicates `reservation_step { step: "6_confirmed" }`. See the cutover below. |
+
+### The booking funnel
+
+One event name with a `step` property, not six event names. A funnel is a
+comparison of counts at ordered stages, and six names would be six series to
+fetch, six rows competing for the events window in the panel, and a schema change
+in three files every time a stage is inserted. The values are numerically
+prefixed so that Umami's own alphabetical list of a property's values comes back
+already in funnel order and nothing has to sort it:
+
+| `step` | When |
+| --- | --- |
+| `1_opened` | The flow mounted. On a phone this is the sheet opening — a React state change that no pageview can see. |
+| `2_date_picked` | A day chosen, from one of the three chips or from the calendar behind them. Carries `via`. |
+| `3_time_picked` | A sitting chosen. On both surfaces this is also the moment the flow leaves the availability screen. |
+| `4_details_shown` | The identity screen in front of somebody: the `/reserveren/gegevens` route on the page, a `pushState` entry in the sheet. |
+| `5_submit_attempted` | The button pressed and our handler entered. |
+| `6_confirmed` | `/api/reserve` accepted the booking. |
+
+`via` rides on `2_date_picked` and is `chip` or `calendar`. It is one property
+on the step it qualifies rather than an event of its own, and it is the single
+number that validates or kills the biggest change in the redesign: if four in
+five guests take one of the three offered days and never open the calendar, then
+hiding a thirty-one square grid behind one tap was right. If a third are opening
+it, "Andere dag" needs to be louder or the chips need to look further ahead.
+
+**These six are not the six the old form sent.** The rename, and the key back to
+the old series, are under "The funnel was remapped" below. It is worth reading
+before comparing anything across the deploy date.
+
+`reservation_abandoned` reuses the identical vocabulary in `last_step`, so the
+funnel and its drop-off read as two properties of one comparable pair. Its `exit`
+says how they left: `sheet_closed` (the phone dialog, whether by the X, the
+backdrop or Escape — all three unmount the form), `navigated_away` (the
+/reserveren page), or `page_hidden` (`pagehide`, which is what mobile Safari
+fires and `beforeunload` is not). It never fires after a confirmed booking.
+
+It also never fires for somebody moving about **inside** the flow. On the page
+surface the two screens are two routes, so "Wijzigen" on the details screen — the
+link whose whole purpose is to go back and change the day — unmounts the funnel
+exactly as leaving the site would, and it was being counted as an abandonment at
+`4_details_shown`. The guest who then booked was counted once as having given up
+and once as having converted, which made the drop-off look worst at precisely the
+boundary the redesign exists to prove itself on. `useFunnel` now watches, in the
+capture phase, for the click that is about to cause the unmount and asks where it
+is going: a plain left click on a link to a path still under /reserveren, in
+either language, is a move rather than a departure. A middle click, a ⌘-click, a
+link to anywhere else and a tab simply closed are all unchanged.
+
+Because `surface`, `entry` and `device` ride on every stage *and* on the
+abandonment, "of the people who opened the sheet on a phone, how many reached the
+time picker" is one reading rather than a join. That question is the owner's
+original complaint, verbatim.
+
+### The funnel was remapped
+
+**Annotate the deploy date in Umami before reading anything across it.** The
+booking form was replaced by a two-screen flow, and three of the six rungs
+changed what they mean. Renamed rather than quietly redefined, because a rung
+called `2_field_touched` that fires when somebody presses a date chip is a rung
+that will be read wrongly by whoever opens the dashboard next year, and by then
+there will be nobody left who remembers. The old series stays where it is; this
+table is the key, and it is also `RENAMED_STEPS` in `src/lib/umami.ts`, which
+the suite asserts is complete.
+
+| Old value | New value | Comparable across the change? |
 | --- | --- | --- |
-| `EVENTS.reserveButtonClicked` | `reserve_clicked` | Someone opened the booking form from the navigation or the phone button. |
-| `EVENTS.reservationStarted` | `reservation_started` | First field of the booking form touched. |
-| `EVENTS.reservationSubmitted` | `reservation_submitted` | Booking accepted by `/api/reserve`. |
-| `EVENTS.reservationFailed` | `reservation_failed` | Booking refused; the error code rides along as a property. |
-| `EVENTS.contactSubmitted` | `contact_submitted` | Contact message sent. |
-| `EVENTS.newsletterSubscribed` | `newsletter_subscribed` | Mailing list sign-up accepted. |
-| `EVENTS.menuViewed` | `menu_viewed` | The menu page was read. |
-| `EVENTS.blogPostRead` | `blog_post_read` | A single blog post was opened. |
-| `EVENTS.eventViewed` | `event_viewed` | A single event page was opened. |
-| `EVENTS.addToCalendar` | `add_to_calendar` | An event was saved to a calendar. |
-| `EVENTS.guestPassOpened` | `guest_pass_opened` | A guest pass link was opened. |
-| `EVENTS.phoneClicked` | `phone_clicked` | A `tel:` link was tapped. |
-| `EVENTS.directionsClicked` | `directions_clicked` | A route or map link was followed. |
+| `1_opened` | `1_opened` | Yes. Same event, same moment. |
+| `2_field_touched` | *(nothing)* | **No.** The stage it measured no longer exists. |
+| `3_date_picked` | `2_date_picked` | Yes, and it is now the second rung rather than the third. |
+| `4_time_picked` | `3_time_picked` | Yes. |
+| — | `4_details_shown` | New. There was no screen boundary here before. |
+| `5_submit_attempted` | `5_submit_attempted` | Yes, but it now follows `4_details_shown` rather than the time. |
+| `6_confirmed` | `6_confirmed` | Yes. |
+
+`2_field_touched` was "the first keystroke in any field", and it fired second
+because the old form asked everything at once. There is no field on screen now
+until an evening has been settled, so the stage has no successor: pointing it at
+`2_date_picked` would claim a continuity that is not there, and somebody would
+draw a line through the deploy date and believe it. The row is deliberately
+`null` in `RENAMED_STEPS`, and the suite asserts that too.
+
+The four old values are still in the Dutch label table in `StatsView.tsx`, so a
+period spanning the change reads as Dutch rather than as raw keys. They are not
+in `FUNNEL_STEPS`, so they draw no row in the chart. Take them out once no
+figures from before the change are in view.
+
+What to expect on the day: `2_date_picked` will read **higher** than
+`3_date_picked` did, because the rung above it no longer filters anybody out,
+and the drop between rungs one and two will look shallower for the same reason.
+Neither is conversion changing. It is measurement changing.
+
+### The property values, in full
+
+This is the authoritative list, and it is here rather than only in the browser
+code because both halves of the wiring are written from it: the values are what
+`src/lib/umamiServer.ts` asks Umami for and what the panel's Dutch label table is
+keyed on. A value the browser sends and the panel has never heard of is printed
+verbatim rather than dropped — see the two rules at the end of "The panel in the
+admin" — so a mismatch is visible rather than silent, but it is still a mismatch.
+Change a value here and in `src/lib/umami.ts` or the booking flow under
+`src/components/booking/` and in `src/components/admin/StatsView.tsx`, in one
+go.
+
+| Property | On | Values |
+| --- | --- | --- |
+| `scope` | `availability_checked` | `window`, `day` |
+| `outcome` | `availability_checked`, `scope: "day"` | `slots_free`, `some_full`, `day_full`, `day_closed`, `refused`, `network` |
+| `outcome` | `availability_checked`, `scope: "window"` | `days_free`, `all_closed`, `refused`, `network` |
+| `via` | `reservation_step`, `2_date_picked` | `chip`, `calendar` |
+| `ms_bucket` | `availability_checked`, `reservation_failed` | `lt500`, `500_1500`, `1500_4000`, `gt4000` |
+| `party_bucket` | `reservation_failed` | `1-2`, `3-4`, `5-6`, `7-10`, `11+` |
+| `lead_bucket` | `availability_checked` (day scope), `reservation_failed` | `0-1_days`, `2-6_days`, `1-2_weeks`, `2_weeks_plus` |
+| `weekday` | `availability_checked` (day scope), `reservation_failed` | `sun`, `mon`, `tue`, `wed`, `thu`, `fri`, `sat` |
+| `outcome` | `contact_submitted`, `newsletter_subscribed` | `sent`, `refused`, `network` |
+
+`scope` exists because the flow asks `/api/availability` two genuinely different
+questions and merging their answers makes both unreadable. `window` is "which
+days at all", asked for a fortnight to draw the three date chips and again for
+whichever month the calendar is showing; `day` is "which sittings on this one
+day", asked the moment a day is settled. `day_closed` at day scope is one guest
+who picked a shut Tuesday; `all_closed` at window scope is a fortnight with
+nothing in it for that party, which is a far more serious thing to see. Only the
+day question carries `weekday` and `lead_bucket`, because only it is about a
+particular date. `scope: "window"` deliberately carries neither: the window is a
+span rather than a booking, and a band naming one end of it would be describing
+a date nobody has chosen.
+
+`outcome` at day scope is the same **five** values it always was, and never
+`slow`, which the original plan listed as a sixth. It cannot be one: the five are what
+`/api/availability` answered, and how long it took to answer is a different
+question with a different property — `ms_bucket` rides along on the same event,
+so "the day was full" and "it took four seconds to say so" are read together
+rather than one of them displacing the other. A guest who gives up before the
+answer arrives produces no `availability_checked` at all, because the request is
+aborted by the effect's own cleanup and the abort path deliberately reports
+nothing; that person is counted by `reservation_abandoned` instead.
+
+`lead_bucket` starts at `0-1_days` rather than splitting today from tomorrow, and
+that is a privacy rule rather than a rounding choice — the argument is under
+"What is *not* collected" and again under "What may ride along, and what may not".
+Both `party_bucket` and `lead_bucket` are left off the event entirely when they
+cannot be derived, rather than sent as an empty string, so a gap in the data is a
+gap and not a value.
 
 ### Where each event is fired
 
-All of these are wired. Each file imports, once:
-
-```ts
-import { EVENTS, track } from "@/lib/umami";
-```
-
 | File | Where | Call |
 | --- | --- | --- |
-| `src/components/ReservationForm.tsx` | `markStarted()`, called from `set()` and `setDate()`, guarded by a `useRef` so it fires once per mounted form | `track(EVENTS.reservationStarted)` |
-| `src/components/ReservationForm.tsx` | `handleSubmit`, the `res.ok` branch | `track(EVENTS.reservationSubmitted)` |
-| `src/components/ReservationForm.tsx` | `handleSubmit`, the refusal branch and the `catch` | `track(EVENTS.reservationFailed, { reason })` — the server's error code, or `"network"` when the request never arrived |
-| `src/components/MobileReserveButton.tsx` | the `onClick` that opens the sheet, and the external-link `<a>` | `track(EVENTS.reserveButtonClicked, { source: "mobile" })` |
-| `src/components/Navigation.tsx` | the `btn-primary` reserve link, both branches | `track(EVENTS.reserveButtonClicked, { source: "nav" })` |
-| `src/components/Navigation.tsx` | the mobile sheet's last row, recognised by its href | `track(EVENTS.reserveButtonClicked, { source: "nav-sheet" })` |
-| `src/components/MailingListForm.tsx` | `handleSubmit`, at `setStatus("success")` | `track(EVENTS.newsletterSubscribed)` |
-| `src/app/(frontend)/[locale]/contact/ContactClient.tsx` | `handleSubmit`, at `setStatus("sent")` | `track(EVENTS.contactSubmitted)` |
-| `src/app/(frontend)/[locale]/contact/ContactClient.tsx` | the `tel:` link | `track(EVENTS.phoneClicked)` |
-| `src/app/(frontend)/[locale]/contact/ContactClient.tsx` | the Google listing link | `track(EVENTS.directionsClicked, { source: "google-listing" })` |
-| `src/app/(frontend)/[locale]/kaart/KaartClient.tsx` | mount effect | `track(EVENTS.menuViewed)` |
-| `src/app/(frontend)/[locale]/blog/[slug]/BlogPostClient.tsx` | mount effect | `track(EVENTS.blogPostRead, { title })` |
-| `src/app/(frontend)/[locale]/evenementen/[slug]/EventClient.tsx` | mount effect | `track(EVENTS.eventViewed, { title })` |
-| `src/app/(frontend)/[locale]/evenementen/[slug]/EventClient.tsx` | each link in the calendar `<details>` | `track(EVENTS.addToCalendar, { title, target })` — `target` is `apple`/`google`/`outlook`/`ics`/`series` |
-| `src/app/(frontend)/[locale]/reservering/[token]/GuestPassClient.tsx` | mount effect | `track(EVENTS.guestPassOpened)` — no properties at all; the URL carries a token, and a token must never become a property |
-| `src/components/AddToCalendarTracker.tsx` | one delegated `onClick` around the guest pass's four calendar links | `track(EVENTS.addToCalendar, { source: "guest-pass", target })` — `target` is `apple`/`google`/`outlook`/`ics`, read off the link's `data-calendar-target` |
-| `src/app/(frontend)/[locale]/reservering/[token]/GuestPassClient.tsx` | the two route links and the `tel:` link | `track(EVENTS.directionsClicked, { source: "guest-pass-google" \| "guest-pass-apple" })`, `track(EVENTS.phoneClicked)` |
+| `src/components/booking/useFunnel.ts` | a mount effect, and again from `reset()` | `reservation_step { step: from }` — `1_opened` for the accordion on either surface, `4_details_shown` for the details route, which was opened by the accordion before it. Fired from the hook rather than from the button that opened the flow, which is what lets the phone sheet carry no measuring code of its own, and guarded once per journey so backing out of the details screen on the phone does not re-open the funnel |
+| `src/components/booking/BookingFlow.tsx` | `onDate()` and `onTime()` | `2_date_picked` (with `via`) and `3_time_picked` |
+| `src/components/booking/BookingFlow.tsx` | the two `/api/availability` effects: each `.then` and `.catch` | `availability_checked { scope, outcome, … }`, and nothing at all when `ac.signal.aborted` |
+| `src/components/booking/GuestDetails.tsx` | a mount effect, `handleSubmit`, the `res.ok` branch | `4_details_shown`, `5_submit_attempted`, `6_confirmed` |
+| `src/components/booking/GuestDetails.tsx` | `onInvalidCapture` on the `<form>` | `reservation_blocked { field }` |
+| `src/components/booking/GuestDetails.tsx` | the refusal branch and the `catch` of `handleSubmit` | `reservation_failed { reason, … }` |
+| `src/components/booking/useFunnel.ts` | an effect holding a `pagehide` listener and an unmount cleanup | `reservation_abandoned { last_step, exit }` — suppressed when the unmount is the hand-off from the accordion to the details route (forward), and when it follows a plain click on a link that stays under /reserveren (backward). Both are somebody moving inside the flow rather than leaving it |
+| `src/components/booking/Confirmation.tsx` | the calendar link | `outbound_clicked { kind: "calendar", target: "ics", surface: "confirmation" }` |
+| `src/components/MobileReserveButton.tsx` | the mark that opens the sheet; the external-booking `<a>` | `reserve_clicked { source: "mobile_fab" }`; `{ source: "mobile_external" }` |
+| `src/components/Navigation.tsx` | the `btn-primary` reserve link, both branches; the mobile sheet's last row | `reserve_clicked { source: "nav" }`; `{ source: "nav_sheet" }` |
+| `src/components/ShareActions.tsx` | the copy button and the wa.me link, in both of its mounts | `guest_pass_step { step: "shared", context }` |
+| `src/components/AddToCalendarTracker.tsx` | one delegated `onClick` around server-rendered links | `outbound_clicked`, `kind` read off the link |
+| `src/components/Footer.tsx` | the contact block, through that delegate | `outbound_clicked { kind: "phone", surface: "footer" }` |
+| `src/components/MailingListForm.tsx` | all three endings of `handleSubmit` | `newsletter_subscribed { outcome }` |
+| `…/contact/ContactClient.tsx` | all three endings of `handleSubmit`; the `tel:` link; the Google listing link | `contact_submitted { outcome }`; `outbound_clicked { kind: "phone" \| "google_listing", surface: "contact" }` |
+| `…/kaart/KaartClient.tsx` | a mount effect, and `chooseCategory()` | `content_viewed { kind: "menu", ref }` |
+| `…/blog/[slug]/BlogPostClient.tsx` | a mount effect | `content_viewed { kind: "blog", ref: slug }` |
+| `…/evenementen/[slug]/EventClient.tsx` | a mount effect; each link in the calendar `<details>` | `content_viewed { kind: "event", ref: slug }`; `outbound_clicked { kind: "calendar", target, surface: "event" }` |
+| `…/reservering/[token]/GuestPassClient.tsx` | a mount effect; the companion form's three endings; the two route links and the `tel:` link; the review link, which is only drawn on a confirmed booking whose evening has already been | `guest_pass_step { step: "opened" \| "companion_joined" \| "companion_failed" }`; `outbound_clicked { kind: "directions" \| "phone" \| "google_listing", surface: "guest_pass" }` |
+| `…/reservering/[token]/page.tsx` | the `tel:` link on the "link no longer valid" sheet, through the delegate | `outbound_clicked { kind: "phone", surface: "guest_pass" }` |
+| `…/reserveren/ReserverenClient.tsx` | the `tel:` link in the rail | `outbound_clicked { kind: "phone", surface: "reserveren" }` |
 
-Two notes on `directions_clicked`. The contact page has no dedicated route
-link — only an embedded map iframe, whose clicks are inside a cross-origin
-frame and cannot be observed — so the nearest true signal there is the Google
-listing link, which is where the reviews and the route button both live. The
-event is therefore always sent with a `source`, and any reading of the figures
-has to look at it: `google-listing` is "went to our Google page", the two
-`guest-pass-*` values are unambiguous route requests.
+`kind` on `outbound_clicked` is `phone`, `directions`, `calendar` or
+`google_listing`, and `target` qualifies it: `google` or `apple` for directions,
+and `apple`/`google`/`outlook`/`ics`/`series` for a calendar. On the guest pass
+`apple` and `ics` are the same file under two names — see the note in
+`AddToCalendar.tsx` — so "how many used a calendar at all" adds them up rather
+than choosing between them. `surface` is which page the link sat on: `contact`,
+`footer`, `guest_pass`, `reserveren`, `confirmation` or `event`.
 
-Both pages that offer a calendar report `add_to_calendar`, and they report it
-differently, which any reading of the figures has to know. The event page sends
-`{ title, target }`, because which event was saved is the interesting half
-there. The guest pass sends `{ source: "guest-pass", target }` and no title:
-that page's URL carries a reservation token, and the only fact about it worth
-counting is that somebody took the evening away with them.
+The contact page has no dedicated route link — only an embedded map iframe,
+whose clicks are inside a cross-origin frame and cannot be observed — so the
+nearest true signal there is the Google listing, which is where the reviews and
+the route button both live. It therefore has a `kind` of its own rather than
+pretending to be a route request.
 
-`target` is one vocabulary across both: `apple`, `google`, `outlook`, `ics`,
-and `series` on the event page, which is the only one that offers a whole
-recurring run. On the guest pass `apple` and `ics` are the same file under two
-names — see the note in `AddToCalendar.tsx` — so a reading of "how many used a
-calendar at all" adds them up rather than choosing between them.
+Three of these events are fired from markup rendered on the **server**, which
+looks impossible at first glance: `src/components/AddToCalendar.tsx` is a server
+component so that `@/lib/ics` stays out of the visitor bundle, and the footer and
+the guest pass's "link no longer valid" sheet are `async` and read the CMS. None
+of the three can carry an `onClick`. So they do not:
+`src/components/AddToCalendarTracker.tsx` is a client component of some sixty
+lines that stands around the links, hears the clicks bubble past, and reads the
+`data-calendar-target` attribute or the `href` scheme off whatever was clicked.
+Nothing else moves to the client, and each wrapper replaces a `<div>` the markup
+already had, so what a guest gets is unchanged. The alternative on the table for
+the calendar — reporting from the `/api/guest-pass?ics=1` handler — was left
+alone: it would see the two `.ics` routes and never Google or Outlook, and it
+would put a measurement in a request path a calendar app makes on its own
+schedule.
 
-How the guest pass manages it is worth a line, because it looks impossible at
-first glance. `src/components/AddToCalendar.tsx` is a **server** component, so
-that `@/lib/ics` stays out of the visitor bundle, and a server component cannot
-carry an `onClick`. So it does not: it renders its four links inside
-`src/components/AddToCalendarTracker.tsx`, a client component of some twenty
-lines that hears the clicks bubble past and reads the `data-calendar-target`
-attribute off the link. Nothing else moves to the client, and the wrapper
-replaces the `<div>` that was around those links anyway, so the markup is
-unchanged. The alternative on the table — reporting from the
-`/api/guest-pass?ics=1` handler — was left alone: it would see the two `.ics`
-routes and never Google or Outlook, and it would put a measurement in a request
-path a calendar app makes on its own schedule.
+### What may ride along, and what may not
 
-Properties must stay non-identifying: a page title or an error code is fine, a
-guest's name, email, phone number or party size is not.
+A fact about **us** may be a property: a stage name, one of our own two form
+surfaces, which of our own buttons was pressed, an error code, a slug of our own
+published content, a width class. A fact about **the guest** may not.
+
+The two rulings that are not obvious, both made in
+`src/lib/bookingTelemetry.ts` above `partyBucket()` and repeated here so this
+file can be read on its own:
+
+- **Party size**: the exact integer is refused, the band is allowed. Umami stores
+  an event beside a timestamp and a same-day visitor hash, and an exact size plus
+  an exact evening is very nearly a primary key into the reservations table. The
+  band answers the owner question and destroys the join.
+- **The booked date**: refused outright, in both directions, and replaced by
+  `lead_bucket` and `weekday`. Umami already records the day the *event* happened,
+  which is what a trend line is drawn from; the evening being booked adds nothing
+  and is the other half of that key. "In both directions" is the part that needs
+  guarding, because the first version of the bands broke it while looking like it
+  did not: `same_day` and `1_day` each named one exact offset, and one exact
+  offset from a date Umami has already written down is the booked evening. They
+  are now the single band `0-1_days`, which is genuinely two evenings and still
+  answers the question the pair was added for.
+
+Name, e-mail, telephone number and the notes field are refused absolutely and are
+not derived from at any point — not bucketed, not hashed, not counted. Neither is
+the number of companions on a guest pass: one companion on one evening is close
+enough to identifying.
+
+### The cutover
+
+Umami keys its history on the event name string, so a renamed event does not
+carry its past with it: old rows stay where they are and the chart of the old
+name simply stops on the day of the deploy. Nothing is lost, but it has to be
+expected. Thirteen names became eleven:
+
+| Was | Is now |
+| --- | --- |
+| `reservation_started` | `reservation_step { step: "2_date_picked" }` — see the remap below |
+| `menu_viewed` | `content_viewed { kind: "menu" }` |
+| `blog_post_read` | `content_viewed { kind: "blog" }` |
+| `event_viewed` | `content_viewed { kind: "event" }` |
+| `phone_clicked` | `outbound_clicked { kind: "phone" }` |
+| `directions_clicked` | `outbound_clicked { kind: "directions" \| "google_listing" }` |
+| `add_to_calendar` | `outbound_clicked { kind: "calendar" }` |
+| `guest_pass_opened` | `guest_pass_step { step: "opened" }` |
+| `reservation_submitted` | `reservation_step { step: "6_confirmed" }` — **and itself, for now** |
+
+That last row is the exception, and it is deliberate. `reservation_submitted` is
+still fired alongside `6_confirmed`, because bookings per week is the one figure
+the owners already read, and watching it fall off a cliff on the very day the
+measuring got better would make the improvement look exactly like a regression.
+Delete the constant, its call site in `src/components/booking/GuestDetails.tsx`
+and this row **after 1 March 2027**, by which point the overlap has covered a full winter.
+
+Note also that `phone_clicked` was a *biased* sample rather than a small one:
+the footer's telephone number, which is on every page of the site, was never
+counted, so the total over-represented whoever happened to be on the contact
+page. `outbound_clicked` will therefore read higher than `phone_clicked` did by
+more than the change of name accounts for.
+
+## Reading the properties back
+
+`metrics?type=event` answers with event names and totals and nothing else. Every
+property in the table above — the refusal `reason`, the funnel `step`, `device`,
+`locale`, all of it — is invisible to it. That is not a small gap: it means a
+`step` property nobody can read back is not a funnel, and it is why the read-back
+path grew a second kind of request.
+
+The endpoint is
+
+```
+GET {base}/websites/{id}/event-data/values?startAt=…&endAt=…&eventName=…&propertyName=…
+```
+
+answering `[{ "value": "slotFull", "total": 40 }]` — note `value`/`total`, where
+the rest of Umami's API says `x`/`y`, and note that `total` is a Postgres
+`count(*)` which may arrive as a JSON number or as a string depending on the
+serialiser in the running version. `src/lib/umamiServer.ts` reads both.
+
+**This endpoint is not in Umami's published API documentation.** The docs list
+`stats`, `pageviews`, `metrics`, `events/series` and stop there; the parameter
+names and the response shape above were read out of Umami's source. Treat it as
+something that can move without notice, which is exactly how it is treated in
+the code: every one of the twelve requests goes through the same `optional()`
+guard the `type=url` → `type=path` incident produced, so a breakdown Umami
+refuses costs one block of the panel and nothing else.
+
+### The telephone split, and why it is Umami's idea of a telephone
+
+`event-data/values` breaks down **one** property at a time and cannot cross two,
+so "the funnel, on phones" cannot be asked for through the `device` property the
+browser attaches — that would be a cross-tabulation. What the endpoint does
+accept is Umami's own session filters, and `device` is one of them, read off the
+user agent.
+
+**On Umami 2.x this split does not merely fail, it lies.** `device` on
+`event-data/values` is a **v3** feature. Umami 2.17 through 2.20 — checked
+against their source, not inferred from behaviour — assemble the filter object
+for this endpoint by hand and never look at `device` at all, and their request
+parsing is not strict, so an unknown parameter is silently dropped rather than
+refused. The request answers **200**, with data, correct in every respect except
+that it is the unfiltered total. The Telefoon column would then equal the overall
+column exactly, and the panel would read as though every visitor to the site was
+on a phone — a wrong number wearing the appearance of a right one, which is worse
+than the empty block `optional()` was built to produce. From v3 onward the filter
+is real and the split is true. The Umami service in `docker-compose.yml` must
+therefore not be pinned below v3; it tracks the moving `postgresql-latest` tag
+today, and anyone pinning it to a fixed version needs to know that pinning to a
+2.x is not "staying on a known-good version", it is switching one column of this
+panel from measurement to fiction.
+
+Umami's vocabulary there is the trap. Anything with a desktop user agent and a
+screen of 1920 pixels or less is a `laptop`; `desktop` is reserved for the
+genuinely large monitors. So `device=desktop` would return a fraction of the real
+number and read on the page as a collapse in desktop bookings. The panel asks
+only for `mobile` and `tablet` and arrives at "computer" by subtracting them from
+the total, which is one request fewer and puts any device class a later Umami
+invents into the remainder instead of losing it.
+
+Consequence worth knowing before anyone reconciles two numbers: the Telefoon
+column is Umami's user-agent classification, while the `device` property on each
+event is the browser's own viewport measurement (`phone` under 640px, `tablet`
+under 1280px). They will not agree exactly. The panel deliberately shows only
+one of the two, so nothing on screen contradicts anything else on screen.
+
+## The panel in the admin
+
+**/admin/statistieken**, in the sidebar under Backups.
+`src/components/admin/StatsView.tsx`.
+
+It is worth recording why this took so long to exist, because the shape of the
+mistake is repeatable. `src/lib/umamiServer.ts` was written first and written
+well — token refresh, per-report isolation, a distinct Dutch sentence for each
+distinct thing that can be wrong. `/api/umami/stats` guarded it. The Statistieken tab told
+the owners "daarmee haalt dit paneel de cijfers weer op". This file described "a
+panel the owners keep open". Nothing rendered any of it: `grep -rn "api/umami"
+src/` returned only the route itself, and `payload.config.ts` registered no such
+view. Every one of those Dutch sentences had been written for a reader who did
+not exist. Measurement that cannot be looked at is not measurement.
+
+The page renders on the **server** and ships no browser code. Changing the period
+is a link (`?periode=today|7d|30d|year`), the way the agenda changes its week.
+That is a departure from the polling panel the older comments imagined, and it is
+the better trade: the figures are a minute stale by design, so live updating
+would be a spinner in front of a cache, and the failure sentences belong in the
+first paint rather than behind a second authenticated round trip.
+
+What it shows, in order, and why that order:
+
+1. **The plain numbers** — visitors, pageviews, visits, average stay, bounce.
+   This is what "how are we doing" means and it is the only part the owners
+   already know how to read.
+2. **The booking funnel**, six stages with a Telefoon / Tablet / Computer split
+   and a "Hier gestopt" column drawn from `reservation_abandoned`. This is the
+   only thing on the page that answers a question the owners asked out loud.
+   Those three device columns are not a fixture: the panel holds the two
+   device-filtered breakdowns up against the unfiltered one, and when all three
+   come back identical it treats the filter as having been thrown away — the
+   2.x behaviour under "The telephone split" above — and leaves the columns out
+   entirely, with a Dutch sentence where they were. So a running panel with no
+   Telefoon column is not a half-built page; it is that check having fired, and
+   the Umami it is talking to is the thing to look at.
+3. **Why bookings failed** — `reason`, with the share and the phone count beside
+   it, then the same failures re-cut by party size and lead time. A refusal is
+   the one figure here that turns into a decision: `slotFull` clustered in
+   `5-6` + `0-1_days` is a capacity setting to change on Monday.
+4. Everything else — where the form stalled, what the availability check
+   answered, which button they came in by, how they left, the top pages, and the
+   raw event totals for completeness.
+
+Two rules the page keeps and any change to it must keep. A property value with no
+Dutch label is printed **verbatim** rather than skipped, because the browser half
+is edited on other days by other people and a new refusal code must show up as an
+unfamiliar word somebody can ask about, never as a row that quietly is not there.
+And when Umami cannot be reached, the sentence `umamiServer.ts` wrote is printed
+word for word, followed by a short list of the settings fields to check — never a
+blank page, never a red box, never an HTTP status.
 
 ## Reading the figures back
 
@@ -290,14 +668,18 @@ guest's name, email, phone number or party size is not.
 
 - Requires a logged-in Payload user (`payload.auth`). Anonymous callers get 401.
 - `range` is one of `today`, `7d`, `30d`, `year`; `report` is one of `all`,
-  `summary`, `series`, `pages`, `events`. Anything else falls back to `7d` /
-  `all`, and the answer echoes what it used.
+  `summary`, `series`, `pages`, `events`, `funnel`. Anything else falls back to
+  `7d` / `all`, and the answer echoes what it used.
 - It is not a proxy. Nothing from the query string ever reaches an upstream URL,
   so a logged-in editor account cannot aim the API key at a host of their
   choosing.
 - Days are Amsterdam days, so "vandaag" ends at local midnight.
-- The upstream call is cached for a minute in module scope, because the panel
-  polls. Failures are not cached.
+- The upstream call is cached for a minute in module scope, because one load of
+  the panel is sixteen upstream requests and reloading it is one keystroke.
+  Failures are not cached.
+- **Nothing in the admin calls this.** The panel renders on the server and calls
+  `getUmamiStats()` directly. The route is what you reach for from a terminal
+  when the panel is empty and you want to see the refusal in its own words.
 
 Success:
 
@@ -309,9 +691,33 @@ Success:
   "bounceRate": 46, "avgSeconds": 94,
   "series":   [{ "date": "2026-08-17", "visitors": 61, "pageviews": 174 }],
   "topPages": [{ "url": "/kaart", "count": 212 }],
-  "events":   [{ "name": "reservation_submitted", "count": 9 }]
+  "events":   [{ "name": "reservation_submitted", "count": 9 }],
+  "breakdowns": {
+    "funnelSteps": [{ "value": "1_opened", "count": 412 }],
+    "funnelStepsPhone": [{ "value": "1_opened", "count": 301 }],
+    "funnelStepsTablet": [],
+    "abandonedAtStep": [{ "value": "4_time_picked", "count": 105 }],
+    "abandonedHow": [{ "value": "sheet_closed", "count": 190 }],
+    "failureReasons": [{ "value": "slotFull", "count": 40 }],
+    "failureReasonsPhone": [{ "value": "slotFull", "count": 34 }],
+    "failurePartySize": [{ "value": "5-6", "count": 21 }],
+    "failureLeadTime": [{ "value": "0-1_days", "count": 31 }],
+    "blockedFields": [{ "value": "time", "count": 58 }],
+    "availabilityOutcome": null,
+    "reserveButtonSource": [{ "value": "mobile_fab", "count": 288 }]
+  }
 }
 ```
+
+`null` and `[]` are different answers in `breakdowns` and nothing may flatten
+one into the other. `[]` is Umami saying nothing of the kind has happened yet,
+which is the ordinary state of a measurement on the day it ships. `null` is
+Umami declining to answer at all, and is a thing for a developer rather than
+something to wait out. The panel prints a different Dutch sentence for each.
+There is a third case that looks like the first and is not: a caller who asked
+for any `report` other than `funnel` gets `[]` for all twelve breakdowns and
+never a `null`, because none of those requests were made and a request that was
+never sent cannot have been refused.
 
 Anything wrong — no website id, no key, Umami unreachable, key rejected —
 answers **200** with:

@@ -3,7 +3,7 @@
  *
  * Route Handlers in the App Router have no default body size limit, and
  * `await request.json()` buffers the whole body before any of our checks run,
- * so a handful of large requests is enough to exhaust memory. Payload 3.10
+ * so a handful of large requests is enough to exhaust memory. Payload 3.88
  * also dropped its own rateLimit option, so both of these have to live here.
  */
 
@@ -132,31 +132,74 @@ function clientKey(request: Request): string {
 }
 
 /**
- * Per-IP throttle, held in process memory. That is deliberately modest: it
+ * Per-key throttle, held in process memory. That is deliberately modest: it
  * resets on deploy and does not span instances, but this site runs as a single
  * container and the alternative needs infrastructure the owners do not have.
- * A limit on Nginx Proxy Manager as well would be better than this one, since
- * it sees the connection rather than a header describing it.
+ * Worth knowing before a second container is ever added: every limit below is
+ * per process, so two of them silently allow twice as much. A limit on Nginx
+ * Proxy Manager as well would be better than this one, since it sees the
+ * connection rather than a header describing it.
  */
 const hits = new Map<string, number[]>();
 
-export function rateLimit(
-  request: Request,
-  bucket: string,
-  limit = 5,
-  windowMs = 10 * 60 * 1000,
+/** How long a hit is remembered, for every bucket that does not say otherwise. */
+const WINDOW_MS = 10 * 60 * 1000;
+
+/** One bucket to count a single event against. */
+export interface RateLimitBucket {
+  /**
+   * Already a key rather than something a person typed: lower-cased, trimmed.
+   * `clientKey()` produces one for an address; an e-mail wants `.toLowerCase()`
+   * first, or Anne@… and anne@… are two guests.
+   */
+  identity: string;
+  /** Which counter this belongs to, so two limits on one identity stay apart. */
+  bucket: string;
+  limit: number;
+}
+
+/**
+ * Several buckets at once, spending a hit in each only if every one of them
+ * had room — and spending nothing at all otherwise.
+ *
+ * That all-or-nothing is the whole reason this exists rather than a loop at
+ * the call site. /api/reserve counts a stored booking against two identities,
+ * the address and the e-mail, and used to ask them one after the other with
+ * `||`. Passing the first bucket is what records in it, so a guest sitting at
+ * their per-e-mail limit had already spent a slot of the per-address bucket
+ * before the e-mail bucket refused them — and again on every further attempt,
+ * so ten refusals of one guest also emptied the address bucket for everybody
+ * else behind the same carrier NAT. The two questions have to be asked before
+ * either one is answered.
+ *
+ * An address is a poor identity on Dutch mobile in the first place, where
+ * carrier NAT puts thousands of subscribers behind one of them and a bucket
+ * sized for one household is shared by a town, which is why /api/reserve
+ * counts against the submitted e-mail as well: that is the identity that
+ * actually books a table, and the one a guest cannot rotate without giving us
+ * a different address to confirm on.
+ *
+ * Nothing here is written down anywhere but the map above, which lives as long
+ * as the process does.
+ */
+export function rateLimitAll(
+  buckets: RateLimitBucket[],
+  windowMs = WINDOW_MS,
 ): boolean {
-  const key = `${bucket}:${clientKey(request)}`;
   const now = Date.now();
-  const recent = (hits.get(key) ?? []).filter((t) => now - t < windowMs);
+  // Pruning happens whatever the answer turns out to be: it is only dropping
+  // hits that have aged out of the window, which is true of them either way.
+  const pruned = buckets.map(({ identity, bucket, limit }) => {
+    const key = `${bucket}:${identity}`;
+    const recent = (hits.get(key) ?? []).filter((t) => now - t < windowMs);
+    return { key, recent, room: recent.length < limit };
+  });
 
-  if (recent.length >= limit) {
-    hits.set(key, recent);
-    return false;
+  const room = pruned.every((entry) => entry.room);
+  for (const entry of pruned) {
+    if (room) entry.recent.push(now);
+    hits.set(entry.key, entry.recent);
   }
-
-  recent.push(now);
-  hits.set(key, recent);
 
   // Keep the map from growing without bound on a long-running process.
   if (hits.size > 5000) {
@@ -164,7 +207,40 @@ export function rateLimit(
       if (times.every((t) => now - t >= windowMs)) hits.delete(k);
     }
   }
-  return true;
+  return room;
+}
+
+/** The same throttle, on something other than an address. */
+// Not exported. `rateLimit` and `rateLimitAll` are the two doors this module
+// means to offer, and a third one taking a bare identity string invites a
+// caller to invent its own notion of who the client is — which is precisely
+// the decision `clientKey` exists to make in one place, with the proxy hops
+// accounted for.
+function rateLimitKey(
+  identity: string,
+  bucket: string,
+  limit = 5,
+  windowMs = WINDOW_MS,
+): boolean {
+  return rateLimitAll([{ identity, bucket, limit }], windowMs);
+}
+
+/** The same, on whoever the visitor is as far as this process can tell. */
+export function rateLimit(
+  request: Request,
+  bucket: string,
+  limit = 5,
+  windowMs = WINDOW_MS,
+): boolean {
+  return rateLimitKey(clientKey(request), bucket, limit, windowMs);
+}
+
+/**
+ * Who the visitor is, for a caller that has to name them in a bucket list of
+ * its own rather than throttle a request outright.
+ */
+export function rateLimitIdentity(request: Request): string {
+  return clientKey(request);
 }
 
 /** Trimmed string with a hard cap, or null when absent or the wrong type. */

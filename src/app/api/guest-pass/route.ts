@@ -279,6 +279,19 @@ export async function POST(request: Request) {
       // about the booking itself may not have gone out yet, or may have failed
       // and be waiting for a retry — so the status is not the thing to lean
       // on. This says it outright instead: see src/lib/outboundEmail.ts.
+      //
+      // That is no longer the whole of it, and the half that came later is the
+      // dangerous half. Since the guest gets a confirmation mail of their own,
+      // Reservations.ts hangs a hook on confirmationEmailStatus that arms that
+      // mail — writes "pending" into the field — from inside any write it does
+      // not recognise as harmless, and the first thing that hook does is look
+      // for this flag. Its own comment puts it as "the flag has to be a fuse,
+      // not a delay": without the flag, a companion typing in an allergy
+      // through the public link would load a confirmation that nothing sends
+      // now and that goes off on the next unrelated save, so the owners would
+      // correct a typo in the notes six weeks later and re-confirm the entire
+      // party. Reading the paragraph above and concluding that this is only
+      // about the owners' notification is exactly the mistake to avoid.
       context: { [SKIP_OUTBOUND_EMAIL]: true },
     })) as { guestResponses?: GuestResponseRow[] | null };
 

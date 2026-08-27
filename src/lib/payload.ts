@@ -2,6 +2,14 @@ import { getPayload } from "payload";
 import type { SerializedEditorState } from "@payloadcms/richtext-lexical/lexical";
 import config from "@payload-config";
 import { defaultLocale, type Locale } from "@/i18n/config";
+/*
+ * The one constant, not the module's behaviour: @/lib/reservationMail is
+ * imported here only for the name of the mode this file has to default to, so
+ * that the fallback and the CMS field cannot say different things. The import
+ * goes one way — that module is forbidden from reaching back into this one,
+ * and says so in its own header.
+ */
+import { DEFAULT_CONFIRMATION_MODE } from "@/lib/reservationMail";
 import { isLexicalDocument, lexicalIsEmpty } from "./lexical";
 
 export const getPayloadClient = () => getPayload({ config });
@@ -143,7 +151,24 @@ const nlDefaults = {
   reservationCapacity: 40,
   reservationMaxPartySize: 20,
   reservationLeadMinutes: 60,
+  // The gap between the last bookable sitting and closing time. Sixty is what
+  // the field itself defaults to and what the column was created with, so a
+  // CMS nobody has pressed save on answers this the same way the database
+  // does — and the same way src/lib/openingHours.ts does when neither is
+  // reachable, as in the booking sheet on phones.
+  reservationLastSittingMinutes: 60,
   reservationHorizonDays: 90,
+  // A string, because that is what a select stores; `resolveBookingRules`
+  // turns it back into the number the grid is laid out on.
+  reservationSlotMinutes: "15",
+  // Spelled out rather than left to `confirmationMode()` to sort out from an
+  // `undefined`. A CMS that has never been saved would otherwise hand every
+  // reader a settings object with no mode in it, and the answer to "when does
+  // the guest get their confirmation" would be decided by whichever `??` the
+  // caller happened to write. It is the same value the field itself defaults
+  // to, taken from the same constant so the two cannot drift: the mail waits
+  // for a human.
+  reservationConfirmationMode: DEFAULT_CONFIRMATION_MODE,
   guestPassEnabled: true,
   // Empty lists mean the guest pass simply does not ask. Better than guessing at
   // a menu the kitchen never agreed to.
@@ -234,7 +259,10 @@ const enDefaults: SiteSettingsData = {
   reservationCapacity: 40,
   reservationMaxPartySize: 20,
   reservationLeadMinutes: 60,
+  reservationLastSittingMinutes: 60,
   reservationHorizonDays: 90,
+  reservationSlotMinutes: "15",
+  reservationConfirmationMode: DEFAULT_CONFIRMATION_MODE,
   guestPassEnabled: true,
   guestPassDrinks: [] as LabelRow[],
   guestPassDietary: [] as LabelRow[],

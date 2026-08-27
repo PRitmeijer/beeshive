@@ -23,7 +23,7 @@ import {
  * calendar's.
  *
  * It is a **server** component, which is the important decision in this file.
- * Payload 3.10 renders `admin.components.Field` on the server while it builds
+ * Payload 3.88 renders `admin.components.Field` on the server while it builds
  * the form state of a document, and hands a server component the document
  * itself along with a live `Payload` instance (see `ServerComponentProps` in
  * node_modules/payload/dist/admin/forms/Field.d.ts, and the `'Field' in
@@ -36,12 +36,17 @@ import {
  * does not exist cannot be left unguarded. src/lib/guestHistory.ts says the
  * same thing at more length and names this file as one of its two doors.
  *
- * The cost of the shape is that the query runs again every time Payload
- * rebuilds the form state — which is on save and, debounced, while somebody
- * types. That is one small indexed-ish read against a table of a few thousand
- * rows on a page that is already doing more work than that, and the
- * alternative is caching a claim about a person that goes stale in the middle
- * of the evening.
+ * The cost of the shape is a query on the server rather than a cached answer,
+ * and the alternative is caching a claim about a person that goes stale in the
+ * middle of the evening. It is one small read against a table of a few thousand
+ * rows, on a page already doing more work than that.
+ *
+ * How often it runs is Payload's business, not this file's, and it changed
+ * under us: 3.88's renderField skips re-rendering a custom component whose path
+ * it has already rendered (`requiresRender`, guarding on `lastRenderedPath`),
+ * so this no longer re-queries on every debounced keystroke the way it did on
+ * 3.10. Nothing here depends on the frequency either way — the count is a claim
+ * about a saved row, so rendering it less often cannot make it wrong.
  *
  * Everything is styled with Payload's own custom properties and nothing else,
  * for the reason src/components/admin/agenda.module.scss opens with: the

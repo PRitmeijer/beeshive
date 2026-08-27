@@ -47,6 +47,27 @@ PostgreSQL now, and `DATABASE_URI` has to point at one. Nothing else does —
 without SMTP credentials mail goes to the console, and without the R2 variables
 uploads go to `./media`, both of which are the right behaviour on a laptop.
 
+### Why `package.json` says `"type": "module"`
+
+Do not remove that line. It is not a style preference, and nothing in the app
+bundle depends on it — Next compiles `src/**` with its own bundler either way.
+It exists for the `payload` CLI: `generate:types`, `generate:importmap` and
+`migrate:create` all load `src/payload.config.ts` through `tsx`, and `tsx`
+decides whether a `.ts` file is ESM or CommonJS from the nearest
+`package.json`. Without the field this project is CommonJS, so the config was
+compiled to CommonJS and its `import`s became `require()` calls — which then
+dragged Payload's own ES-module `dist` through Node's CommonJS loader.
+
+That happened to survive on Payload 3.10. On 3.88 it does not: the graph now
+reaches `payload/dist/exports/node.js`, and loading that through `require()`
+fails on `@next/env`'s default export, so every one of those three commands
+died before doing any work. Marking the project ESM lets the config load as
+what it already was, and Payload's `dist` loads natively.
+
+Everything else here was already ESM — the configs are all `.mjs` or `.ts`,
+and no file in `src/`, `ops/` or `scripts/` uses `require`, `__dirname` or
+`module.exports` — which is why the field could simply be added.
+
 ## Mail
 
 Two forms send mail, both to the address in Site Instellingen → Contact, which
@@ -90,8 +111,10 @@ the site will otherwise take bookings silently.
 The times the reservation form offers are read from Site Instellingen →
 Openingstijden, per weekday, rather than hard-coded. Change the hours in the
 admin and the form follows: a closed day offers nothing and says so, and the
-last table on offer is one hour before closing. `/api/reserve` checks the same
-rows, so the rule holds for anything posting to it directly as well.
+last table on offer is a gap before closing that the owners set in Site
+Instellingen → Reserveren → *Laatste reservering vóór sluitingstijd*, an hour
+until they change it. `/api/reserve` checks the same rows with the same gap, so
+the rule holds for anything posting to it directly as well.
 
 Free text is fine — `11:00 – 21:00`, `11.00-21.00`, `Gesloten`, `Closed`, or a
 split service such as `12:00-16:00, 17:00-22:00` are all read correctly. A cell
@@ -161,6 +184,55 @@ and every remaining `<img>` renders a photograph Payload has already re-encoded
 and Cloudflare is already serving. The generated files —
 `src/payload-types.ts` and `src/app/(payload)/admin/importMap.js` — are
 ignored, since a complaint about either is a complaint about a generator.
+
+## Tests
+
+```bash
+npm test              # vitest run
+npm run test:watch
+npm run test:coverage
+```
+
+The suite covers the booking system: the opening-hours parser, the schedule
+resolution, the seat counting, and all three public endpoints. It takes about
+two seconds and needs no database, no Payload instance and no browser.
+
+That last part is the whole design. `src/lib/payload.ts` imports
+`@payload-config`, so merely *importing* anything that reads the CMS would
+build the Postgres adapter, the S3 plugin and the mail transport before the
+first assertion ran. Every test that touches one of those modules therefore
+replaces `@/lib/payload` with a `vi.mock` factory and hands it the in-memory
+fake in `tests/support/fakePayload.ts`, which honours the `where` clauses this
+codebase actually sends — the date window, the `status not_equals
+"geannuleerd"` that gives a cancelled table's seats back, the guest token — and
+records every call, so a test can assert *how* a query was made and not only
+what came back. Nothing else is mocked: the route tests run the real schedule
+and the real arithmetic underneath, because a test that proves `/api/reserve`
+calls a function a stub said returned "closed" proves nothing at all.
+
+`TZ=UTC` is pinned in `vitest.config.ts`. Nothing in the booking path reads the
+process timezone on purpose — every clock read passes `Europe/Amsterdam` to
+Intl, and every piece of date arithmetic is done at midday UTC — but the
+owners' laptop is in Amsterdam and a server is not, so pinning it means a date
+bug that reads the local clock by accident fails where it was written instead
+of on a Sunday in March somewhere else. Time is frozen with
+`vi.useFakeTimers({ toFake: ["Date"] })`; `tests/support/time.ts` holds the
+four dates worth freezing on, the two nights the clocks change among them.
+
+Two conventions worth knowing before adding a test. The rate limiters in
+`src/lib/apiGuard.ts` keep their counters in module scope for the life of the
+process, so every endpoint test gives itself a private bucket through a unique
+`x-forwarded-for` header — reuse one and you get a mysterious 429 in a test
+about something else. And where a table of cases carries a short reason beside
+each value, the callback declares it as `_why: string`: it is printed into the
+test name by the `%s` in the title, and TypeScript will not let a two-column
+table be read with a one-argument callback.
+
+A handful of tests are named `TRAP`, `FINDING` or `SURPRISING`. Those pin
+behaviour that is arguably wrong — `parseRanges("11:00 t/m 21:00")` reading as
+closed, for one — as it stands today, so the suite documents it rather than
+blessing it. If one of them starts failing, read the comment above it before
+"fixing" the test: somebody has probably just fixed the code.
 
 ## Database schema and migrations
 

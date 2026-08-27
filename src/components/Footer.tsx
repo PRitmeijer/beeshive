@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getSiteSettings } from "@/lib/payload";
 import { TornEdge } from "@/components/TornEdge";
 import { SocialRow, socialLinks } from "@/components/SocialMarks";
+import { OutboundLinkTracker } from "@/components/AddToCalendarTracker";
 import { getDict } from "@/i18n/dictionaries";
 import { localeHref, localeTags, type Locale } from "@/i18n/config";
 
@@ -96,34 +97,43 @@ export async function Footer({ locale }: { locale: Locale }) {
           <div className="md:col-span-3">
             <h4 className="label-light">{t.footer.contact}</h4>
             <div className="rule-ink-light mt-3 mb-4" aria-hidden="true" />
-            <address className="not-italic">
-              <ul className="space-y-2.5 text-sm text-honey-200/70">
-                <li>
-                  <a
-                    href={`mailto:${s.contactEmail}`}
-                    className="hover:text-honey-300 transition-colors duration-500 ease-settle break-words"
-                  >
-                    {s.contactEmail}
-                  </a>
-                </li>
-                {s.phone && (
+            {/* The telephone number down here is tapped more than every other
+                one on the site put together, because it is on every page,
+                and it was the one nobody counted — so "how many people rang
+                us" read as a fraction of itself, weighted towards whoever
+                happened to be on the contact page. This footer is rendered on
+                the server, so the tap is heard by delegation rather than by a
+                handler; see the component's own note. */}
+            <OutboundLinkTracker surface="footer">
+              <address className="not-italic">
+                <ul className="space-y-2.5 text-sm text-honey-200/70">
                   <li>
                     <a
-                      href={`tel:${s.phone.replace(/\s/g, "")}`}
-                      className="figures-old hover:text-honey-300 transition-colors duration-500 ease-settle"
+                      href={`mailto:${s.contactEmail}`}
+                      className="hover:text-honey-300 transition-colors duration-500 ease-settle break-words"
                     >
-                      {s.phone}
+                      {s.contactEmail}
                     </a>
                   </li>
-                )}
-                <li>
-                  {s.address.area
-                    ? `${s.address.area}, ${s.address.city}`
-                    : s.address.city}
-                </li>
-                <li>{country}</li>
-              </ul>
-            </address>
+                  {s.phone && (
+                    <li>
+                      <a
+                        href={`tel:${s.phone.replace(/\s/g, "")}`}
+                        className="figures-old hover:text-honey-300 transition-colors duration-500 ease-settle"
+                      >
+                        {s.phone}
+                      </a>
+                    </li>
+                  )}
+                  <li>
+                    {s.address.area
+                      ? `${s.address.area}, ${s.address.city}`
+                      : s.address.city}
+                  </li>
+                  <li>{country}</li>
+                </ul>
+              </address>
+            </OutboundLinkTracker>
           </div>
 
           {/* Social */}

@@ -34,6 +34,12 @@ content-export.json
 .github
 .claude
 *.tsbuildinfo
+# The test suite and its runner config. The Dockerfile copies the whole context,
+# and none of this is needed to serve a page: the tests run in the terminal and
+# in CI, against the source, before an image is ever built.
+tests
+vitest.config.ts
+coverage
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

@@ -11,6 +11,7 @@ import {
   type Week,
 } from "@/lib/openingHours";
 import { buildMetadata } from "@/lib/metadata";
+import { jsonLdHtml } from "@/lib/jsonLd";
 import { getDict } from "@/i18n/dictionaries";
 import { canonicalUrl, parseLocale, type Locale } from "@/i18n/config";
 import { HomeClient } from "./HomeClient";
@@ -184,7 +185,7 @@ export default async function HomePage({ params }: PageProps) {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }}
       />
       <h1 className="sr-only">
         {t.home.srHeading(s.siteName, s.address.area, s.address.city)}

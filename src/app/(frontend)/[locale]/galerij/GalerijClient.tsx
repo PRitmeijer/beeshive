@@ -328,7 +328,7 @@ export function GalerijClient({
             role="dialog"
             aria-modal="true"
             aria-label={selected.title}
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-hive-900/92 p-6"
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-hive-900/[0.92] p-6"
             onClick={() => setSelected(null)}
           >
             <m.div

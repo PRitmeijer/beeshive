@@ -71,7 +71,6 @@ export interface ReservationDoc {
    * the other is not.
    */
   guestNote?: string | null;
-  occasion?: string | null;
   status?: string | null;
   guestToken?: string | null;
   guestResponses?: GuestResponseRow[] | null;
@@ -261,7 +260,6 @@ function asStatus(value: unknown): GuestPassStatus {
  *                  "My mother is recovering from chemo" is a note. It is not
  *                  for the group chat. Not to be confused with `guestNote`,
  *                  which is let through: see below.
- *   occasion     — the retired version of the same thing.
  *   name         — only `firstNameOf(name)` survives; the surname never does.
  *   id           — an id invites walking to the next one. Nothing on this page
  *                  needs it, so nothing on this page gets it.
@@ -276,6 +274,17 @@ function asStatus(value: unknown): GuestPassStatus {
  *   source       — bookkeeping.
  *   emailStatus, emailError, emailSentAt — bookkeeping, and the error text can
  *                  quote the booker's address verbatim.
+ *   confirmationEmailStatus, confirmationEmailError, confirmationEmailSentAt —
+ *                  the same bookkeeping again, for the confirmation the guest
+ *                  themselves is sent, and the same warning with more weight
+ *                  behind it: this is the mail addressed to the booker, so the
+ *                  address a failed send quotes back is always theirs. Whether
+ *                  the party has been written to is also simply not the party's
+ *                  business; the page tells them what was booked.
+ *   locale       — which language the booker filled the form in, and so which
+ *                  language the mail and this page were written in. A fact
+ *                  about one person rather than about the table, and of no use
+ *                  here anyway: the page takes its language from its own URL.
  *   createdAt, updatedAt — of no interest to a guest, and updatedAt would leak
  *                  when the owners last touched the row.
  *   guestResponses[].addedAt — nobody needs to know who answered last.
@@ -476,8 +485,17 @@ export function amsterdamInstant(date: string, time: string): Date | null {
   return new Date(naive - settled * 60_000);
 }
 
-/** How long the table is held: the row's own answer, or the house standard. */
-function sittingMinutes(
+/**
+ * How long the table is held: the row's own answer, or the house standard.
+ *
+ * Exported because two different things need it and only one of them used to.
+ * The calendar entry has always honoured a row's own `duration`; `hasPassed()`
+ * below did not, and could not, because it is handed the redacted view and the
+ * redaction drops `duration` on the floor. So a long table — the field goes up
+ * to eight hours, and a party of twelve on a Saturday is exactly what it is
+ * for — was declared over two hours in, while everybody was still eating.
+ */
+export function sittingMinutes(
   doc: ReservationDoc,
   settings: SiteSettingsData,
 ): number {
@@ -552,6 +570,24 @@ export function toIcsEvent(
 export function hasPassed(
   view: GuestPassView,
   settings: SiteSettingsData,
+  /**
+   * How long this particular table is held, when the caller knows.
+   *
+   * It very often does know something this function cannot: the redacted view
+   * carries no `duration`, so left to itself this falls back to the house
+   * standard and a table booked for four hours is called over after two. That
+   * was survivable while the past state was a single grey line under the
+   * booking. It stopped being survivable when the page started saying "bedankt
+   * voor jullie bezoek" — telling a party who are halfway through their meal
+   * that it was lovely to have had them is the page showing them the door.
+   *
+   * Optional rather than required so the callers that genuinely have no
+   * document — anything holding only the view — keep working unchanged and
+   * keep the old behaviour. Anything below a quarter of an hour is ignored,
+   * matching `sittingMinutes()`, because a zero here would be the one value
+   * that makes the answer wrong in the dangerous direction.
+   */
+  graceMinutes?: number,
 ): boolean {
   const today = todayInAmsterdam();
   if (!view.date) return false;
@@ -559,8 +595,87 @@ export function hasPassed(
   if (view.date > today) return false;
   if (!view.time) return false;
 
-  const [hours, minutes] = view.time.split(":").map(Number);
   const standard = settings.reservationDurationMinutes;
-  const grace = typeof standard === "number" && standard >= 15 ? standard : 120;
+  const house =
+    typeof standard === "number" && standard >= 15 ? standard : 120;
+  const grace =
+    typeof graceMinutes === "number" && graceMinutes >= 15
+      ? graceMinutes
+      : house;
+
+  const [hours, minutes] = view.time.split(":").map(Number);
   return nowMinutesInAmsterdam() > hours * 60 + minutes + grace;
+}
+
+
+/**
+ * The Google listing, but only when asking for a review is fair.
+ *
+ * The owners asked for this in one sentence — a link to the reviews "if they
+ * liked it" — and the hedge in it is the whole of the design. Three things
+ * have to be true before this page says a word about reviews, and each of them
+ * is a way of getting it wrong that is worse than never asking at all.
+ *
+ * The evening has to be over, and `isPast` is `hasPassed()` above and nothing
+ * else. That function already knows that today counts as past only once the
+ * sitting's own length has gone by, which matters here more than it does for a
+ * notice: a party still at the table at half past eight being thanked for a
+ * visit they are in the middle of is a page telling them to go home.
+ *
+ * The booking has to have been confirmed. A row still sitting at "nieuw" whose
+ * date has slipped by is not evidence that anybody ate here — it may well be a
+ * table that was never given, because nobody got round to ringing back, and
+ * asking that person to review their evening is presumptuous at best. They
+ * still get the thanks, which is a kindness that costs nothing if they did
+ * come; they do not get the ask. "geannuleerd" fails the same test with more
+ * force, though it never reaches this function: the page's cancelled branch
+ * wins over its past one, and that ordering is deliberate.
+ *
+ * And the URL has to be in Site Instellingen. The field's own description says
+ * an empty value means the owners do not want the block, so an empty value has
+ * to mean that here as well as on the contact page, or the setting is a lie.
+ *
+ * The answer is the URL rather than a boolean because the caller needs the
+ * link anyway, and two values that have to agree with each other are two
+ * values that eventually will not.
+ */
+export function reviewAskUrl(
+  view: GuestPassView,
+  isPast: boolean,
+  settings: SiteSettingsData,
+): string {
+  if (!isPast) return "";
+  if (view.status !== "bevestigd") return "";
+  return webUrl(settings.googleReviewUrl);
+}
+
+/**
+ * A CMS text field on its way into an `href`, or nothing.
+ *
+ * "Google Reviews URL" is a plain text field with no validation on it, so what
+ * comes back is whatever somebody pasted — and an `href` is one of the few
+ * places in a page where a string can still become executable. A owner who
+ * pastes something beginning `javascript:` gets it run, on a page whose URL is
+ * a credential and whose reader is a guest.
+ *
+ * That is not a likely accident and it never was the point. What makes it worth
+ * a function is that the field is edited by people who paste things from
+ * elsewhere, this page now puts it in front of a wider audience than the
+ * contact page ever did, and the check costs one parse. `data:` and `blob:` are
+ * refused by the same rule for the same reason; anything that will not parse as
+ * a URL at all — a half-typed address, a stray space, a Dutch sentence
+ * explaining where the link went — comes back empty and the block simply is
+ * not drawn, which is exactly what an empty field already means here.
+ */
+function webUrl(value: string | null | undefined): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw);
+    return parsed.protocol === "https:" || parsed.protocol === "http:"
+      ? raw
+      : "";
+  } catch {
+    return "";
+  }
 }

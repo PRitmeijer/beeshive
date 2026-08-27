@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AddToCalendar } from "@/components/AddToCalendar";
-import { socialLinks } from "@/components/SocialMarks";
+import { OutboundLinkTracker } from "@/components/AddToCalendarTracker";
+import { followLinks, socialLinks } from "@/components/SocialMarks";
 import { getSiteSettings } from "@/lib/payload";
 import { buildMetadata } from "@/lib/metadata";
 import { getDict } from "@/i18n/dictionaries";
@@ -16,6 +17,8 @@ import {
   guestPassUrl,
   hasPassed,
   redactForGuests,
+  reviewAskUrl,
+  sittingMinutes,
   toIcsEvent,
 } from "@/lib/guestPass";
 import { GuestPassClient } from "./GuestPassClient";
@@ -105,7 +108,16 @@ function LinkGone({
         <p className="mt-5 max-w-prose leading-relaxed text-hive-500">
           {t.guestPass.notFoundBody}
         </p>
-        <div className="mt-8 flex flex-wrap items-center gap-x-8 gap-y-3">
+        {/* Whoever is reading this was forwarded a link that did not survive
+            the trip, and the telephone number is the only thing on the sheet
+            that can still help them — so how often it is actually used is
+            worth knowing. This page is rendered on the server and has no
+            handler to hang that on; the wrapper hears the tap on its way past
+            and replaces the <div> that was here rather than adding one. */}
+        <OutboundLinkTracker
+          surface="guest_pass"
+          className="mt-8 flex flex-wrap items-center gap-x-8 gap-y-3"
+        >
           {phone ? (
             <a href={`tel:${phone.replace(/\s/g, "")}`} className="ink-link">
               {phone}
@@ -114,7 +126,7 @@ function LinkGone({
           <Link href={localeHref(locale, "/")} className="ink-link">
             {t.guestPass.backToSite}
           </Link>
-        </div>
+        </OutboundLinkTracker>
       </div>
     </section>
   );
@@ -135,6 +147,27 @@ export default async function GuestPassPage({ params }: PageProps) {
   const view = redactForGuests(doc);
   const event = toIcsEvent(doc, s, locale);
 
+  // Resolved on the server: `new Date()` during a client render is the
+  // hydration hazard this whole codebase keeps out of components. Hoisted out
+  // of the JSX below because the review ask is decided against the same
+  // answer, and two readings of the clock a few lines apart is how a page ends
+  // up thanking somebody it has just told to come on Saturday.
+  //
+  // The sitting length is passed in from the document rather than left to the
+  // house standard, because the view handed to `hasPassed` has had `duration`
+  // redacted out of it and a long table would otherwise be declared over after
+  // the usual two hours — with the party still at it, reading a page that
+  // thanks them for having come.
+  const isPast = hasPassed(view, s, sittingMinutes(doc, s));
+
+  // "" whenever this party should not be asked for a review — the evening is
+  // still ahead of them, the booking was never confirmed, or the owners left
+  // the field empty. All three live in reviewAskUrl(), so the client has one
+  // thing to check rather than three to get right. Held in a name because the
+  // row of marks at the foot of the page turns on the same answer, and asking
+  // twice is how the two of them end up disagreeing.
+  const reviewUrl = reviewAskUrl(view, isPast, s);
+
   /**
    * <AddToCalendar> is a server component so that @/lib/ics never reaches the
    * browser bundle, and <GuestPassClient> is a client component because a copy
@@ -154,9 +187,8 @@ export default async function GuestPassPage({ params }: PageProps) {
       locale={locale}
       token={token}
       view={view}
-      // Resolved on the server: `new Date()` during a client render is the
-      // hydration hazard this whole codebase keeps out of components.
-      isPast={hasPassed(view, s)}
+      isPast={isPast}
+      reviewUrl={reviewUrl}
       shareUrl={guestPassUrl(locale, token)}
       siteName={s.siteName}
       addressLines={addressLines(s)}
@@ -179,7 +211,14 @@ export default async function GuestPassPage({ params }: PageProps) {
         s.aboutImage?.sizes?.card?.url || s.aboutImage?.url || ""
       }
       welcomeImageAlt={s.aboutImage?.alt ?? ""}
-      socials={socialLinks(s)}
+      // The same row of marks the footer prints, except on a sheet that has
+      // already asked for a review. `socialLinks` is the accounts you can
+      // follow plus the Google listing, and on a thanked pass that listing is
+      // the exact destination the ask at the top points at — so the guest was
+      // being handed the same link twice, forty lines apart, which is the
+      // opposite of the said-once-at-the-door restraint the ask is written to
+      // have. `followLinks` is that row with the listing left out.
+      socials={reviewUrl ? followLinks(s) : socialLinks(s)}
       dietaryOptions={(s.guestPassDietary ?? [])
         .map((row) => row?.label?.trim() ?? "")
         .filter(Boolean)}

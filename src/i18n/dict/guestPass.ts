@@ -29,6 +29,25 @@
  * is one, which is why it takes three arguments and lays them out over
  * paragraphs rather than running them into one sentence.
  *
+ * The `past*` keys and the three `review*` keys are the page after the fact.
+ * Once the evening has been and gone the pass stops being a booking and
+ * becomes a thank-you — people leave the tab open in a coat pocket and open it
+ * again on the tram home — so `pastHeading` and `pastWelcomeBack` carry the
+ * page where `subheading` normally does, `pastNotice` is the line under them,
+ * and `pastDetailsHeading` and `attendingPast` are the same two blocks as
+ * before written in the tense they are now read in. The review ask is offered
+ * and not pressed: `reviewAsk` says "if you liked it" out loud and gives the
+ * other answer somewhere to go, because a request that only has a yes in it is
+ * not a request. No stars, no counting of minutes.
+ *
+ * `followOnlyHint` belongs to the same afternoon. The marks at the foot of the
+ * pass are introduced by `followHint`, which offers "or read what guests wrote
+ * about us" — and that half of the line points at the Google listing, which is
+ * the very thing the ask above has already offered. On a sheet that carries the
+ * ask the listing is left out of the row, so the line above it has to stop
+ * promising it; anywhere else, and on a pass with no ask at all, `followHint`
+ * is still the line.
+ *
  * `houseNoteLabel` heads the one piece of free text on the page: the line the
  * owners wrote to the whole party in the admin. It sits with the date and the
  * address because that is what it is, part of the booking. Nothing runs the
@@ -42,6 +61,7 @@ export const guestPassNl = {
   welcomeHeading: "Welkom bij ons",
   seeMenu: "Bekijk de kaart",
   followHint: "Volg ons, of lees wat gasten over ons schreven.",
+  followOnlyHint: "Volg ons hier ook.",
   subheading: (name: string) => `${name} heeft gereserveerd`,
   notFound: "Deze link werkt niet meer",
   notFoundBody:
@@ -62,6 +82,15 @@ export const guestPassNl = {
   guestsUnknown: "niet doorgegeven",
   houseNoteLabel: "Nog even dit",
   pastNotice: "Deze avond is geweest. Leuk dat jullie er waren.",
+  pastHeading: "Bedankt voor jullie bezoek",
+  pastWelcomeBack:
+    "Kom gerust nog eens langs, dan zetten we weer een tafel voor jullie klaar.",
+  pastDetailsHeading: "Wat jullie geboekt hadden",
+  attendingPast: "Wie erbij waren",
+  reviewHeading: "Was het een fijne avond?",
+  reviewAsk:
+    "Als het jullie beviel, schrijf dan gerust even iets op Google. En zo niet, dan horen we het liever rechtstreeks van jullie.",
+  reviewLink: "Een review achterlaten",
   cancelledNotice:
     "Deze reservering is geannuleerd. Bel ons als dat niet klopt.",
   addToCalendar: "Zet in mijn agenda",
@@ -127,6 +156,7 @@ export const guestPassEn: GuestPassDict = {
   welcomeHeading: "Welcome",
   seeMenu: "See the menu",
   followHint: "Follow along, or read what our guests have written.",
+  followOnlyHint: "You can follow along here too.",
   subheading: (name: string) => `${name} made the booking`,
   notFound: "This link no longer works",
   notFoundBody:
@@ -147,6 +177,14 @@ export const guestPassEn: GuestPassDict = {
   guestsUnknown: "not given",
   houseNoteLabel: "One more thing",
   pastNotice: "This evening has been and gone. Lovely to have had you.",
+  pastHeading: "Thank you for coming",
+  pastWelcomeBack: "Come by again sometime and we will lay a table for you.",
+  pastDetailsHeading: "What you had booked",
+  attendingPast: "Who was there",
+  reviewHeading: "Was it a good evening?",
+  reviewAsk:
+    "If you enjoyed it, you are welcome to say so on Google. And if you did not, we would sooner hear it from you directly.",
+  reviewLink: "Leave a review",
   cancelledNotice:
     "This booking has been cancelled. Give us a ring if that is not right.",
   addToCalendar: "Add to my calendar",

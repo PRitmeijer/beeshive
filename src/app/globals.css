@@ -134,7 +134,14 @@
        site is underneath a bar that is always there and, on the landing page,
        is still moving. Reserve the bar, the banner above it and the strip of
        screen iOS keeps for the status bar, so a jump lands the heading in the
-       reader's eyeline instead of behind the chrome. */
+       reader's eyeline instead of behind the chrome.
+
+       Stated once, here, and deliberately not restated as a `scroll-margin`
+       on the elements that get scrolled to: the two add up. A heading wearing
+       both lands two chrome-heights down the screen — measured at 192px on a
+       390-wide phone against the 96px this alone produces — which is a hole
+       where the answer should be. See the note beside the "Hoe laat" heading
+       in TimeBand, where that was tried. */
     scroll-padding-top: calc(
       var(--notice-h, 0px) + var(--nav-h) + env(safe-area-inset-top, 0px) + 1rem
     );
@@ -381,6 +388,34 @@
     @apply font-display text-[0.95rem] md:text-base font-normal text-hive-700 tabular-nums whitespace-nowrap;
   }
 
+  /* One printed section of the card — a category rank and the dishes under
+     it. A full card is six or seven of these and some six thousand pixels
+     tall, of which a phone is showing about eight hundred; laying out and
+     painting the rest of it before anyone has scrolled to it is work done for
+     nobody. `content-visibility: auto` lets the browser skip a section it
+     cannot see and do it when it comes near.
+
+     The intrinsic size is the half of this that is not optional. Without it a
+     skipped section measures zero, the page collapses to a fraction of its
+     height, and the scrollbar and the scroll position jump about as sections
+     come into view — which is a far worse page than a slow one.
+
+     The number is 320px because that is a little under what the real sections
+     measure: laid out on a phone they come to between 239px and 377px. It
+     errs short on purpose. `auto` only replaces the guess with the real height
+     once a section has actually been laid out, so everything still below the
+     fold is contributing the guess and nothing else; guess high and the
+     document starts taller than it will ever be and shrinks under the reader
+     as they scroll, which is the very drift this line is here to prevent.
+     Guessing a little low leaves the page growing slightly instead, and a
+     scrollbar that gives ground is far less alarming than one that takes it.
+     This stood at 600px on the theory that a rank holds a header and five or
+     six dishes; the sections were then measured and they do not. */
+  .menu-section {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 320px;
+  }
+
   /* Retained as an invisible flexible spacer so any leftover markup still
      pushes its price to the right margin. The dots are gone deliberately. */
   .dot-leader {
@@ -472,6 +507,110 @@
     padding-top: max(0px, calc(env(safe-area-inset-top, 0px) - var(--notice-h, 0px)));
   }
 
+  /* ---- The booking calendar and the sittings ----------------------------
+     Both controls were native <select> elements, and the date one held up to
+     ninety options: on a phone, a scroll wheel with ninety entries in it, no
+     sense of which week you are in, and no way to see that the Sunday you
+     wanted is shut without spinning past it. Quarter-hour sittings would have
+     made the time one about forty. So they are a month grid and a row of chips
+     now, and everything below is what keeps that printed rather than drawn in
+     the browser's own furniture.
+
+     There is no box anywhere in here. A day is a numeral; a sitting is a
+     numeral over a rule. What changes between the states is the ink and what
+     is struck through it, which is how a diary marks a day off and how the
+     rest of this sheet already behaves. */
+
+  .cal-day {
+    @apply relative flex h-full w-full items-center justify-center py-2
+           font-body text-[0.9rem] text-hive-700 transition-colors duration-200 ease-settle;
+    font-feature-settings: "tnum" 1, "kern" 1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Open, and the only state that responds to a pointer. */
+  .cal-day[data-state="open"]:hover {
+    @apply bg-hive-700/[0.08];
+  }
+
+  /* Three states, one grey, on purpose. Shut, already gone by, and further
+     ahead than we take bookings are three different sentences and they are all
+     the same picture: pale ink, and nothing struck off, because there was never
+     a sitting there to strike off. A guest scanning the month is looking for
+     the days they can press, and drawing three shades of "not this one" would
+     ask them to learn a key before they could read the sheet. The difference is
+     carried in the label — "gesloten", "geweest", "nog niet te reserveren" —
+     where the reader who needs it is the reader who is being read to.
+
+     Full is the one unpressable state that does get its own treatment, a rule
+     below, and that is the distinction worth the ink: a full day is the café
+     being open and having no room, which is the only one of them somebody may
+     want to ring about. */
+  .cal-day[data-state="closed"],
+  .cal-day[data-state="past"],
+  .cal-day[data-state="beyond"] {
+    @apply cursor-default text-hive-300/70;
+  }
+
+  /* Full: struck through, in ink a shade stronger than a shut day's. The two
+     must not look alike — a shut day sends the guest to another day, a full
+     one to another day as well but for a reason they may want to ring about,
+     and a guest who cannot tell them apart taps the square again. */
+  .cal-day[data-state="full"] {
+    @apply cursor-default text-hive-400/80 line-through decoration-hive-400/70;
+    text-decoration-thickness: 1px;
+  }
+
+  /* The day being asked for. Terracotta, as the printed category bars are:
+     the one place on this sheet where ink is laid down solid. */
+  .cal-day[aria-pressed="true"] {
+    @apply bg-clay-500 text-paper;
+  }
+
+  /* Today, when it is not the chosen day: a printer's rule under the numeral
+     rather than a ring around it. */
+  .cal-day[data-today="true"]:not([aria-pressed="true"])::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: 0.3rem;
+    width: 0.85rem;
+    height: 1px;
+    transform: translateX(-50%);
+    background: currentColor;
+    opacity: 0.5;
+  }
+
+  /* One sitting. The rule under it is the field rule the rest of the form
+     sits on, so a row of these reads as part of the same printing. */
+  .slot-chip {
+    @apply inline-flex items-center justify-center rounded-none border-0 border-b
+           border-hive-700/25 px-2.5 py-1.5 font-body text-[0.9rem] text-hive-700
+           transition-colors duration-200 ease-settle;
+    font-feature-settings: "tnum" 1, "kern" 1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .slot-chip:not([aria-disabled="true"]):hover {
+    @apply border-honey-400 bg-hive-700/[0.06];
+  }
+
+  /* There were two more rules here, for a taken sitting and for the chosen
+     one, and both were keyed on an ARIA attribute because the chips were
+     buttons wearing `role="radio"`. They are real radio inputs now, with the
+     input visually hidden inside its own label, so the ink follows the
+     browser's own `:checked` through Tailwind's `peer` at the call site and
+     there is nothing left for a selector here to hang on.
+
+     The taken sitting has gone further than that: it is not drawn at all any
+     more. On a phone an evening filling up was forty targets of which thirty
+     were refusals, and a sentence naming them — "Vol om 19:00 en 19:30." —
+     says the same thing without asking anybody to press it. On a nearly full
+     Saturday that sentence runs to four lines rather than one, which is the
+     price of naming every sitting that has gone rather than counting most of
+     them; the reasoning is written out beside the line itself in TimeBand.
+     Everything printed as a chip can be pressed. */
+
   }
 
 /* ==========================================================================
@@ -547,6 +686,55 @@
   }
 }
 
+/* Changing rank on the menu card.
+
+   Tapping a category used to hand the whole card to AnimatePresence under a
+   new key, which is a polite way of saying React threw away every dish, every
+   price and every dietary mark on the sheet and built a fresh set — some
+   thirteen hundred elements on a full card — and the deckle filter then had
+   to re-render the lot at a new height. That is where the stall on the tap
+   came from. The card is now one element that stays where it is; only which
+   sections carry `hidden` changes.
+
+   Which leaves the fade to do here, in two phases, because the old selection
+   has to be gone before the new one arrives — `mode="wait"` is what that was
+   called before. Out is a transition, so the component can be told when it has
+   finished and swap the dishes over at that exact moment. In is `hero-rise`,
+   the same keyframe the card opens the page with, because it is the same
+   movement: up ten pixels, a quarter of a second, the settle curve.
+   Transitions are off during the second phase so the two never fight over the
+   same two properties.
+
+   The travel is what framer-motion was given — exit to -8px, enter from +10px
+   — and the timing is not, any more. Both phases ran for seven tenths of a
+   second each, which is one and two fifths of a second between tapping a
+   category and being able to read the dishes under it, on the one control this
+   page has and on a page people tap through four or five ranks of. The owner's
+   words for it were that it is quite annoying, and they are right: at that
+   length the fade stops reading as the sheet turning over and starts reading
+   as the site thinking. A quarter of a second each way is still plainly a
+   movement — same curve, same distances, same two phases — and it is over
+   before anybody has time to wonder whether the tap landed.
+
+   If either number moves again, the backstop in KaartClient.tsx has to move
+   with it. It waits for the out phase and then commits regardless; set shorter
+   than the transition, it commits halfway through the fade. */
+.menu-swap {
+  transition: opacity 0.25s var(--ease-settle),
+    transform 0.25s var(--ease-settle);
+}
+
+.menu-swap[data-swap="out"] {
+  opacity: 0;
+  transform: translate3d(0, -8px, 0);
+}
+
+.menu-swap[data-swap="in"] {
+  --rise-travel: 10px;
+  transition: none;
+  animation: hero-rise 0.25s var(--ease-settle) both;
+}
+
 /* The scroll cue at the foot of the hero, breathing.
 
    The only animation on the site that never ends, which is exactly why it
@@ -614,6 +802,27 @@
      an invisible hero. Named explicitly so it simply starts there. */
   .hero-rise {
     animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  /* KaartClient skips the two-phase swap outright when motion is reduced and
+     changes the rank in one go, so this should never have anything to catch.
+     It is here as the backstop, because the one failure mode that matters on
+     this page is a card left sitting at opacity 0.
+
+     The second selector is not redundant. Bare `.menu-swap` weighs less than
+     `.menu-swap[data-swap="out"]` above and would lose to it, so the
+     attribute has to be named here too — and then the two tie exactly, at
+     (0,2,0), because an attribute selector counts for precisely as much as a
+     class does. Nothing about specificity settles it. This block wins on
+     source order alone, so it has to stay below the `.menu-swap[data-swap=…]`
+     rules; move it above them and the card is back to sitting at opacity
+     nought with nothing to say so. */
+  .menu-swap,
+  .menu-swap[data-swap] {
+    animation: none;
+    transition: none;
     opacity: 1;
     transform: none;
   }

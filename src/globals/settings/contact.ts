@@ -221,7 +221,10 @@ export const contactTab: Tab = {
         description:
           "Link naar jullie Google-vermelding, waar gasten de beoordelingen lezen "
           + "en er zelf een achterlaten. Ga naar Google Maps → jullie zaak → Delen "
-          + "→ Link kopiëren. Laat leeg als je dit blok niet op de contactpagina wilt.",
+          + "→ Link kopiëren. Deze link staat op twee plekken: op de contactpagina, "
+          + "en onder het bedankje op de reserveringspagina dat gasten te zien "
+          + "krijgen als hun avond geweest is. Laat leeg als je er niet om wilt "
+          + "vragen; dan verdwijnt hij op allebei die plekken.",
       },
     },
     {

@@ -23,16 +23,23 @@ const compat = new FlatCompat({ baseDirectory: dirname(fileURLToPath(import.meta
 const config = [
   {
     /**
-     * Two of these are build output; the other two are generated files that
+     * Three of these are build output; the other two are generated files that
      * happen to be committed. `src/payload-types.ts` is written by
      * `npm run generate:types` and `importMap.js` by
      * `npm run generate:importmap`, both wholesale, so a complaint about
      * either is a complaint about a generator we do not control and cannot
      * act on without losing it at the next regeneration.
+     *
+     * `coverage/` is the v8 reporter's HTML output from `npm run test:coverage`.
+     * It ships vendored copies of prettify.js and a couple of sorters, and
+     * linting them turns a coverage run into three warnings from files nobody
+     * wrote — harmless today, but a lint step run with --max-warnings=0 would
+     * start failing on whether somebody happened to measure coverage first.
      */
     ignores: [
       ".next/**",
       "node_modules/**",
+      "coverage/**",
       "src/payload-types.ts",
       "src/app/(payload)/admin/importMap.js",
     ],

@@ -3,6 +3,7 @@ import type {
   Field,
   Payload,
   PayloadRequest,
+  SelectField,
   TypeWithID,
 } from "payload";
 
@@ -74,6 +75,21 @@ import type {
  * The hook also never throws. Payload surfaces a thrown afterChange as a
  * failed save, which would mean a mail outage rolling back into the admin as
  * "your change was not saved" — the exact opposite of what this module is for.
+ *
+ * One collection may owe more than one message. A reservation owes the owners
+ * a heads-up the moment it arrives and the guest a confirmation the moment the
+ * owners say yes, and those two have nothing to do with each other: they go to
+ * different people, at different times, and either can fail while the other
+ * succeeded. So each message keeps a bookkeeping trio of its very own, named
+ * when the fields and the hook are built, and every sentence above holds once
+ * per trio rather than once per collection. Two badges in the sidebar, two
+ * retries, two honest answers to "did that go out?". What the trios must never
+ * do is read each other's status, which is why the field names are threaded
+ * through instead of being written out in the body of the send.
+ *
+ * SKIP_OUTBOUND_EMAIL, on the other hand, stays one flag for all of them, and
+ * that is deliberate too. It marks a write that must not announce itself, and
+ * a write that must not announce itself must not announce itself twice.
  */
 
 /** The flag that marks a write which must not announce itself. */
@@ -81,30 +97,97 @@ export const SKIP_OUTBOUND_EMAIL = "skipOutboundEmail";
 
 export type EmailState = "pending" | "sent" | "failed" | "skipped";
 
+/** Declared order, because it is the order the owners read in the dropdown. */
+const EMAIL_STATES: EmailState[] = ["pending", "sent", "failed", "skipped"];
+
+const STATE_LABELS: Record<EmailState, string> = {
+  pending: "In de wachtrij",
+  sent: "Verstuurd",
+  failed: "Mislukt",
+  skipped: "Niet verstuurd",
+};
+
+/**
+ * Which three columns hold one message's bookkeeping.
+ *
+ * A second message on the same collection cannot share the first one's fields
+ * without the two of them settling on top of each other, so the names travel
+ * together as one object and are handed to both halves of the arrangement: the
+ * fields that store the state, and the hook that reads and writes it. Getting
+ * them out of step is the one mistake this shape is meant to make impossible,
+ * which is why they are a single value rather than three arguments.
+ */
+export interface EmailFieldNames {
+  status: string;
+  error: string;
+  sentAt: string;
+}
+
+/** The original three, still the answer for any collection with one message. */
+const DEFAULT_FIELD_NAMES: EmailFieldNames = {
+  status: "emailStatus",
+  error: "emailError",
+  sentAt: "emailSentAt",
+};
+
 interface EmailStateOverrides {
+  /** The three column names, when this is not a collection's only message. */
+  names?: EmailFieldNames;
   /** Dutch label, when a collection wants to name the mail it sends. */
   label?: string;
   /** Replaces the standard admin explanation. */
   description?: string;
   defaultValue?: EmailState;
+  /**
+   * Renames single entries in the dropdown.
+   *
+   * "Niet verstuurd" is honest for a message that was owed and then turned out
+   * not to be, which is what "skipped" means for the owners' notification. For
+   * a mail that is only owed once somebody presses Bevestigd it reads as a
+   * fault report on a row where nothing has gone wrong yet, and the owners
+   * would spend a fortnight looking for the breakage. Per-value, because the
+   * other three still mean exactly what they say.
+   */
+  optionLabels?: Partial<Record<EmailState, string>>;
+  /** Names the other two fields, so a second trio is not three anonymous
+   *  repeats of "Foutmelding" and "Verstuurd op" further down the sidebar. */
+  errorLabel?: string;
+  sentAtLabel?: string;
+  /**
+   * Takes the trio out of the admin without taking it out of the database.
+   *
+   * For a message that is built but deliberately not part of a release yet.
+   * Three sidebar panels reporting on a mail that cannot be sent are three
+   * invitations to file a bug against a feature nobody switched on — and the
+   * columns must stay, because the day it is switched on the rows that were
+   * written meanwhile have to still make sense.
+   */
+  hidden?: boolean;
 }
 
 /**
- * The status of the outgoing mail belonging to this document. Never localized:
- * it is bookkeeping, not content, and there is only one of it per row.
+ * The status of one outgoing mail belonging to this document. Never localized:
+ * it is bookkeeping, not content, and it holds the same one answer whichever
+ * language the row is read in.
+ *
+ * Typed as the select it is rather than as a `Field`, so that a collection
+ * which needs to hang a hook on this one field can spread it and add one
+ * without the union getting in the way. The arming hook in Reservations.ts is
+ * the reason that matters.
  */
-export const emailStateField = (overrides: EmailStateOverrides = {}): Field => ({
-  name: "emailStatus",
+export const emailStateField = (
+  overrides: EmailStateOverrides = {},
+): SelectField => ({
+  name: (overrides.names ?? DEFAULT_FIELD_NAMES).status,
   label: overrides.label ?? "Verzendstatus",
   type: "select",
-  options: [
-    { label: "In de wachtrij", value: "pending" },
-    { label: "Verstuurd", value: "sent" },
-    { label: "Mislukt", value: "failed" },
-    { label: "Niet verstuurd", value: "skipped" },
-  ],
+  options: EMAIL_STATES.map((value) => ({
+    label: overrides.optionLabels?.[value] ?? STATE_LABELS[value],
+    value,
+  })),
   defaultValue: overrides.defaultValue ?? "pending",
   admin: {
+    hidden: overrides.hidden ?? false,
     position: "sidebar",
     description:
       overrides.description ??
@@ -113,11 +196,12 @@ export const emailStateField = (overrides: EmailStateOverrides = {}): Field => (
 });
 
 /** What went wrong, in the mail server's own words. Only filled on a failure. */
-export const emailErrorField = (): Field => ({
-  name: "emailError",
-  label: "Foutmelding",
+export const emailErrorField = (overrides: EmailStateOverrides = {}): Field => ({
+  name: (overrides.names ?? DEFAULT_FIELD_NAMES).error,
+  label: overrides.errorLabel ?? "Foutmelding",
   type: "textarea",
   admin: {
+    hidden: overrides.hidden ?? false,
     position: "sidebar",
     readOnly: true,
     description:
@@ -126,11 +210,12 @@ export const emailErrorField = (): Field => ({
 });
 
 /** When the mail actually left, as opposed to when the row was created. */
-export const emailSentAtField = (): Field => ({
-  name: "emailSentAt",
-  label: "Verstuurd op",
+export const emailSentAtField = (overrides: EmailStateOverrides = {}): Field => ({
+  name: (overrides.names ?? DEFAULT_FIELD_NAMES).sentAt,
+  label: overrides.sentAtLabel ?? "Verstuurd op",
   type: "date",
   admin: {
+    hidden: overrides.hidden ?? false,
     position: "sidebar",
     readOnly: true,
     date: { pickerAppearance: "dayAndTime" },
@@ -140,7 +225,11 @@ export const emailSentAtField = (): Field => ({
 /** The three bookkeeping fields together, for spreading into a field list. */
 export const outboundEmailFields = (
   overrides: EmailStateOverrides = {},
-): Field[] => [emailStateField(overrides), emailErrorField(), emailSentAtField()];
+): Field[] => [
+  emailStateField(overrides),
+  emailErrorField(overrides),
+  emailSentAtField(overrides),
+];
 
 type Builder<T, R> = (doc: T, payload: Payload) => R | Promise<R>;
 
@@ -152,6 +241,19 @@ export interface OutboundEmailOptions<T> {
   body: Builder<T, string>;
   /** Usually the guest, so hitting reply answers the right person. */
   replyTo?: Builder<T, string | null | undefined>;
+  /** Which three columns this message keeps its bookkeeping in. Leave it out
+   *  and it is the collection's only message, in the original three. */
+  fields?: EmailFieldNames;
+  /**
+   * What the owners are told when `to` comes back empty.
+   *
+   * The default sends them to Site Instellingen, which is exactly right for a
+   * notification addressed to the house and exactly wrong for a mail addressed
+   * to a guest: there is no setting on that screen that will conjure up an
+   * e-mail address the guest never gave. A message that knows better says so
+   * itself, in the sidebar, where the row is already open.
+   */
+  skipReason?: string;
 }
 
 /**
@@ -165,6 +267,69 @@ const COMMIT_WAIT_MS = 30_000;
 
 /** Short enough to be invisible next to an SMTP round trip. */
 const COMMIT_POLL_MS = 10;
+
+/**
+ * One delivery at a time per document, and it took a measurement to learn why.
+ *
+ * Two messages on one row used to be something that could not happen at the
+ * same moment: the owners' notification armed on the create, and the guest's
+ * confirmation armed on a much later update, hours or days afterwards.
+ * Automatic confirmation ended that. In `auto` the endpoint writes both
+ * `pending` columns on the same create, so both hooks fire on the same write,
+ * both wake off the same commit, and both finish by recording their outcome.
+ *
+ * Recording the outcome is the part that does not survive the overlap.
+ * `settle()` below calls `payload.update`, and a Payload update is not a patch
+ * of the columns handed to it: the operation merges that data over the document
+ * it read when it started and writes the whole row back. Two settles that
+ * overlap are therefore two read-modify-write cycles on one row, and whichever
+ * finishes second carries a copy of the other's column from before the other
+ * had written it.
+ *
+ * This was not reasoned about, it was run. Two concurrent `payload.update`
+ * calls against one reservation, one setting the owner trio and one setting the
+ * confirmation trio, on this schema and this adapter: `emailStatus` came back
+ * "sent" and `confirmationEmailStatus` came back "pending" — a confirmation
+ * that really had been sent, on a row still saying it was owed.
+ *
+ * Which is worse than a lost note, because "pending" is the arming state. The
+ * next unrelated save — an owner fixing a typo in the notes a week later —
+ * hands the row back to this module, which reads "pending", believes the mail
+ * is owed, and sends the guest a second confirmation. That is precisely the
+ * double-send SKIP_OUTBOUND_EMAIL exists to prevent, arriving through a door
+ * the flag does not cover.
+ *
+ * The fix is the smallest one that removes the overlap instead of trying to win
+ * it: deliveries for the same document queue behind one another. The second one
+ * then does its re-read after the first has committed, sees the row as it
+ * really is, and writes a merge that already contains the first one's column.
+ *
+ * A promise chain in a Map rather than a lock, because there is nothing here
+ * that could deadlock — every delivery already swallows its own failures, so a
+ * link can never be left unresolved. The key carries the collection as well as
+ * the id, since ids are only unique within one.
+ *
+ * What this does not protect against is two processes. The chain lives in this
+ * module's memory, exactly as the rate limiter's map does next door, so a
+ * second container would have a second chain and the two could overlap again.
+ * That is the same single-long-lived-server assumption the rest of this file
+ * already rests on, written down here rather than discovered later.
+ */
+const deliveries = new Map<string, Promise<void>>();
+
+function afterPreviousDelivery(key: string, work: () => Promise<void>): void {
+  const previous = deliveries.get(key) ?? Promise.resolve();
+  // `work` swallows everything, but the chain must not be breakable even so:
+  // one rejected link would strand every delivery queued behind it.
+  const next = previous.then(work, work);
+  deliveries.set(key, next);
+  // Keeps the map from growing a key per document for the life of the process.
+  // Only the tail clears itself, so a delivery queued in the meantime keeps the
+  // chain it is waiting on.
+  void next.finally(() => {
+    if (deliveries.get(key) === next) deliveries.delete(key);
+  });
+}
 
 /**
  * Resolves once the write that fired the hook is over, either way.
@@ -204,8 +369,15 @@ export function sendOnChange<T extends TypeWithID = TypeWithID>(
     // scheduled either.
     if (req.context?.[SKIP_OUTBOUND_EMAIL]) return doc;
 
-    const current = doc as T & { emailStatus?: EmailState | null };
-    if (current.emailStatus !== "pending") return doc;
+    const names = options.fields ?? DEFAULT_FIELD_NAMES;
+    /** This message's own status, and never the other message's. */
+    const stateOf = (row: unknown) =>
+      (row as Record<string, unknown> | null | undefined)?.[names.status] as
+        | EmailState
+        | null
+        | undefined;
+
+    if (stateOf(doc) !== "pending") return doc;
 
     const { payload } = req;
     const slug = collection.slug;
@@ -243,14 +415,14 @@ export function sendOnChange<T extends TypeWithID = TypeWithID>(
         return;
       }
 
-      let record: T & { emailStatus?: EmailState | null };
+      let record: T;
       try {
         record = (await payload.findByID({
           collection: slug,
           id,
           depth: 0,
           overrideAccess: true,
-        })) as unknown as T & { emailStatus?: EmailState | null };
+        })) as unknown as T;
       } catch (error) {
         // Almost always a rollback: the row the hook was holding never made it
         // to disk, so there is nothing to announce and nowhere to write that
@@ -266,14 +438,15 @@ export function sendOnChange<T extends TypeWithID = TypeWithID>(
       // Checked again on the stored values rather than on the in-flight
       // document: between the hook firing and the commit landing, a second
       // save may already have settled this one.
-      if (record.emailStatus !== "pending") return;
+      if (stateOf(record) !== "pending") return;
 
       try {
         const to = await options.to(record, payload);
         if (!to) {
           await settle({
-            emailStatus: "skipped",
-            emailError:
+            [names.status]: "skipped",
+            [names.error]:
+              options.skipReason ??
               "Geen ontvanger ingesteld (Site Instellingen -> Contact).",
           });
           return;
@@ -291,23 +464,28 @@ export function sendOnChange<T extends TypeWithID = TypeWithID>(
         });
 
         await settle({
-          emailStatus: "sent",
-          emailError: null,
-          emailSentAt: new Date().toISOString(),
+          [names.status]: "sent",
+          [names.error]: null,
+          [names.sentAt]: new Date().toISOString(),
         });
       } catch (error) {
         console.error(`${slug} email send failed`, error);
         await settle({
-          emailStatus: "failed",
-          emailError: error instanceof Error ? error.message : String(error),
+          [names.status]: "failed",
+          [names.error]: error instanceof Error ? error.message : String(error),
         });
       }
     };
 
     // Started, not awaited. The commit this is waiting for cannot happen until
     // the hook has returned, so awaiting it here would be waiting on itself.
-    // `deliver` swallows everything, which is what makes a bare `void` safe.
-    void deliver();
+    // `deliver` swallows everything, which is what makes this safe to abandon.
+    //
+    // Queued behind any delivery already running for this same document rather
+    // than started outright: in automatic mode both mails arm on one write, and
+    // two overlapping settles leave one of them recorded as still owed. See
+    // `afterPreviousDelivery` above for the measurement.
+    afterPreviousDelivery(`${slug}:${id}`, deliver);
 
     return doc;
   };

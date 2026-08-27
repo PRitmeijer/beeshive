@@ -9,6 +9,15 @@ import { WelcomeBlock } from "@/components/WelcomeBlock";
 import type { SocialLink } from "@/components/SocialMarks";
 import { getDict } from "@/i18n/dictionaries";
 import { localeHref, type Locale } from "@/i18n/config";
+/*
+ * From @/lib/guestPassStage and NOT from @/lib/guestPass, which is the same
+ * function and a different bundle. @/lib/guestPass reaches Payload, and Payload
+ * reaches nodemailer, and nodemailer reaches `fs` — so a value taken from there
+ * by this client component stops the production build outright. Types are fine
+ * either way, because they are erased; functions are not. Neither tsc nor the
+ * test suite notices, which is why this is written down here.
+ */
+import { passStage } from "@/lib/guestPassStage";
 import type { GuestResponseView, GuestPassView } from "@/lib/guestPass";
 import { EVENTS, track } from "@/lib/umami";
 
@@ -20,6 +29,14 @@ import { EVENTS, track } from "@/lib/umami";
  * way down, in the order somebody actually wants it: what and when, then into
  * the calendar, then how to get there, then pass it on, and only at the bottom
  * the optional business of saying what you do not eat.
+ *
+ * That order holds while there is still an evening to come. Once it has been
+ * and gone the same page turns into a thank-you: the booking somebody already
+ * knows about drops to a demoted line further down, the thanks and the offer
+ * of a review take the top of the sheet, and everything that only makes sense
+ * beforehand — the calendar, the map, the directions, the button that sends
+ * the link on to nine more people — is simply not drawn. Nobody navigates
+ * here; they left the tab open and found it again.
  *
  * There is no motion in here at all. Everything else on the site fades its
  * sections in, but this one is read once, quickly, on a connection that is
@@ -48,6 +65,15 @@ interface Props {
   view: GuestPassView;
   /** Decided on the server, against the café's own clock. */
   isPast: boolean;
+  /**
+   * The café's Google listing, and "" far more often than not. Whether this
+   * party may be asked for a review at all is settled on the server by
+   * `reviewAskUrl` in @/lib/guestPass — the evening has to be over, the
+   * booking has to have been confirmed, and the owners have to have filled the
+   * field in — so "" here means say nothing about reviews, not merely that
+   * there is no link to hand.
+   */
+  reviewUrl: string;
   shareUrl: string;
   siteName: string;
   addressLines: string[];
@@ -61,7 +87,13 @@ interface Props {
   welcomeText: string;
   welcomeImageUrl: string;
   welcomeImageAlt: string;
-  /** Site Instellingen → Contact, plus the Google listing. May be empty. */
+  /**
+   * Site Instellingen → Contact, as marks for the row at the foot. The Google
+   * listing is normally among them and is deliberately not when `reviewUrl` is
+   * set: the ask above has already offered that exact link, and the page said
+   * it once on purpose. Decided on the server, in page.tsx, because that is
+   * where both halves of the pair are already in hand. May be empty.
+   */
   socials: SocialLink[];
   dietaryOptions: string[];
   drinkOptions: string[];
@@ -173,6 +205,7 @@ export function GuestPassClient({
   token,
   view,
   isPast,
+  reviewUrl,
   shareUrl,
   siteName,
   addressLines,
@@ -193,12 +226,19 @@ export function GuestPassClient({
   const dict = getDict(locale);
   const t = dict.guestPass;
 
-  // No properties at all. The token is the one thing this page has that
-  // nothing else does, and it is exactly the thing that must never leave it —
-  // a token in an analytics property is the reservation handed to a third
-  // party. That the page was opened is the whole measurement.
+  /**
+   * The stage, and nothing whatever beside it.
+   *
+   * The token is the one thing this page has that nothing else does, and it is
+   * exactly the thing that must never leave it — a token in an analytics
+   * property is the reservation handed to a third party. Nothing else here is
+   * sendable either: the form below collects what people cannot eat and a free
+   * text note, and the party is a handful of named guests on one evening, so
+   * even the number of companions is close enough to identifying that it is
+   * deliberately not counted. The stage is the whole measurement.
+   */
   useEffect(() => {
-    track(EVENTS.guestPassOpened);
+    track(EVENTS.guestPassStep, { step: "opened" });
   }, []);
 
   const [responses, setResponses] = useState<GuestResponseView[]>(
@@ -312,6 +352,7 @@ export function GuestPassClient({
       } | null;
 
       if (!res.ok) {
+        track(EVENTS.guestPassStep, { step: "companion_failed" });
         setError(messageFrom(data));
         setStatus("error");
         return;
@@ -327,22 +368,55 @@ export function GuestPassClient({
       setDraft(saved);
       setEditing(false);
       setStatus("sent");
+      // The one thing this whole feature was built for: somebody who was
+      // forwarded the link filled it in. Until this event existed the guest
+      // pass could have been entirely inert — nobody sharing, nobody joining —
+      // and the figures would have looked identical to it working perfectly.
+      track(EVENTS.guestPassStep, { step: "companion_joined" });
       try {
         window.localStorage.setItem(storageKey, JSON.stringify(saved));
       } catch {
         // See above: forgetting only costs the guest a retyped name.
       }
     } catch {
+      track(EVENTS.guestPassStep, { step: "companion_failed" });
       setError(t.error);
       setStatus("error");
     }
   };
 
-  const cancelled = view.status === "geannuleerd";
-  const notice = cancelled ? t.cancelledNotice : isPast ? t.pastNotice : null;
-  // An evening that is over or called off is not asking anyone anything. The
+  /**
+   * The page after the fact.
+   *
+   * Somebody left this tab open in a coat pocket and has opened it again on
+   * the tram home, or a fortnight later. Until now that reader got the booking
+   * they already know about with one italic line above it saying the evening
+   * had gone, which is a page that has not noticed what it is for any more. So
+   * once the evening is over the thanks becomes the page and the booking is
+   * demoted underneath it.
+   *
+   * A cancelled row wins, and that ordering is the single most important thing
+   * in this file. Thanking a party for a visit they rang up to call off is the
+   * worst sentence this page could produce, and the way it would happen is
+   * somebody later writing `isPast ? thanks : cancelled ? ...` without
+   * thinking about the row that is both.
+   *
+   * So it is no longer decided here. `passStage()` in @/lib/guestPassStage is the
+   * same three lines with one difference that matters: it can be tested, and
+   * it is. Written inline, this was a boolean nobody could reach — flipping it
+   * to plain `isPast` broke not one test in a suite of eight hundred, while
+   * quietly thanking every cancelled party whose date had gone by.
+   */
+  const stage = passStage(view, isPast);
+  const thanking = stage === "thanking";
+  const notice = stage === "cancelled" ? t.cancelledNotice : null;
+  // An evening that is over or called off is not asking anyone anything, and
+  // "upcoming" is the one stage that is neither. Read off the stage rather
+  // than worked out again from the status and the clock: this used to be its
+  // own `view.status === "geannuleerd"` a few lines up, which is precisely the
+  // second copy of the decision that `passStage()` exists to prevent. The
   // endpoint refuses these too; this only keeps the page honest about it.
-  const canJoin = formEnabled && !cancelled && !isPast;
+  const canJoin = formEnabled && stage === "upcoming";
   /**
    * The form opens on a tap, never on arrival.
    *
@@ -375,14 +449,66 @@ export function GuestPassClient({
           />
           <p className="label mt-8">{t.heading}</p>
           <div className="rule-ink my-4 w-14" aria-hidden="true" />
-          <h1 className="heading-lg text-hive-800">
-            {t.subheading(view.firstName)}
-          </h1>
-          {notice ? (
-            <p className="mt-6 max-w-prose font-display text-[0.95rem] italic leading-relaxed text-clay-600">
-              {notice}
-            </p>
-          ) : null}
+          {thanking ? (
+            <>
+              <h1 className="heading-lg text-hive-800">{t.pastHeading}</h1>
+              <p className="mt-6 max-w-prose font-display text-lg leading-relaxed text-hive-600">
+                {t.pastNotice} {t.pastWelcomeBack}
+              </p>
+
+              {/* ===== The review ask =====
+                  Under the thanks, on the same sheet, and never anywhere else:
+                  it is a thing you say at the door on the way out, not a
+                  banner. The owners asked for it "if they liked it" and that
+                  hedge is in the copy rather than in a condition — the other
+                  answer is given somewhere to go, so a guest who did not enjoy
+                  it is not being handed a form to fill in about it. Whether
+                  there is anything here at all was decided on the server. */}
+              {reviewUrl ? (
+                <div className="mt-10">
+                  <div className="rule-ink w-10" aria-hidden="true" />
+                  <h2 className="label mt-6">{t.reviewHeading}</h2>
+                  <p className="mt-3 max-w-prose leading-relaxed text-hive-500">
+                    {t.reviewAsk}
+                  </p>
+                  <a
+                    href={reviewUrl}
+                    onClick={() =>
+                      track(EVENTS.outboundClicked, {
+                        kind: "google_listing",
+                        surface: "guest_pass",
+                      })
+                    }
+                    target="_blank"
+                    /* `noreferrer` is doing real work here, unlike the habit
+                       it usually is. This page's address contains the guest
+                       token, and the token is a credential rather than an
+                       identifier: whoever holds it can open the booking.
+                       Without this attribute the tap hands Google a Referer
+                       header, and what a browser puts in it is up to the
+                       browser — the URL the guest was invited to follow a
+                       link from, token and all, sitting in a third party's
+                       logs. `noopener` is the ordinary precaution beside it. */
+                    rel="noopener noreferrer"
+                    className="ink-link mt-4 inline-block"
+                  >
+                    {t.reviewLink}
+                  </a>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <h1 className="heading-lg text-hive-800">
+                {t.subheading(view.firstName)}
+              </h1>
+              {notice ? (
+                <p className="mt-6 max-w-prose font-display text-[0.95rem] italic leading-relaxed text-clay-600">
+                  {notice}
+                </p>
+              ) : null}
+            </>
+          )}
         </div>
         <TornEdge
           color={PAPER_DEEP}
@@ -397,6 +523,29 @@ export function GuestPassClient({
           {/* ===== When, where, how many ===== */}
           <Sheet tone="paper" edge="soft">
             <div className="px-6 py-10 md:px-10 md:py-12">
+              {/* ===== The evening, once it is behind them =====
+                  Demoted rather than dropped. People do look back at what they
+                  booked, and at what the party passed on, so the sheet stays —
+                  but set as one line of ordinary prose instead of as the front
+                  of an invitation, and without the calendar, which is the one
+                  thing on this page that can only be wanted beforehand. The
+                  heading says outright which of the two this is, so nobody
+                  reads a date in the past as a date to turn up on. */}
+              {when && thanking ? (
+                <div className="pb-7">
+                  <p className="label">{t.pastDetailsHeading}</p>
+                  <p className="mt-4 font-display figures-old text-2xl leading-snug text-hive-600">
+                    {when.weekday} {when.day} {when.month} {when.year}
+                    {view.time ? (
+                      <>
+                        <span className="text-hive-300"> · </span>
+                        {view.time}
+                      </>
+                    ) : null}
+                  </p>
+                </div>
+              ) : null}
+
               {/* ===== The evening, given the room it deserves =====
                   For most of the party this page is the first thing they ever
                   see of the place: a link tapped inside a chat, on a phone, on
@@ -406,7 +555,7 @@ export function GuestPassClient({
                   the hour answers them in the honey ink, and the weekday and
                   year sit underneath at reading size, where somebody checking
                   a diary goes looking. */}
-              {when ? (
+              {when && !thanking ? (
                 <div className="pb-7">
                   <p className="label">{t.whenLabel}</p>
                   <div className="mt-4 flex flex-wrap items-baseline gap-x-7 gap-y-2">
@@ -461,7 +610,11 @@ export function GuestPassClient({
                         they arrived as separate ideas. Same embed and the same
                         sepia as /contact, so the one rectangle on the page
                         that is not ours reads the same in both places. */}
-                    {mapEmbedUrl ? (
+                    {/* The map goes with the journey, so it goes when the
+                        journey has been made. What stays is the address
+                        itself, which is what somebody looking back at their
+                        own booking is reading. */}
+                    {mapEmbedUrl && !thanking ? (
                       <div className="mt-5 overflow-hidden rounded-[2px] border border-hive-700/15">
                         <iframe
                           src={mapEmbedUrl}
@@ -472,7 +625,16 @@ export function GuestPassClient({
                             filter: "sepia(0.22) saturate(0.85) contrast(0.96)",
                           }}
                           loading="lazy"
-                          referrerPolicy="no-referrer-when-downgrade"
+                          /* `no-referrer`, where the identical embed on
+                             /contact can live with the browser's default. The
+                             request this frame makes is cross-origin to
+                             Google and the referrer it would carry is this
+                             page's own URL — which is to say the guest token.
+                             The Referrer-Policy header on this route says the
+                             same thing, but an element's own attribute wins
+                             over the header, so the attribute has to agree
+                             with it rather than quietly undo it. */
+                          referrerPolicy="no-referrer"
                           title={mapTitle}
                           className="block w-full"
                         />
@@ -480,36 +642,49 @@ export function GuestPassClient({
                     ) : null}
 
                     <div className="mt-4 flex flex-wrap items-center gap-x-7 gap-y-2">
-                      <a
-                        href={mapsGoogleUrl}
-                        onClick={() =>
-                          track(EVENTS.directionsClicked, {
-                            source: "guest-pass-google",
-                          })
-                        }
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="ink-link"
-                      >
-                        {t.directionsGoogle}
-                      </a>
-                      <a
-                        href={mapsAppleUrl}
-                        onClick={() =>
-                          track(EVENTS.directionsClicked, {
-                            source: "guest-pass-apple",
-                          })
-                        }
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="ink-link"
-                      >
-                        {t.directionsApple}
-                      </a>
+                      {!thanking ? (
+                        <>
+                          <a
+                            href={mapsGoogleUrl}
+                            onClick={() =>
+                              track(EVENTS.outboundClicked, {
+                                kind: "directions",
+                                target: "google",
+                                surface: "guest_pass",
+                              })
+                            }
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="ink-link"
+                          >
+                            {t.directionsGoogle}
+                          </a>
+                          <a
+                            href={mapsAppleUrl}
+                            onClick={() =>
+                              track(EVENTS.outboundClicked, {
+                                kind: "directions",
+                                target: "apple",
+                                surface: "guest_pass",
+                              })
+                            }
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="ink-link"
+                          >
+                            {t.directionsApple}
+                          </a>
+                        </>
+                      ) : null}
                       {phone ? (
                         <a
                           href={`tel:${phone.replace(/\s/g, "")}`}
-                          onClick={() => track(EVENTS.phoneClicked)}
+                          onClick={() =>
+                            track(EVENTS.outboundClicked, {
+                              kind: "phone",
+                              surface: "guest_pass",
+                            })
+                          }
                           className="ink-link"
                         >
                           {t.callUs}
@@ -568,20 +743,30 @@ export function GuestPassClient({
             </div>
           </Sheet>
 
-          {/* ===== Passing it on ===== */}
-          <div>
-            <h2 className="label">{t.shareHeading}</h2>
-            <div className="rule-ink mt-3 w-10" aria-hidden="true" />
-            <p className="mt-4 leading-relaxed text-hive-500">{t.shareHint}</p>
-            <ShareActions
-              url={shareUrl}
-              message={t.whatsAppMessage(siteName, shareUrl)}
-              copyLabel={t.copyLink}
-              copiedLabel={t.copied}
-              whatsAppLabel={t.shareWhatsApp}
-              className="mt-5"
-            />
-          </div>
+          {/* ===== Passing it on =====
+              Only while there is something to pass on. "Stuur deze link door,
+              dan kan iedereen zijn wensen doorgeven" is an instruction that
+              has quietly expired, and a WhatsApp button under it is an
+              invitation to send a dozen people to a page about an evening that
+              already happened. */}
+          {!thanking ? (
+            <div>
+              <h2 className="label">{t.shareHeading}</h2>
+              <div className="rule-ink mt-3 w-10" aria-hidden="true" />
+              <p className="mt-4 leading-relaxed text-hive-500">
+                {t.shareHint}
+              </p>
+              <ShareActions
+                url={shareUrl}
+                context="guest_pass"
+                message={t.whatsAppMessage(siteName, shareUrl)}
+                copyLabel={t.copyLink}
+                copiedLabel={t.copied}
+                whatsAppLabel={t.shareWhatsApp}
+                className="mt-5"
+              />
+            </div>
+          ) : null}
 
           {/* ===== Are you coming too? ===== */}
           {canJoin ? (
@@ -736,7 +921,9 @@ export function GuestPassClient({
               it by then. */}
           {responses.length > 0 ? (
           <div>
-            <h2 className="label">{t.attending}</h2>
+            <h2 className="label">
+              {thanking ? t.attendingPast : t.attending}
+            </h2>
             <div className="rule-ink mt-3 w-10" aria-hidden="true" />
             {(
               <ul className="mt-5 space-y-5">
@@ -796,7 +983,13 @@ export function GuestPassClient({
               <div className="mt-10">
                 <WelcomeBlock
                   heading={t.welcomeHeading}
-                  followHint={t.followHint}
+                  /* The ordinary line offers "or read what guests wrote about
+                     us", and on a thanked pass the mark it was pointing at —
+                     the Google listing — is the one `socials` has just had
+                     taken out of it. A hint that promises a destination the
+                     row below it no longer shows is a small lie, so the
+                     follow-only sheet gets the follow-only line. */
+                  followHint={reviewUrl ? t.followOnlyHint : t.followHint}
                   text={welcomeText}
                   imageUrl={welcomeImageUrl}
                   imageAlt={welcomeImageAlt}

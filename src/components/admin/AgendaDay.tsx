@@ -409,7 +409,7 @@ export function useAdminRoutes() {
  *
  * This is the part that makes the calendar worth having. A day that already
  * has an afwijkende dag behind it opens that document; a day that has not gets
- * one written for it here and then opens it, because Payload 3.10 has no way
+ * one written for it here and then opens it, because Payload 3.88 has no way
  * to hand initial values to a create form through the URL — the owners would
  * otherwise land on an empty form and have to find the date again themselves,
  * which is exactly the friction that kept them from closing a day in the first

@@ -55,14 +55,20 @@ export function MailingListForm({
         body: JSON.stringify({ email, name }),
       });
       if (res.ok) {
-        track(EVENTS.newsletterSubscribed);
+        track(EVENTS.newsletterSubscribed, { outcome: "sent" });
         setStatus("success");
         setEmail("");
         setName("");
       } else {
+        // Counting only the sign-ups that worked leaves the rate at which this
+        // form works unknowable, and a broken endpoint looking identical to a
+        // quiet month. The address itself never travels — only that somebody
+        // tried and was turned away.
+        track(EVENTS.newsletterSubscribed, { outcome: "refused" });
         setStatus("error");
       }
     } catch {
+      track(EVENTS.newsletterSubscribed, { outcome: "network" });
       setStatus("error");
     }
   };

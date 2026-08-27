@@ -18,6 +18,23 @@ export const blogNl = {
   empty: "Binnenkort verschijnen hier onze verhalen.",
   back: "Terug naar blog",
   by: (name: string) => `Door ${name}`,
+  /**
+   * The plate at the head of an article and the panel it opens into.
+   *
+   * `hint` is the only one of these anybody sees. The other three are spoken:
+   * the plate is a button and needs a name that says what pressing it does,
+   * the panel is a dialog and needs a name of its own, and the cross has no
+   * words in it at all. All three take the photograph's own description where
+   * there is one, falling back to the headline, because "vergroot de foto" on
+   * its own tells a reader listening to a list of links nothing about which
+   * photograph they are being offered.
+   */
+  photo: {
+    hint: "Vergroten",
+    enlarge: (what: string) => `Vergroot de foto: ${what}`,
+    dialog: (what: string) => `Foto: ${what}`,
+    close: "Sluiten",
+  },
   samplePosts: {
     welcome: {
       title: "Welkom bij De Bee's Hive",
@@ -51,6 +68,12 @@ export const blogEn: BlogDict = {
   empty: "Our stories will appear here soon.",
   back: "Back to the blog",
   by: (name: string) => `By ${name}`,
+  photo: {
+    hint: "Enlarge",
+    enlarge: (what: string) => `Enlarge the photo: ${what}`,
+    dialog: (what: string) => `Photo: ${what}`,
+    close: "Close",
+  },
   samplePosts: {
     welcome: {
       title: "Welcome to De Bee's Hive",

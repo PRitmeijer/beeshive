@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { EVENTS, track } from "@/lib/umami";
 
 /**
  * The two ways a guest pass link travels: onto the clipboard, or straight into
@@ -28,6 +29,14 @@ import { useEffect, useRef, useState } from "react";
  * callers are at genuinely different moments — one is passing a link on, the
  * other has just been given it — and each has its own lines in its own
  * namespace. Nothing here is visitor-facing copy of its own.
+ *
+ * Both ways out report the same thing, `guest_pass_step { step: "shared" }`,
+ * because the guest pass exists so that a link is forwarded and companions add
+ * what they cannot eat — and whether that ever happens was, until now,
+ * unmeasurable. The feature could have been entirely inert and the figures
+ * would have looked identical to it working perfectly. Which of the two
+ * buttons was used is not the interesting half and is not recorded; that the
+ * link started moving is.
  */
 
 interface ShareActionsProps {
@@ -41,6 +50,16 @@ interface ShareActionsProps {
   copyLabel: string;
   copiedLabel: string;
   whatsAppLabel: string;
+  /**
+   * Which of the two screens this row is standing on: the guest pass itself, or
+   * the confirmation the person who booked is looking at. Required rather than
+   * optional, because a third mount that forgot it would quietly merge into
+   * whichever value happened to be the default — and the two are not the same
+   * question. The person on the confirmation screen is the only one who knows
+   * who else is coming and the only one who can start the link moving at all;
+   * everyone on the guest pass is already holding it.
+   */
+  context: "guest_pass" | "confirmation";
   /** Spacing from whatever sits above. The row itself is not positioned. */
   className?: string;
 }
@@ -54,6 +73,7 @@ export function ShareActions({
   copyLabel,
   copiedLabel,
   whatsAppLabel,
+  context,
   className = "",
 }: ShareActionsProps) {
   const [copied, setCopied] = useState(false);
@@ -66,7 +86,11 @@ export function ShareActions({
     [],
   );
 
+  const shared = () =>
+    track(EVENTS.guestPassStep, { step: "shared", context });
+
   const copy = async () => {
+    shared();
     try {
       await navigator.clipboard.writeText(url);
     } catch {
@@ -105,6 +129,7 @@ export function ShareActions({
         // wa.me rather than whatsapp://, because this same link has to work
         // when the page is opened on a laptop with WhatsApp Web.
         href={`https://wa.me/?text=${encodeURIComponent(message)}`}
+        onClick={shared}
         target="_blank"
         rel="noopener noreferrer"
         className="btn-secondary"

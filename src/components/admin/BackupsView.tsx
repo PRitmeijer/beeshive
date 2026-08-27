@@ -11,7 +11,7 @@ import { BackupPanel } from "./BackupPanel";
  * makes it findable.
  *
  * Both halves of this file exist because of the same two properties of
- * Payload 3.10's custom views, which AgendaView ran into first and which are
+ * Payload 3.88's custom views, which AgendaView ran into first and which are
  * worth repeating rather than cross-referencing.
  *
  * A custom view gets no template. getViewFromConfig leaves `templateType`

@@ -30,8 +30,9 @@ import { googleCalendarUrl, outlookCalendarUrl, type IcsEvent } from "@/lib/ics"
  *
  * Having no handlers does not mean having no measurement. <AddToCalendarTracker>
  * is a few lines of client component wrapped around these links that hears
- * their clicks as they bubble past, so `add_to_calendar` is reported from here
- * too without @/lib/ics following it into the browser.
+ * their clicks as they bubble past, so these four are counted as
+ * `outbound_clicked { kind: "calendar", target }` — `target` being the key
+ * below — without @/lib/ics following it into the browser.
  */
 
 interface AddToCalendarProps {

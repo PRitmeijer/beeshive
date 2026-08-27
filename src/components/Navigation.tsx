@@ -20,6 +20,51 @@ import { EVENTS, track } from "@/lib/umami";
 const SETTLE: [number, number, number, number] = [0.16, 0.84, 0.28, 1];
 
 /**
+ * How long the menu takes to arrive, in one place so it can be argued about.
+ *
+ * It used to be 0.6s a step with the links staggered 0.06s apart on top of an
+ * 0.08s lead-in. On paper that is a considered entrance; in the hand it was a
+ * full second of waiting for a list of seven words. The last link settled 1.04s
+ * after the tap and the language switch at 1.10s, and because the stagger grows
+ * with the number of links, adding one page to the site made the menu slower.
+ *
+ * The thing that made it feel broken rather than merely slow is that a menu is
+ * not an entrance, it is an answer. Nobody opens a navigation menu to look at
+ * it; they open it on the way to somewhere else, having already decided where.
+ * Every millisecond of choreography is spent on somebody who is waiting to
+ * leave. That is the opposite of the card on /kaart, which people do read.
+ *
+ * So the character is kept and the clock is cut: the same easing curve, the
+ * same travel, the same order of arrival, at roughly a third of the duration.
+ * The whole sheet is now settled in about 0.44s, which is inside the window
+ * where a transition still reads as movement rather than as lag.
+ *
+ * The stagger is deliberately the smallest of the three numbers. It is the one
+ * that multiplies — it is paid once per link, so it is the one that punishes
+ * the site for growing, and at 0.025s seven links cost 0.15s rather than 0.42s.
+ */
+const MENU_MOTION = {
+  /** The sheet sliding in, and the hamburger folding into a cross. */
+  duration: 0.26,
+  /** Before the first link moves, so the sheet is on its way first. */
+  lead: 0.03,
+  /** Between one link and the next. */
+  stagger: 0.025,
+} as const;
+
+/**
+ * The i-th link's delay, and the same arithmetic for whatever follows them.
+ *
+ * `reduce` is `boolean | null` because that is what `useReducedMotion()` hands
+ * back: null is "asked before the media query could be read", which happens on
+ * the very first render. It is taken as "no preference stated", the same way
+ * every other caller in this file treats it, so nothing is held back on the
+ * strength of an answer nobody has given yet.
+ */
+const menuDelay = (index: number, reduce: boolean | null) =>
+  reduce ? 0 : MENU_MOTION.lead + index * MENU_MOTION.stagger;
+
+/**
  * How far down the page the bar takes on its paper ground, its rule and its
  * lockup.
  *
@@ -291,17 +336,17 @@ export function Navigation({
         >
           <m.span
             animate={isOpen ? { rotate: 45, y: 6 } : { rotate: 0, y: 0 }}
-            transition={{ duration: 0.6, ease: SETTLE }}
+            transition={{ duration: MENU_MOTION.duration, ease: SETTLE }}
             className="w-6 h-0.5 block bg-hive-700"
           />
           <m.span
             animate={isOpen ? { opacity: 0 } : { opacity: 1 }}
-            transition={{ duration: 0.6, ease: SETTLE }}
+            transition={{ duration: MENU_MOTION.duration, ease: SETTLE }}
             className="w-6 h-0.5 block bg-hive-700"
           />
           <m.span
             animate={isOpen ? { rotate: -45, y: -6 } : { rotate: 0, y: 0 }}
-            transition={{ duration: 0.6, ease: SETTLE }}
+            transition={{ duration: MENU_MOTION.duration, ease: SETTLE }}
             className="w-6 h-0.5 block bg-hive-700"
           />
         </button>
@@ -317,7 +362,7 @@ export function Navigation({
               initial={reduce ? { opacity: 0 } : { opacity: 0, x: "100%" }}
               animate={{ opacity: 1, x: 0 }}
               exit={reduce ? { opacity: 0 } : { opacity: 0, x: "100%" }}
-              transition={{ duration: 0.6, ease: SETTLE }}
+              transition={{ duration: MENU_MOTION.duration, ease: SETTLE }}
               className="fixed inset-0 z-40 xl:hidden"
             >
               <TornEdge
@@ -335,7 +380,7 @@ export function Navigation({
                     // by a flag the array does not carry.
                     const leave = () => {
                       if (link.href === reserveHref) {
-                        track(EVENTS.reserveButtonClicked, { source: "nav-sheet" });
+                        track(EVENTS.reserveButtonClicked, { source: "nav_sheet" });
                       }
                       setIsOpen(false);
                     };
@@ -345,8 +390,8 @@ export function Navigation({
                         initial={reduce ? false : { opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{
-                          duration: 0.6,
-                          delay: reduce ? 0 : 0.08 + i * 0.06,
+                          duration: MENU_MOTION.duration,
+                          delay: menuDelay(i, reduce),
                           ease: SETTLE,
                         }}
                       >
@@ -394,8 +439,8 @@ export function Navigation({
                   initial={reduce ? false : { opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{
-                    duration: 0.6,
-                    delay: reduce ? 0 : 0.08 + mobileLinks.length * 0.06,
+                    duration: MENU_MOTION.duration,
+                    delay: menuDelay(mobileLinks.length, reduce),
                     ease: SETTLE,
                   }}
                   className="px-6 pb-24 pt-8"

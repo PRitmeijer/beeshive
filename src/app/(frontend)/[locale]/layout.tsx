@@ -10,6 +10,7 @@ import { MotionProvider } from "@/components/motion";
 import { PaperDefs } from "@/components/Sheet";
 import { getActiveNotifications } from "@/lib/notifications";
 import { getSiteSettings } from "@/lib/payload";
+import { resolveBookingRules } from "@/lib/openingHours";
 import { locales, parseLocale } from "@/i18n/config";
 
 /**
@@ -156,6 +157,48 @@ export default async function FrontendLayout({
             column below begins at <PaperDefs> exactly as it did. */}
         <MotionProvider>
           <PaperDefs />
+          {/*
+            The strip of screen iOS keeps for the clock and the battery, in
+            paper, always.
+
+            `viewportFit: "cover"` above is what lets this site's paper run
+            edge to edge under the notch, and it is worth keeping. What comes
+            with it is that the page is genuinely up there, so anything that
+            fails to cover that strip lets running text scroll through it —
+            which reads, from the reader's side, as the words sliding over the
+            top of the header and into the status bar.
+
+            Three separate things were covering it before, and each of them has
+            a state in which it does not. The notification bar folds the inset
+            into its own padding, but it is dismissible. The body pays the
+            inset as padding, but only when the server rendered no bar — and a
+            bar that is dismissed a second later does not give that padding
+            back. The header pays it through `.safe-head-below-notice`, but on
+            the landing page the header is deliberately transparent until the
+            reader has moved ninety pixels, because the masthead beneath it is
+            doing the talking. Every one of those is right on its own. The gap
+            is that nothing owned the strip.
+
+            So this does, and it does nothing else: one element, no content, no
+            pointer events, the height of the inset and the colour of the
+            paper. On a phone without a notch `env()` is zero and this is a
+            div of no height. It cannot be seen in any state that was already
+            correct, because the hero, the header's settled state and this are
+            all the same cream — it only shows up in the states that were
+            wrong, where it is the difference between chrome and a sentence.
+
+            The z-index is the whole of its interaction with everything else:
+            above the page, below the header at 50 so the header's own paper
+            still wins once it is opaque, below the banner at 60 so a banner
+            covers it as it always did, and below the booking sheet at 50 so
+            that sheet's dim backdrop still darkens the notch rather than
+            leaving a bright band across the top of a modal.
+          */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none fixed inset-x-0 top-0 z-[45] bg-paper"
+            style={{ height: "env(safe-area-inset-top, 0px)" }}
+          />
           <NotificationBanner locale={locale} initial={notices} />
           <Navigation
             locale={locale}
@@ -164,10 +207,22 @@ export default async function FrontendLayout({
           />
           <main className="flex-1">{children}</main>
           <Footer locale={locale} />
+          {/* The booking sheet is mounted here rather than by a page, so
+              everything it needs about the CMS has to be handed to it here
+              too: the switch that takes online booking out of service, and
+              the numbers the form draws its dates, times and party sizes from.
+              Without them the sheet ran on constants of its own and offered
+              ninety days, an hour's notice, an hour before closing and twenty
+              people whatever the owners had set — on the device most of this
+              café's guests book from. */}
           <MobileReserveButton
             locale={locale}
             reservationUrl={s.reservationUrl || undefined}
             openingHours={s.openingHours}
+            reservationsEnabled={s.reservationsEnabled !== false}
+            rules={resolveBookingRules(s)}
+            phone={s.phone || undefined}
+            email={s.contactEmail || undefined}
           />
           <div className="paper-ground" aria-hidden="true" />
           {/* Owned by another agent; everything it needs is decided here, in

@@ -49,8 +49,15 @@ const ALIASES: Record<string, CraftIconName> = {
   "🍵": "cup",
 };
 
-/** Slight coordinate drift keeps the marks from reading as a vector icon set. */
-const PATHS: Record<CraftIconName, React.ReactNode> = {
+/**
+ * Slight coordinate drift keeps the marks from reading as a vector icon set.
+ *
+ * Exported because the drawings are no longer stamped into the page at every
+ * mark; <PaperDefs> in Sheet.tsx hangs one <symbol> per entry in the document
+ * and every <CraftIcon> points at those. The table stays here, with the names
+ * and the aliases it belongs to.
+ */
+export const MARKS: Record<CraftIconName, React.ReactNode> = {
   pan: (
     <>
       <path d="M5.8 15.4 C5.8 20.6 9.1 24.2 13.2 24.2 C17.4 24.2 20.6 20.6 20.5 15.4 Z" />
@@ -136,7 +143,7 @@ const PATHS: Record<CraftIconName, React.ReactNode> = {
 export function resolveIcon(input?: string | null): CraftIconName {
   if (!input) return "mark";
   const key = input.trim();
-  if (key in PATHS) return key as CraftIconName;
+  if (key in MARKS) return key as CraftIconName;
   return ALIASES[key] ?? ALIASES[key.replace(/️/g, "")] ?? "mark";
 }
 
@@ -149,6 +156,29 @@ interface CraftIconProps {
   weight?: number;
 }
 
+/**
+ * One mark, pointed at the drawing rather than carrying it.
+ *
+ * It used to inline its path data, which is fine for the two or three marks
+ * most pages show and ruinous on the menu card: sixty dishes with two dietary
+ * tags each meant a hundred and twenty separate SVG documents to parse and
+ * some four hundred <path> nodes, forty-odd kilobytes of markup that was the
+ * same eleven drawings over and over. A third of the card's DOM was this
+ * component repeating itself.
+ *
+ * The drawings now hang once in <PaperDefs> and each mark is a <use> pointing
+ * at one. Nothing about the rendering changes: the constants that never vary
+ * per instance — the fill, the stroke colour, the linecaps — sit on the
+ * <symbol>, and the two that do vary come down the tree as they always did.
+ * `size` is still the viewport, `weight` is still stroke-width in the symbol's
+ * own 32-unit space and so still scales with the mark, and `currentColor`
+ * resolves against the ink of whatever the icon is sitting in, because a use
+ * shadow tree inherits through the element that referenced it.
+ *
+ * The one thing this now depends on is <PaperDefs> being in the document. It
+ * is mounted at the top of the frontend layout, above everything that draws a
+ * mark.
+ */
 export function CraftIcon({
   name,
   size = 40,
@@ -160,16 +190,12 @@ export function CraftIcon({
       viewBox="0 0 32 32"
       width={size}
       height={size}
-      fill="none"
-      stroke="currentColor"
       strokeWidth={weight}
-      strokeLinecap="round"
-      strokeLinejoin="round"
       aria-hidden="true"
       focusable="false"
       className={className}
     >
-      {PATHS[resolveIcon(name)]}
+      <use href={`#craft-${resolveIcon(name)}`} />
     </svg>
   );
 }

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getSiteSettings } from "@/lib/payload";
 import { buildMetadata } from "@/lib/metadata";
+import { jsonLdHtml } from "@/lib/jsonLd";
 import { getDict } from "@/i18n/dictionaries";
 import { canonicalUrl, parseLocale, type Locale } from "@/i18n/config";
 import {
@@ -167,7 +168,7 @@ export default async function EvenementenPage({ params }: PageProps) {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }}
       />
       <EvenementenClient
         locale={locale}

@@ -11,12 +11,18 @@ import { SLOT_MINUTES, formatTime, timeToMinutes } from "./openingHours";
  *
  * A table is not a moment, it is a sitting: `reservationDurationMinutes` (two
  * hours out of the box) is how long the chairs stay occupied. A party of four
- * at 19:00 therefore takes four seats out of every half hour from 19:00 up to
- * and including 20:30 — the last slot from which their sitting still overlaps —
- * and a booking that would push any half hour it covers past the room's
+ * at 19:00 therefore takes four seats out of every slot their two hours run
+ * through, and a booking that would push any of those slots past the room's
  * capacity is refused. A row may carry its own `duration` when the owners know
  * a table will be longer or shorter than usual; the setting is only the
  * default.
+ *
+ * The slots are the same ones the form offers — quarter hours or half hours,
+ * as the owners set them in Site Instellingen — and `slotMinutes` is how that
+ * setting reaches the arithmetic. It has to: seats counted in half hours while
+ * the form offers quarters would put 19:00 and 19:15 in one bucket, so the two
+ * would always be full together and the whole point of quarter hours, which is
+ * spreading the arrivals, would be counted away.
  *
  * Everything is counted in memory from a single query for the day. Reservation
  * rows are small, there are a handful per day, and asking the database once per
@@ -27,14 +33,14 @@ import { SLOT_MINUTES, formatTime, timeToMinutes } from "./openingHours";
  */
 
 export interface SlotLoad {
-  /** HH:MM, on the half-hour grid the form offers. */
+  /** HH:MM, on the grid the form offers. */
   time: string;
   seatsTaken: number;
   seatsLeft: number;
   /**
    * Whether a new booking could start here at all. Unlike `seatsTaken`, which
-   * is about this half hour alone, this looks ahead across the whole sitting:
-   * a table at 19:00 is no use if the room is full at 20:00.
+   * is about this slot alone, this looks ahead across the whole sitting: a
+   * table at 19:00 is no use if the room is full at 20:00.
    */
   full: boolean;
 }
@@ -44,14 +50,26 @@ export interface CapacityOptions {
   capacity: number;
   durationMinutes: number;
   /**
-   * The day's bookable half hours, from the resolved schedule. Without them
-   * "the whole day is full" cannot be told apart from "the café is shut", and
-   * only the single slot can be judged.
+   * The day's bookable sittings, from the resolved schedule. Without them "the
+   * whole day is full" cannot be told apart from "the café is shut", and only
+   * the single slot can be judged.
    */
   slots?: string[];
   /** Seats being asked for. One is the question "is there any room at all". */
   partySize?: number;
+  /**
+   * How far apart the sittings sit, as the owners set it. Left off, the
+   * module's own default stands — which is what the tests and any caller that
+   * has no settings to hand rely on.
+   */
+  slotMinutes?: number;
 }
+
+/** The grid this question is being asked on. */
+const grid = (opts: CapacityOptions): number =>
+  Number.isFinite(opts.slotMinutes) && (opts.slotMinutes ?? 0) > 0
+    ? (opts.slotMinutes as number)
+    : SLOT_MINUTES;
 
 /** Only the parts of a stored reservation the arithmetic needs. */
 interface Booking {
@@ -70,10 +88,14 @@ const DEFAULT_DURATION = 120;
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
 /** A sitting has to cover at least the slot it starts in. */
-function sittingMinutes(booking: Booking, fallback: number): number {
+function sittingMinutes(
+  booking: Booking,
+  fallback: number,
+  slotMinutes: number,
+): number {
   const own = typeof booking.duration === "number" ? booking.duration : 0;
   const minutes = own > 0 ? own : fallback > 0 ? fallback : DEFAULT_DURATION;
-  return Math.max(SLOT_MINUTES, minutes);
+  return Math.max(slotMinutes, minutes);
 }
 
 /**
@@ -126,34 +148,39 @@ async function bookingsBetween(
 const bookingsFor = (isoDate: string) => bookingsBetween(isoDate, isoDate);
 
 /**
- * The half hours a sitting is in the room for, as keys on the grid.
+ * The slots a sitting is in the room for, as keys on the grid.
  *
  * Keyed to the grid rather than to the sitting's own start, because the two are
- * not always the same. Everything the form offers lands on :00 or :30, but the
+ * not always the same. Everything the form offers lands on the grid, but the
  * owners type reservations in by hand as well, and a party entered at 19:07
  * whose seats are counted under 19:07 occupies a key nothing else ever reads:
  * the picker asks about 19:00, finds the room empty, and hands out forty chairs
  * that are already sat in. A table from 19:07 to 21:07 is in the room for part
- * of the 19:00 half hour and part of the 21:00 one, and takes its seats out of
- * both.
+ * of the slot 19:07 falls in and part of the one 21:07 falls in, and takes its
+ * seats out of both.
  */
-function coveredSlots(start: number, minutes: number): number[] {
+function coveredSlots(
+  start: number,
+  minutes: number,
+  slotMinutes: number,
+): number[] {
   const end = start + minutes;
   const slots: number[] = [];
   for (
-    let t = Math.floor(start / SLOT_MINUTES) * SLOT_MINUTES;
+    let t = Math.floor(start / slotMinutes) * slotMinutes;
     t < end;
-    t += SLOT_MINUTES
+    t += slotMinutes
   ) {
     slots.push(t);
   }
   return slots;
 }
 
-/** Seats taken per half hour, keyed by minutes from midnight. */
+/** Seats taken per slot, keyed by minutes from midnight. */
 function seatsBySlot(
   bookings: Booking[],
   durationMinutes: number,
+  slotMinutes: number,
 ): Map<number, number> {
   const taken = new Map<number, number>();
   for (const booking of bookings) {
@@ -161,24 +188,30 @@ function seatsBySlot(
     if (start === null) continue;
     const seats = Number(booking.guests);
     if (!Number.isFinite(seats) || seats <= 0) continue;
-    for (const t of coveredSlots(start, sittingMinutes(booking, durationMinutes))) {
+    const covered = coveredSlots(
+      start,
+      sittingMinutes(booking, durationMinutes, slotMinutes),
+      slotMinutes,
+    );
+    for (const t of covered) {
       taken.set(t, (taken.get(t) ?? 0) + seats);
     }
   }
   return taken;
 }
 
-/** Seats left in the tightest half hour a sitting starting here would cover. */
+/** Seats left in the tightest slot a sitting starting here would cover. */
 function roomFrom(
   taken: Map<number, number>,
   start: number,
   opts: CapacityOptions,
 ): number {
-  const duration = Math.max(SLOT_MINUTES, opts.durationMinutes || DEFAULT_DURATION);
+  const step = grid(opts);
+  const duration = Math.max(step, opts.durationMinutes || DEFAULT_DURATION);
   let left = opts.capacity;
   // The same walk `seatsBySlot` used to put the seats there, so the question
   // and the answer cannot land on different keys.
-  for (const t of coveredSlots(start, duration)) {
+  for (const t of coveredSlots(start, duration, step)) {
     left = Math.min(left, opts.capacity - (taken.get(t) ?? 0));
   }
   return left;
@@ -190,15 +223,19 @@ const counting = (opts: CapacityOptions) =>
 
 /**
  * The day's occupancy. Given `slots`, one entry per slot the café offers —
- * which is what the date picker wants. Without them, one entry per half hour
- * that anybody has actually booked, and a time that is missing is a time
- * nobody has taken.
+ * which is what the time picker wants. Without them, one entry per slot that
+ * anybody has actually booked, and a time that is missing is a time nobody has
+ * taken.
  */
 export async function loadForDay(
   isoDate: string,
   opts: CapacityOptions,
 ): Promise<SlotLoad[]> {
-  const taken = seatsBySlot(await bookingsFor(isoDate), opts.durationMinutes);
+  const taken = seatsBySlot(
+    await bookingsFor(isoDate),
+    opts.durationMinutes,
+    grid(opts),
+  );
   const seats = Math.max(1, opts.partySize ?? 1);
 
   const times = opts.slots?.length
@@ -256,7 +293,11 @@ export async function canSeat(
   if (start === null) return { ok: false, reason: "slotFull" };
 
   const seats = Math.max(1, guests);
-  const taken = seatsBySlot(await bookingsFor(isoDate), opts.durationMinutes);
+  const taken = seatsBySlot(
+    await bookingsFor(isoDate),
+    opts.durationMinutes,
+    grid(opts),
+  );
 
   if (roomFrom(taken, start, opts) >= seats) return { ok: true };
 
@@ -297,7 +338,11 @@ export async function fullDaysBetween(
 
   const seats = Math.max(1, opts.partySize ?? 1);
   for (const date of dates) {
-    const taken = seatsBySlot(byDate.get(date) ?? [], opts.durationMinutes);
+    const taken = seatsBySlot(
+      byDate.get(date) ?? [],
+      opts.durationMinutes,
+      grid(opts),
+    );
     const slots = slotsByDate.get(date) ?? [];
     const anyRoom = slots.some((slot) => {
       const t = timeToMinutes(slot);

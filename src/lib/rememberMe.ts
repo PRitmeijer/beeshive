@@ -86,9 +86,24 @@ const LIMITS = { name: 120, email: 200, phone: 40 } as const;
  */
 const MAX_RAW = 4000;
 
-/** The most and fewest people /api/reserve will accept, so the rest is noise. */
+/**
+ * The most and fewest people a reservation can ever be for, so the rest is
+ * noise. The ceiling is the `guests` field's own maximum in
+ * src/collections/Reservations.ts and deliberately not the form's, which is a
+ * CMS setting the owners can move: a party size stored here in December, when
+ * twenty-five was allowed, would otherwise be thrown away in January because
+ * they had lowered the maximum to twelve — and thrown away silently, on a
+ * prefill nobody could see was missing. What this holds is a starting point
+ * for one field; the form's own `max` and /api/reserve both check the number
+ * again on the way past, against whatever the setting says today.
+ *
+ * Written out rather than imported for the same reason the lengths above are:
+ * this module stands between a rendered field and a string of unknown
+ * provenance, and that guard should not depend on anything else for its
+ * limits.
+ */
 const MIN_GUESTS = 1;
-const MAX_GUESTS = 20;
+const MAX_GUESTS = 30;
 
 export interface RememberedGuest {
   name: string;
@@ -137,7 +152,7 @@ function storage(): Storage | null {
 
 /**
  * What this device remembers, or null. Never called during render — see the
- * note in ReservationForm about hydration — and never throws, whatever is in
+ * note in GuestDetails about hydration — and never throws, whatever is in
  * the slot.
  */
 export function readRemembered(): RememberedGuest | null {
