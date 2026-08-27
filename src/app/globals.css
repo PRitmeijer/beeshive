@@ -528,9 +528,24 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* Open, and the only state that responds to a pointer. */
-  .cal-day[data-state="open"]:hover {
-    @apply bg-hive-700/[0.08];
+  /* Open, and the only state that responds to a pointer — where a pointer
+     exists, and where the day is not already the chosen one.
+
+     Both halves of that are load-bearing, and neither is a style preference.
+     This selector is one heavier than the chosen-day rule below it — class
+     plus attribute plus pseudo-class, against class plus attribute — so it
+     wins on a day that is both chosen and hovered no matter which order the
+     two are printed in. On a mouse that meant hovering the terracotta day
+     washed it back to pale. On a phone it was worse: a touch browser has no
+     pointer to move away, so it leaves `:hover` on whatever was tapped until
+     something else is tapped, and the day just pressed therefore never turned
+     terracotta at all until the next press — which reads as the calendar
+     ignoring the tap. The `:not()` settles the first, the media query the
+     second. */
+  @media (hover: hover) and (pointer: fine) {
+    .cal-day[data-state="open"]:not([aria-pressed="true"]):hover {
+      @apply bg-hive-700/[0.08];
+    }
   }
 
   /* Three states, one grey, on purpose. Shut, already gone by, and further
@@ -591,8 +606,18 @@
     font-variant-numeric: tabular-nums;
   }
 
-  .slot-chip:not([aria-disabled="true"]):hover {
-    @apply border-honey-400 bg-hive-700/[0.06];
+  /* Guarded like the calendar day above, but for the second of its two
+     reasons only. The chosen sitting is drawn by `peer-checked:` at the call
+     site, which weighs the same as this rule and is printed after it, so it
+     already wins on a chip that is both chosen and hovered. What the guard
+     stops is the tint outliving the tap: on the recovery chips in
+     GuestDetails, which are plain buttons with no chosen state to cover it
+     up, a pressed chip otherwise stays washed until something else is
+     pressed. */
+  @media (hover: hover) and (pointer: fine) {
+    .slot-chip:not([aria-disabled="true"]):hover {
+      @apply border-honey-400 bg-hive-700/[0.06];
+    }
   }
 
   /* There were two more rules here, for a taken sitting and for the chosen

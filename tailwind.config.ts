@@ -13,6 +13,21 @@ import type { Config } from "tailwindcss";
  * `honey` now carries the gold and `hive` the chocolate inks.
  */
 const config: Config = {
+  /**
+   * `hover:` only where hovering is a thing that exists.
+   *
+   * A touch browser has no pointer to move away, so it fakes one: a tap leaves
+   * `:hover` stuck on whatever was tapped until something else is tapped. On a
+   * chip whose hover tint and whose chosen state are both backgrounds, that
+   * reads as the selection simply not happening — press a party size, and the
+   * tile stays pale until you press something else. This wraps every `hover:`
+   * utility in `@media (hover: hover) and (pointer: fine)`, which is Tailwind 4's
+   * default and is opt-in here only because this project is on 3.x.
+   *
+   * It does not reach a `:hover` written out by hand, so the two in
+   * globals.css carry the same guard themselves.
+   */
+  future: { hoverOnlyWhenSupported: true },
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",

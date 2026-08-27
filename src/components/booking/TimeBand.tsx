@@ -589,7 +589,8 @@ export function TimeBand({
                                sixty-nine pixel box read as a caption rather
                                than as the thing to press. */
                             className="slot-chip min-h-[3rem] w-full text-base
-                                       peer-hover:border-honey-400 peer-hover:bg-hive-700/[0.06]
+                                       peer-hover:peer-[:not(:checked)]:border-honey-400
+                                       peer-hover:peer-[:not(:checked)]:bg-hive-700/[0.06]
                                        peer-checked:border-clay-500 peer-checked:bg-clay-500 peer-checked:text-paper
                                        peer-focus-visible:ring-2 peer-focus-visible:ring-honey-400
                                        peer-focus-visible:outline peer-focus-visible:outline-2

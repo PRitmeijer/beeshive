@@ -149,7 +149,31 @@ export function Analytics({
           this is a bare script tag rather than next/script. */}
       <script dangerouslySetInnerHTML={{ __html: REDACT_SCRIPT }} />
       <Script
-        id="umami"
+        /**
+         * Anything but `umami`, and this is not a style choice.
+         *
+         * next/script puts this string on the injected tag as its `id`, and an
+         * element with an id becomes a property of that name on `window` —
+         * named access on the Window object, which is as old as the web and
+         * still on by default. So `id="umami"` made `window.umami` the SCRIPT
+         * ELEMENT, and the element is appended to the document a moment before
+         * the code inside it runs.
+         *
+         * Umami's last line is `window.umami || (window.umami = { track… })`:
+         * a guard, so a second copy of the tag cannot replace a live API. It
+         * found the element already sitting there, decided somebody had got
+         * there first, and never installed anything. Pageviews carried on
+         * regardless — the tracker counts those by calling its own function
+         * directly and never goes through the global — so the figures looked
+         * healthy while `window.umami.track` did not exist, and every custom
+         * event this site fires was dropped by src/lib/umami.ts, correctly and
+         * silently, for want of a function to call.
+         *
+         * That is the whole of why the funnel was empty from the day it was
+         * built: not one custom event was ever recorded. The cost of the name
+         * was a year of the booking flow measuring nothing.
+         */
+        id="umami-tracker"
         src={src}
         strategy="afterInteractive"
         data-website-id={id}

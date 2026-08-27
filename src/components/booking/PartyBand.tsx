@@ -170,7 +170,7 @@ export function PartyBand({
                 className="flex h-12 items-center justify-center rounded-[2px]
                            border-b border-hive-700/25 font-body text-[1rem] text-hive-700
                            transition-colors duration-200 ease-settle
-                           peer-hover:bg-hive-700/[0.06]
+                           peer-hover:peer-[:not(:checked)]:bg-hive-700/[0.06]
                            peer-checked:border-clay-500 peer-checked:bg-clay-500 peer-checked:text-paper
                            peer-focus-visible:ring-2 peer-focus-visible:ring-honey-400
                            peer-focus-visible:outline peer-focus-visible:outline-2
