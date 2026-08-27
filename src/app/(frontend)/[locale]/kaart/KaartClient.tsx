@@ -1,7 +1,6 @@
 "use client";
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useReducedMotion } from "@/components/motion";
+import { memo, useEffect, useMemo, useState } from "react";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { TornEdge } from "@/components/TornEdge";
 import { Sheet } from "@/components/Sheet";
@@ -175,7 +174,6 @@ export function KaartClient({
   useEffect(() => {
     track(EVENTS.contentViewed, { kind: "menu", ref: "all" });
   }, []);
-  const reduce = useReducedMotion();
 
   // Built only on a site that still needs it, and then only once. Ten fresh
   // objects on every render would be a small waste on their own; what they
@@ -192,127 +190,40 @@ export function KaartClient({
   const [activeCategory, setActiveCategory] = useState<CardId | null>(null);
 
   /**
-   * Changing rank, in two phases.
+   * Changing rank, in one step.
    *
-   * The card used to be handed to AnimatePresence under a key made of the
-   * selected category, so choosing one threw the whole sheet away and built a
-   * new one: every dish, every price, every dietary mark, thirteen hundred
-   * elements on a full card, with the deckle filter re-rendering the lot at a
-   * new height afterwards. That is the stall people felt on the tap.
+   * This was a two-phase swap. The tap faded the whole card out over a quarter
+   * of a second; a transitionend — with a 350ms timer behind it as a backstop,
+   * because an interrupted transition reports cancelled instead — then
+   * committed the new rank and played a second animation to bring it back in.
+   * Half a second between asking for Desserts and being able to read them, on
+   * the only control this page has, with the largest thing on the screen
+   * moving both ways. What the movement communicated was latency.
    *
-   * Nothing is unmounted now. The sections that do not match simply carry
-   * `hidden`, and the fade lives in `.menu-swap` in globals.css. All that is
-   * left here is the part CSS cannot know: that the new rank must not appear
-   * until the old one has finished leaving, which is what `mode="wait"` used
-   * to arrange. `out` is a transition so it can be waited on; `wanted` holds
-   * the rank the reader asked for while it runs, so a second tap mid-fade
-   * replaces the answer rather than starting anything over.
+   * It was covering nothing. The sections that do not match carry `hidden`,
+   * which is one attribute flip on elements that are already mounted — the
+   * expensive version, where choosing a rank rebuilt thirteen hundred
+   * elements, was replaced long before this and the fade outlived the stall it
+   * was hiding. So the commit is immediate now and the fade is deleted rather
+   * than shortened: there is no duration at which an animation over a fifth of
+   * a second of real work is worth waiting for.
+   *
+   * What is left is the filter row marking itself, and it is kept because the
+   * reader needs to see which word they hit. 150ms is the whole of it — long
+   * enough not to snap, short enough to read as the control answering rather
+   * than as an effect being played.
    */
-  const [swap, setSwap] = useState<"out" | "in" | null>(null);
-  const wanted = useRef<CardId | null>(null);
-
-  /**
-   * The same rank as `wanted.current`, kept a second time in state.
-   *
-   * The ref is the copy that commits, and it has to be a ref: `applyWanted`
-   * is reached from a timeout and from a transitionend, so it must keep the
-   * same identity across renders or the backstop below would be torn down and
-   * started again every time somebody taps. But a ref cannot ask for
-   * a render, and the filter row has to light up on the tap — including on a
-   * second tap inside the fade, which changes nothing else about the state
-   * and would otherwise leave the reader looking at the rank they had just
-   * tapped away from. So the rank is written twice, and the two writes belong
-   * together on the same two lines.
-   */
-  const [wantedCategory, setWantedCategory] = useState<CardId | null>(null);
-
-  const applyWanted = useCallback(() => {
-    setActiveCategory(wanted.current);
-    setSwap("in");
-  }, []);
-
-  /**
-   * The rank the reader asked for, which for a quarter of a second is not yet
-   * the rank the card is printing. The filter buttons take all of their state
-   * from this; the sections take theirs from `activeCategory`.
-   *
-   * Both used to read `activeCategory`, and since that is only committed once
-   * the out phase has run, the tap on the one control this page has did
-   * nothing at all for that whole time — no colour,
-   * no underline, and `aria-pressed` still naming the old rank, which is a
-   * stale answer read out to somebody who has no fade to explain it. The
-   * underline keeps its own 500ms transition, so it still draws itself on
-   * rather than snapping.
-   */
-  const pending = swap === "out" ? wantedCategory : activeCategory;
-
   function chooseCategory(id: CardId | null) {
-    // Reported from the tap and never from the commit. The rank the card is
-    // printing lands a quarter of a second later, after the fade, and it can
-    // still be overtaken by a second tap on the way — so measuring there would
-    // count what the reader ended up with rather than what they asked for, and
-    // would miss every change of mind entirely.
+    // Every tap, including a tap on the rank already showing. The reader
+    // asking twice, or changing their mind and coming back, is a real fact
+    // about how the card is read and the count is worth having.
     track(EVENTS.contentViewed, {
       kind: "menu",
       ref: id === null
         ? "all"
         : (categories.find((cat) => cat.id === id)?.name ?? String(id)),
     });
-    // Measured against the rank in flight rather than the one on the card.
-    // During the out phase `activeCategory` is still the rank on its way off,
-    // so a reader who tapped Desserts and changed their mind back to the
-    // whole card mid-fade was comparing null against null, being sent home
-    // before `wanted` could be updated, and getting Desserts anyway when the
-    // fade landed. Tapping back to what is still on screen is therefore a
-    // real request now: it re-commits that rank and plays the enter phase.
-    const inFlight = swap === "out" ? wanted.current : activeCategory;
-    wanted.current = id;
-    setWantedCategory(id);
-    if (id === inFlight) return;
-    // Reduced motion has nothing to wait for, and waiting on a transition
-    // that has been told not to run is waiting forever.
-    if (reduce) {
-      setActiveCategory(id);
-      setSwap(null);
-      return;
-    }
-    setSwap("out");
-  }
-
-  useEffect(() => {
-    if (swap !== "out") return;
-    // The swap turns on one transitionend, and a transition that is
-    // interrupted sends a cancel instead. The card must never be left sitting
-    // at opacity 0 with the old dishes still on it, so this is the floor,
-    // cleared the moment the real event arrives.
-    //
-    // The number is the fade plus a hundred milliseconds, and it has to be
-    // worked out rather than picked: shorter than the fade and this commits
-    // the new rank halfway through the old one leaving, which is the swap
-    // happening in full view and worse than the stall it replaced. The fade is
-    // 0.25s in `.menu-swap`, so 350. The cushion stays a hundred rather than
-    // becoming a proportion of the duration, because what it covers — the
-    // frame or two between the attribute landing and the browser starting the
-    // transition — is the same length whatever the transition is.
-    const timer = window.setTimeout(applyWanted, 350);
-    return () => window.clearTimeout(timer);
-  }, [swap, applyWanted]);
-
-  function finishExit(event: React.TransitionEvent<HTMLDivElement>) {
-    if (swap !== "out") return;
-    // Two guards for two different mistakes. The fade animates opacity and
-    // transform, so it reports finished twice and the card would be swapped
-    // over twice; and transitionend bubbles, so anything inside the sheet
-    // that ever gets a transition of its own would otherwise be able to end
-    // this phase on the card's behalf.
-    if (event.target !== event.currentTarget) return;
-    if (event.propertyName !== "opacity") return;
-    applyWanted();
-  }
-
-  function finishEnter(event: React.AnimationEvent<HTMLDivElement>) {
-    if (swap !== "in" || event.target !== event.currentTarget) return;
-    setSwap(null);
+    setActiveCategory(id);
   }
 
   // Every rank the card prints, always. A section that is not the selected
@@ -375,12 +286,12 @@ export function KaartClient({
                 <button
                   type="button"
                   onClick={() => chooseCategory(null)}
-                  aria-pressed={pending === null}
+                  aria-pressed={activeCategory === null}
                   className="group text-left"
                 >
                   <span
-                    className={`label block transition-colors duration-500 ease-settle ${
-                      pending === null
+                    className={`label block transition-colors duration-150 ease-settle ${
+                      activeCategory === null
                         ? "text-honey-600"
                         : "text-hive-400 group-hover:text-honey-600"
                     }`}
@@ -389,8 +300,8 @@ export function KaartClient({
                   </span>
                   <span
                     aria-hidden="true"
-                    className={`rule-ink mt-2 block w-full transition-opacity duration-500 ease-settle ${
-                      pending === null ? "opacity-100" : "opacity-0"
+                    className={`rule-ink mt-2 block w-full transition-opacity duration-150 ease-settle ${
+                      activeCategory === null ? "opacity-100" : "opacity-0"
                     }`}
                   />
                 </button>
@@ -400,12 +311,12 @@ export function KaartClient({
                     key={cat.id}
                     type="button"
                     onClick={() => chooseCategory(cat.id)}
-                    aria-pressed={pending === cat.id}
+                    aria-pressed={activeCategory === cat.id}
                     className="group text-left"
                   >
                     <span
-                      className={`label block transition-colors duration-500 ease-settle ${
-                        pending === cat.id
+                      className={`label block transition-colors duration-150 ease-settle ${
+                        activeCategory === cat.id
                           ? "text-honey-600"
                           : "text-hive-400 group-hover:text-honey-600"
                       }`}
@@ -414,8 +325,8 @@ export function KaartClient({
                     </span>
                     <span
                       aria-hidden="true"
-                      className={`rule-ink mt-2 block w-full transition-opacity duration-500 ease-settle ${
-                        pending === cat.id ? "opacity-100" : "opacity-0"
+                      className={`rule-ink mt-2 block w-full transition-opacity duration-150 ease-settle ${
+                        activeCategory === cat.id ? "opacity-100" : "opacity-0"
                       }`}
                     />
                   </button>
@@ -452,12 +363,7 @@ export function KaartClient({
               and ninety-six points of nothing between them read as the end of
               the page rather than as a pause. */}
           <div className="hero-rise mt-8 md:mt-12 [--rise-delay:0s] [--rise-duration:0.7s] [--rise-travel:10px]">
-            <div
-              className="menu-swap grid md:grid-cols-12 md:gap-x-10"
-              data-swap={swap ?? undefined}
-              onTransitionEnd={finishExit}
-              onAnimationEnd={finishEnter}
-            >
+            <div className="grid md:grid-cols-12 md:gap-x-10">
               {/* The marginal bee, as it is drawn in the gutter of the card. */}
               <div className="hidden md:col-span-2 md:block" aria-hidden="true">
                 <SketchBee

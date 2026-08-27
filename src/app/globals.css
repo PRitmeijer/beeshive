@@ -711,54 +711,20 @@
   }
 }
 
-/* Changing rank on the menu card.
+/* Changing rank on the menu card: nothing, deliberately.
 
-   Tapping a category used to hand the whole card to AnimatePresence under a
-   new key, which is a polite way of saying React threw away every dish, every
-   price and every dietary mark on the sheet and built a fresh set — some
-   thirteen hundred elements on a full card — and the deckle filter then had
-   to re-render the lot at a new height. That is where the stall on the tap
-   came from. The card is now one element that stays where it is; only which
-   sections carry `hidden` changes.
+   There was a two-phase fade here, and before that an AnimatePresence that
+   rebuilt thirteen hundred elements on every tap. The second was a real stall
+   and killing it was a real fix; the fade was then kept to cover it, outlived
+   it, and was cut from seven tenths of a second each way to a quarter after
+   the owners called it annoying — which treated the length as the problem.
+   It was not. Only which sections carry `hidden` changes now, so there is no
+   work to cover, and any duration at all is a delay inserted between a reader
+   tapping Desserts and reading them. The rank commits on the tap.
 
-   Which leaves the fade to do here, in two phases, because the old selection
-   has to be gone before the new one arrives — `mode="wait"` is what that was
-   called before. Out is a transition, so the component can be told when it has
-   finished and swap the dishes over at that exact moment. In is `hero-rise`,
-   the same keyframe the card opens the page with, because it is the same
-   movement: up ten pixels, a quarter of a second, the settle curve.
-   Transitions are off during the second phase so the two never fight over the
-   same two properties.
-
-   The travel is what framer-motion was given — exit to -8px, enter from +10px
-   — and the timing is not, any more. Both phases ran for seven tenths of a
-   second each, which is one and two fifths of a second between tapping a
-   category and being able to read the dishes under it, on the one control this
-   page has and on a page people tap through four or five ranks of. The owner's
-   words for it were that it is quite annoying, and they are right: at that
-   length the fade stops reading as the sheet turning over and starts reading
-   as the site thinking. A quarter of a second each way is still plainly a
-   movement — same curve, same distances, same two phases — and it is over
-   before anybody has time to wonder whether the tap landed.
-
-   If either number moves again, the backstop in KaartClient.tsx has to move
-   with it. It waits for the out phase and then commits regardless; set shorter
-   than the transition, it commits halfway through the fade. */
-.menu-swap {
-  transition: opacity 0.25s var(--ease-settle),
-    transform 0.25s var(--ease-settle);
-}
-
-.menu-swap[data-swap="out"] {
-  opacity: 0;
-  transform: translate3d(0, -8px, 0);
-}
-
-.menu-swap[data-swap="in"] {
-  --rise-travel: 10px;
-  transition: none;
-  animation: hero-rise 0.25s var(--ease-settle) both;
-}
+   The filter row still marks itself, in 150ms, at the call site in
+   KaartClient.tsx. That is the control answering, which is worth having; this
+   was the card performing, which was not. Do not put it back. */
 
 /* The scroll cue at the foot of the hero, breathing.
 
@@ -827,27 +793,6 @@
      an invisible hero. Named explicitly so it simply starts there. */
   .hero-rise {
     animation: none;
-    opacity: 1;
-    transform: none;
-  }
-
-  /* KaartClient skips the two-phase swap outright when motion is reduced and
-     changes the rank in one go, so this should never have anything to catch.
-     It is here as the backstop, because the one failure mode that matters on
-     this page is a card left sitting at opacity 0.
-
-     The second selector is not redundant. Bare `.menu-swap` weighs less than
-     `.menu-swap[data-swap="out"]` above and would lose to it, so the
-     attribute has to be named here too — and then the two tie exactly, at
-     (0,2,0), because an attribute selector counts for precisely as much as a
-     class does. Nothing about specificity settles it. This block wins on
-     source order alone, so it has to stay below the `.menu-swap[data-swap=…]`
-     rules; move it above them and the card is back to sitting at opacity
-     nought with nothing to say so. */
-  .menu-swap,
-  .menu-swap[data-swap] {
-    animation: none;
-    transition: none;
     opacity: 1;
     transform: none;
   }
